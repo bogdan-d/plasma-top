@@ -1,0 +1,42 @@
+# machines.toml — per-machine overrides on top of config.toml.
+#
+# Each top-level table is one of your machines: a [<name>.detect] rule that
+# recognizes it from the DMI board/product name, plus the tweaks it needs. On
+# startup the machine whose detect matches this host is merged over the
+# config.toml defaults — no selection, the hardware picks it. So one synced
+# config.toml + machines.toml works across all your machines; a machine with no
+# matching block just runs the plain config.
+#
+# This shipped file has no machines — only the how-to below. Put YOURS in
+# ~/.config/pirostats/machines.toml, merged on top of this file, so your hardware
+# stays on your machine.
+#
+# ── How to describe a machine ────────────────────────────────────────────────
+#
+# Detection — [<name>.detect], matched against /sys/class/dmi/id/. The first
+# machine whose pattern matches wins; if none match, only config.toml applies.
+# If nothing matches yours, widen the detect rule until it does. Keys:
+#   board_contains / board_startswith  → matched on `board_name`
+#   product_contains                   → matched on `product_name`
+#
+# Overrides — a machine may set any config.toml section. Two kinds:
+#   * typed sections (values): [<name>.sensors], [<name>.battery], [<name>.disks]
+#     e.g. name a fan hwmon input, a keyboard's Bolt index, or disable SMART.
+#   * item lists (grammar): under [<name>.panel.<section>] / [<name>.tooltip.<section>]
+#       items       = [...]   replace the section's items
+#       items_add   = [...]   append items
+#       items_remove= [...]   drop items
+#     and [<name>.panel] / [<name>.tooltip]: order_add = [...]  add sections.
+#
+# Example (copy into ~/.config/pirostats/machines.toml and adjust):
+#
+#   [example.detect]
+#   product_contains = "XPS 13"          # match product_name (or board_contains / board_startswith)
+#
+#   [example.sensors]
+#   fan1_speed = "nct6775|fan1_input"    # hwmon "chip|input" for the fan
+#
+#   [example.tooltip.io]
+#   items_remove = ["wifi_ssid_signal"]  # e.g. a desktop with no Wi-Fi
+#
+# Run `pirostats list-items` for the valid item names.

@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0 http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+	<kcfgfile name=""/>
+
+	<group name="General">
+		<!-- No interval / command / tooltipCommand / waitForCompletion here: the applet
+		     has no clock of its own. It watches the daemon's runtime directory and reads
+		     when the daemon writes, so the only rate is the daemon's poll_interval. The
+		     two `cat`s and the runtime path are derived in main.qml (`config.runtimeDir`)
+		     rather than defaulted here — $XDG_RUNTIME_DIR/pirostats isn't knowable when
+		     the package is built, and the daemon derives the same path independently. -->
+		<!-- PiroStats defaults: a Nerd Font mono is required for the glyphs;
+		     override any of these in the Appearance page. -->
+		<entry name="fontSize" type="int">
+			<default>8</default>
+		</entry>
+		<entry name="fontFamily" type="string">
+			<default>NotoSansM Nerd Font Mono</default>
+		</entry>
+		<entry name="useTooltipFontSize" type="bool">
+			<default>true</default>
+		</entry>
+		<entry name="tooltipFontSize" type="int">
+			<default>11</default>
+		</entry>
+		<entry name="panelLineHeight" type="double">
+			<default>1.05</default>
+		</entry>
+		<entry name="tooltipLineHeight" type="double">
+			<default>1.05</default>
+		</entry>
+		<entry name="useTooltipWidth" type="bool">
+			<default>false</default>
+		</entry>
+		<entry name="tooltipWidth" type="int">
+			<default>420</default>
+		</entry>
+		<entry name="bold" type="bool">
+			<default>false</default>
+		</entry>
+		<entry name="italic" type="bool">
+			<default>false</default>
+		</entry>
+		<entry name="underline" type="bool">
+			<default>false</default>
+		</entry>
+		<entry name="textAlign" type="int">
+			<!-- Text.AlignLeft: 1 -->
+			<!-- Text.AlignHCenter: 4 -->
+			<!-- Text.AlignRight: 2  -->
+			<!-- Text.AlignJustify: 8  -->
+			<!-- PiroStats: centered by default (panel only; the tooltip is always
+			     left-aligned in the QML). -->
+			<default>4</default>
+		</entry>
+		<entry name="vertAlign" type="int">
+			<!-- Text.AlignTop: 32 -->
+			<!-- Text.AlignVCenter: 128 -->
+			<!-- Text.AlignBottom: 64  -->
+			<default>128</default>
+		</entry>
+		<entry name="textColor" type="string">
+			<default></default>
+		</entry>
+		<entry name="outlineColor" type="string">
+			<default></default>
+		</entry>
+		<entry name="showOutline" type="bool">
+			<default>false</default>
+		</entry>
+		<entry name="showBackground" type="bool">
+			<default>false</default>
+		</entry>
+		<!-- Absolute path to the system CLI: /usr/bin is always on the panel's
+		     PATH, and being explicit keeps it independent of the shell env. -->
+		<entry name="clickCommand" type="string">
+			<default>/usr/bin/pirostats click</default>
+		</entry>
+		<entry name="mousewheelUpCommand" type="string">
+			<default>/usr/bin/pirostats page prev</default>
+		</entry>
+		<entry name="mousewheelDownCommand" type="string">
+			<default>/usr/bin/pirostats page next</default>
+		</entry>
+		<entry name="useFixedWidth" type="bool">
+			<default>false</default>
+		</entry>
+		<entry name="fixedWidth" type="int">
+			<default>100</default>
+		</entry>
+		<entry name="useFixedHeight" type="bool">
+			<default>false</default>
+		</entry>
+		<entry name="fixedHeight" type="int">
+			<default>100</default>
+		</entry>
+		<entry name="replaceAllNewlines" type="bool">
+			<default>false</default>
+		</entry>
+	</group>
+
+</kcfg>
+

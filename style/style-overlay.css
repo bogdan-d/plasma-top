@@ -1,0 +1,47 @@
+/* pirostats — inspection overlay, distinct backgrounds per role (label/val/
+   extra) to spot cell gaps/overlaps in panel and tooltip layout.
+
+   THEME-AGNOSTIC: loaded ON TOP of whichever base is active (style-dark.css or
+   style-light.css), only when the inspection overlay is on (`overlay = true`
+   under [display]). Always active in THIS file (no comments
+   to toggle) — toggling the overlay means loading/not loading this file at all
+   (see daemon.py _read_css), never editing it.
+
+   This file only sets background-color, never color: the text keeps the base
+   sheet's own colours (the widget's themed default + good/warn/crit states),
+   which is exactly why a single overlay works for both light and dark — the
+   backgrounds mark the cell boxes, the text stays whatever the theme makes it.
+
+   Rules here override the base sheet's same-specificity ones (context + 1
+   class) purely by coming later in the concatenated <style> block — keep each
+   selector here at the SAME specificity as the rule it's meant to override, or
+   it won't win. */
+
+.panel { background-color: #ff0000; }
+.panel .label { background-color: #224488; }
+.panel .val { background-color: #884422; }
+.panel .aux { background-color: #89209c; }
+.panel .gap { background-color: #2f6f4f; }
+
+/* Explicit separators (separator_small/big in the TOML): empty gaps with no
+   ink of their own, invisible in normal mode — paint them here to see where
+   they land and how tall they are. */
+.panel .separator-rule-small { background-color: #aa2266; }
+.panel .separator-rule-big { background-color: #aa2266; }
+
+/* Section title and its underline rule (tooltip only): two close teal shades
+   so the title's text box and the thin rule below it are each visible and
+   told apart. The rule's bg here overrides its real colour from the base sheet. */
+.tooltip .title { background-color: #006666; }
+.tooltip .title-rule { background-color: #00a0a0; }
+
+.tooltip .label { background-color: #224488; }
+.tooltip .val { background-color: #884422; }
+.tooltip .aux { background-color: #89209c; }
+.tooltip .gap { background-color: #2f6f4f; }
+
+/* Explicit separators (separator_small/big in the TOML): empty gaps with no
+   ink of their own, invisible in normal mode — paint them here to see where
+   they land and how tall they are. */
+.tooltip .separator-rule-small { background-color: #aa2266; }
+.tooltip .separator-rule-big { background-color: #aa2266; }

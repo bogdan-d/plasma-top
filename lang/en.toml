@@ -1,0 +1,51 @@
+# lang/en.toml — the label (word) for each metric. TRANSLATABLE text: one
+# file per language (en, it, …). Default 'en'. `delimiter` separates label and
+# value in the tooltip; `history` is the history side of the bar+history combos.
+
+delimiter            = ":"
+cpu_usage            = "Cpu usage"
+mem_usage            = "Mem usage"
+swap_usage           = "Swap usage"
+cpu_freq             = "Cpu freq"
+cpu_turbo            = "Cpu turbo"
+cpu_temp             = "Cpu temp"
+hd_temp              = "Disk"
+fan_speed            = "Fan speed"
+gpu_nvidia_usage     = "Gpu usage"
+gpu_nvidia_mem_usage = "Gpu mem usage"
+gpu_nvidia_dec_usage = "Gpu decoder usage"
+gpu_nvidia_temp      = "Gpu temp"
+gpu_nvidia_fan_speed = "Gpu fan speed"
+gpu_intel_usage      = "Igpu usage"
+gpu_intel_freq       = "Igpu freq"
+gpu_intel_dec_usage  = "Igpu decoder"
+battery_sys          = "Battery"
+battery_mouse        = "Mouse"
+battery_kbd          = "Keyboard"
+screen_brightness    = "Brightness"
+net_speed_up         = "Upload"
+net_speed_down       = "Dload"
+disk_io_read         = "Read"
+disk_io_write        = "Write"
+net_device_ip        = "Network"
+net_device           = "Network"
+net_ip               = "IP"
+wifi_ssid_signal     = "Wifi"
+wifi_ssid            = "Wifi"
+wifi_signal          = "Signal"
+uptime               = "Uptime"
+load_avg             = "Load avg"
+system_updates       = "System updates"
+server_check         = "Server check"
+history              = "History"
+
+# Desktop notification text (notifier.py). Metric labels above are reused for
+# the metric name where the wording matches (cpu_temp, gpu_nvidia_temp,
+# hd_temp, battery_sys, battery_mouse, battery_kbd, load_avg); only the
+# wording with no single-metric equivalent lives here.
+[notify]
+disk_usage    = "Disk"
+disk_smart    = "Disk"
+smart_fail    = "SMART check FAILED"
+load_high_for = "high for"
+server_down   = "Server is not reachable!"

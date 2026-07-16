@@ -1,0 +1,30 @@
+# Ruff config. The repo ships no build/lint step and is not pip-installable
+# (`./pirostats` just prepends src/ to sys.path), so this is a standalone
+# ruff.toml rather than a pyproject.toml that would imply a package.
+#
+# The point of running ruff here is the F rules (Pyflakes: dead imports, unused
+# variables, undefined/redefined names) — real bugs vulture's dead-code gate
+# doesn't cover the same way. We keep ruff's DEFAULT select (E4/E7/E9 + F) and
+# only silence the pycodestyle style rules this codebase breaks on purpose, so
+# `ruff check` stays green on the current tree and only speaks up for something
+# new and worth fixing. E501 (line length) is deliberately NOT in the default
+# set and stays out: the comments here run wide on purpose.
+
+target-version = "py311"
+
+[lint]
+# Each ignore is a deliberate house style, not an oversight:
+ignore = [
+    "E731",  # assigned lambdas — the metric gates (_g_*) and the cell factories in
+             # items.py are declarative lookup tables; def-ing each would scatter them.
+    "E702",  # multiple statements per line (semicolons) — chart.py's rasterizer packs
+             # a per-pixel loop body onto one line on purpose (buf[p]=…; buf[p+1]=…).
+    "E741",  # ambiguous name `l` — used as a short "label" binding in a few dense
+             # comprehensions; a house convention, not a variable anyone confuses with 1.
+    "E401",  # multiple imports on one line — bolt_battery.py groups its ctypes imports.
+]
+
+[lint.per-file-ignores]
+# The `page` fast-path (fired once per mouse-wheel notch) runs and exits BEFORE
+# importing daemon, so its heavy import sits below that guard by design.
+"pirostats" = ["E402"]

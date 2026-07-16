@@ -1,0 +1,148 @@
+/* pirostats — stylesheet for LIGHT Plasma color schemes (dark variant:
+   style.css). The daemon serves one or the other by the desktop's window
+   background luminance (daemon.py _plasma_is_light), watched on kdeglobals so a
+   Global Theme switch hot-reloads it. This file mirrors style.css's STRUCTURE
+   1:1 — same selectors, same layout mechanics — and only the color /
+   background-color values differ (dark inks instead of near-white, light-grey
+   tracks, saturated hues darkened to read on a light page). Keep the two in
+   sync: a layout/selector change here must be mirrored in style.css.
+
+   Same Qt RichText caveats as style.css apply — see that file's header for the
+   CSS subset, the &nbsp;-padding column model, and the DANGER note about stray
+   comment delimiters and newlines killing the whole <style> block. */
+
+
+/* ── Panel ────────────────────────────────────────────────────────────────── */
+
+.panel-v { word-spacing: 0px; letter-spacing: 0px; }
+.panel-h { word-spacing: 0px; letter-spacing: 0px; }
+
+.panel .label { color: #2a2e32; }
+/* .panel .val { font-weight: bold; } */
+.panel .aux { color: #232629; }
+
+.panel .active      { color: #232629; }
+.panel .deactive    { color: #c0392b; }
+
+.panel-v .separator-rule-small { font-size: 4px; }
+.panel-v .separator-rule-big { font-size: 8px; }
+
+.panel-h .item-gap { letter-spacing: 2px; }
+.panel-h .separator-rule-small { letter-spacing: 8px; }
+.panel-h .separator-rule-big { letter-spacing: 18px; }
+
+
+/* ── Tooltip ──────────────────────────────────────────────────────────────── */
+
+.tooltip .title { font-weight: bold;
+   font-size: 1.35em;
+   color: #1d7bb8;
+   text-align: left;
+   letter-spacing: 1px;
+ }
+
+.tooltip .title-rule { background-color: #c4c8cc;
+   font-size: 1px;
+   margin-top: 3px;
+   margin-bottom: 4px; }
+
+.tooltip .label { color: #7a7f83; }
+/* .tooltip .val { font-weight: bold; } */
+.tooltip .aux { color: #232629; }
+
+.tooltip .active      { color: #232629; }
+.tooltip .deactive    { color: #c0392b; }
+
+.tooltip .separator-rule-small { font-size: 3px; }
+.tooltip .separator-rule-big { font-size: 8px; }
+
+/* Pager: centered row of dots under every page, the active one lit. See the
+   dark sheet for the letter-spacing/margin rationale. */
+/* Body font-size (see dark sheet): the pager's &nbsp; centering needs the
+   body's monospace cell width. */
+.tooltip .pager { margin-top: 8px; }
+.tooltip .pager .on  { color: #232629; }
+.tooltip .pager .off { color: #b6babd; }
+
+/* Deep-dive pages: explicit color for raw command text (see dark sheet). */
+.tooltip .page { color: #2b2f33; }
+
+
+/* ── Common ───────────────────────────────────────────────────────────────── */
+
+/* Threshold colors, assigned dynamically in Python from value + thresholds. */
+.good { color: #232629; }
+.warn { color: #eb8d00; }
+.crit { color: #c0392b; }
+.active { color: #232629; }
+.deactive { color: #c0392b; }
+
+
+/* ── Bar ───────────────────────────────────────────────────────────────── */
+
+.bar-empty { background-color: #c4c8cc; color: #c4c8cc; word-spacing:0px; letter-spacing:0px; }
+
+.item-cpu_usage.form-bar .bar-good { color: #27ae60; background-color: #27ae60; }
+.item-cpu_usage.form-bar .bar-warn { color: #d68910; background-color: #d68910; }
+.item-cpu_usage.form-bar .bar-crit { color: #e74c3c; background-color: #e74c3c; }
+
+.item-mem_usage.form-bar .bar-good { color: #8e44ad; background-color: #8e44ad; }
+.item-mem_usage.form-bar .bar-warn { color: #7d3c98; background-color: #7d3c98; }
+.item-mem_usage.form-bar .bar-crit { color: #5b1fb3; background-color: #5b1fb3; }
+
+
+/* ── Spark ───────────────────────────────────────────────────────────────── */
+
+.spark-empty { color: #c4c8cc; }
+
+.item-cpu_usage.form-spark .bar-good { color: #27ae60; }
+.item-cpu_usage.form-spark .bar-warn { color: #d68910; }
+.item-cpu_usage.form-spark .bar-crit { color: #e74c3c; }
+
+.item-mem_usage.form-spark .bar-good { color: #8e44ad; }
+.item-mem_usage.form-spark .bar-warn { color: #7d3c98; }
+.item-mem_usage.form-spark .bar-crit { color: #5b1fb3; }
+
+.item-cpu_usage.form-spark_value .bar-good { color: #27ae60; }
+.item-cpu_usage.form-spark_value .bar-warn { color: #d68910; }
+.item-cpu_usage.form-spark_value .bar-crit { color: #e74c3c; }
+
+.item-mem_usage.form-spark_value .bar-good { color: #8e44ad; }
+.item-mem_usage.form-spark_value .bar-warn { color: #7d3c98; }
+.item-mem_usage.form-spark_value .bar-crit { color: #5b1fb3; }
+
+
+/* ── Braille ───────────────────────────────────────────────────────────────── */
+
+.grad-cpu-0 { color: #1e9e3c; }
+.grad-cpu-1 { color: #1e9e3c; }
+.grad-cpu-2 { color: #1e9e3c; }
+.grad-cpu-3 { color: #6ab52a; }
+.grad-cpu-4 { color: #caa200; }
+.grad-cpu-5 { color: #e08e00; }
+.grad-cpu-6 { color: #e2661c; }
+.grad-cpu-7 { color: #d02e2e; }
+
+.grad-mem-0 { color: #9aa0a6; }
+.grad-mem-1 { color: #a86fd0; }
+.grad-mem-2 { color: #9438c4; }
+.grad-mem-3 { color: #8410c8; }
+.grad-mem-4 { color: #9c0eb0; }
+.grad-mem-5 { color: #b02878; }
+.grad-mem-6 { color: #d0402f; }
+.grad-mem-7 { color: #d9600f; }
+
+.item-cpu_usage.form-braille, .item-mem_usage.form-braille { font-size: inherit; }
+
+
+/* ── Cpu/Mem usage column ───────────────────────────────────────────────────────────────── */
+
+.item-cpu_usage.form-column .bar-good { color: #27ae60; }
+.item-cpu_usage.form-column .bar-warn { color: #d68910; }
+.item-cpu_usage.form-column .bar-crit { color: #e74c3c; }
+.item-mem_usage.form-column .bar-good { color: #8e44ad; }
+.item-mem_usage.form-column .bar-warn { color: #7d3c98; }
+.item-mem_usage.form-column .bar-crit { color: #5b1fb3; }
+
+.item-cpu_usage.form-column { background-color: #c4c8cc; letter-spacing: -0.5px; word-spacing: 0px; }
+.item-mem_usage.form-column { background-color: #c4c8cc; letter-spacing: -0.5px; word-spacing: 0px; }

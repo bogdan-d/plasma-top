@@ -1,0 +1,229 @@
+# config.toml — PiroStats behavior and data: thresholds, glyphs, item order,
+# hardware. Colors, spacing and fonts live in the style CSS, not here.
+# To customize: copy to ~/.config/pirostats/config.toml and edit (hot-reloaded).
+# Per-machine tweaks auto-detect from the DMI name — see machines.toml.
+
+
+# ── Display ───────────────────────────────────────────────────────────────────
+# The daemon's two cadences, plus the inspection aid. Everything else is scoped
+# to a surface, a page or a form, and lives in its own section below.
+
+[display]
+poll_interval    = 1.5 # rewrite of both panel and tooltip HTML
+history_interval = 1.5 # sampling of the history buffer shared by spark, braille and the graphs page
+
+# Dev aid: per-cell diagnostic backgrounds (style-overlay.css) to spot layout
+# gaps/overlaps. Flip to true to inspect, false in production.
+overlay          = false
+
+
+# ── Panel ─────────────────────────────────────────────────────────────────────
+# A surface is an ordered list of typed sections, each with an ordered list of
+# item names. Listing an item enables it; list order = render order. An item
+# shows only if listed AND its hardware is present, so lists can be generous. A
+# section with no visible item collapses entirely.
+#
+# Item names: `pirostats list-items`. Glyph in style/icons.toml, label in
+# lang/<language>.toml, threshold in [thresholds]. Machine blocks override per
+# section via items / items_add / items_remove (+ order_add).
+
+[panel]
+order  = ["cpumem", "thermal", "batteries"]
+glyphs = true   # show the label glyph next to each value
+
+# :bar adapts to orientation by itself (column in horizontal, side bar in
+# vertical), so cpumem stays one section. Column height in [column_panel].
+[panel.cpumem]
+items = ["cpu_usage", "cpu_usage:bar", "separator_small", "mem_usage", "mem_usage:bar", "separator_small"]
+
+[panel.thermal]
+items = ["cpu_temp"]
+
+[panel.batteries]
+items = ["battery_sys"]
+
+# Per-orientation override (content and options, not form; same grammar as
+# machine blocks). Horizontal panel space is tight: no glyphs, no battery.
+[panel_horizontal]
+glyphs = false
+
+[panel_horizontal.batteries]
+items_remove = ["battery_sys"]
+
+
+# ── Tooltip ───────────────────────────────────────────────────────────────────
+# Same grammar as [panel] above, plus a per-section title. The width is derived,
+# never configured: every page sizes to the main page's canonical (max) width.
+
+[tooltip]
+order = ["cpumem", "drives", "gpu", "thermal", "batteries", "io", "load"]
+
+[tooltip.cpumem]
+title = "CPU & MEM"
+items = ["cpu_usage:braille_value", "mem_usage", "cpu_freq"]
+
+[tooltip.drives]
+title = "DRIVES"
+items = ["disk_usage", "disk_smart:pair"]
+
+[tooltip.gpu]
+title = "GPU"
+items = ["gpu_nvidia_usage", "gpu_nvidia_mem_usage", "gpu_nvidia_dec_usage",
+         "gpu_intel_usage", "gpu_intel_freq", "gpu_intel_dec_usage", "screen_brightness"]
+
+[tooltip.thermal]
+title = "THERMAL"
+items = ["cpu_temp", "gpu_nvidia_temp", "hd_temp:pair", "fan_speed:pair", "gpu_nvidia_fan_speed"]
+
+[tooltip.batteries]
+title = "BATTERIES"
+items = ["battery_sys", "battery_mouse", "battery_kbd"]
+
+[tooltip.io]
+title = "I/O"
+items = ["disk_io", "net_speed", "net_device_ip", "wifi_ssid_signal"]
+
+[tooltip.load]
+title = "LOAD"
+items = ["uptime", "load_avg"]
+
+
+# ── Pages ─────────────────────────────────────────────────────────────────────
+# Tooltip deep-dive pages reached by scrolling the widget; the full stats view is
+# always first and is not listed here. Available: processes, cpu_cores,
+# connections, fastfetch, graphs. order = [] leaves just the full view, no pager.
+
+[pages]
+order = ["graphs", "processes"]
+
+# graphs only: samples kept by its history charts (time window = this ×
+# display.history_interval). No extra memory when "graphs" is not in order.
+graph_history_length = 60
+
+
+# ── Forms ─────────────────────────────────────────────────────────────────────
+# Size knobs of the :bar / :spark / :braille forms, per surface. Whether a form
+# renders at all is decided by the item lists above, never here. The vertical
+# PANEL's bar, spark and braille widths are auto-fitted to the live panel
+# geometry, so only the hand-tuned ones appear below.
+
+[bar_panel]
+# height = strip thickness in px (font-size of the █/░ glyphs; Qt ignores CSS
+# height) — the only bar knob meant to be hand-tuned. Width is auto-fitted.
+height     = 3   # px; 0 = inherit the plasmoid's font
+
+[bar_tooltip]
+width      = 10
+
+[column_panel]
+# :bar in the horizontal panel renders as a vertical column.
+# width = thickness in glyphs; height is auto-fitted to the digit height.
+width = 1
+
+# Spark and braille read the same history buffer (cadence:
+# display.history_interval) with independent widths, in characters. Spark is
+# colored by [thresholds].cpu_spark/mem_spark; braille uses a gradient.
+
+[spark_tooltip]
+cpu_spark_length = 10
+mem_spark_length = 10
+
+[braille_tooltip]
+cpu_braille_length = 10
+mem_braille_length = 10
+
+
+# ── Thresholds ────────────────────────────────────────────────────────────────
+
+[thresholds]
+# 3-color thresholds: [mid, high]. Below "mid" -> low
+cpu_spark            = [50, 70]
+cpu_usage            = [50, 70]
+mem_spark            = [40, 60]
+mem_usage            = [40, 60]
+top_process_cpu      = [50, 70]
+top_process_mem      = [15, 30]
+swap_usage           = [50, 70]
+disk_usage           = [50, 80]
+cpu_temp             = [50, 70]
+hd_temp              = [50, 55]
+gpu_nvidia_usage     = [50, 70]
+gpu_nvidia_mem_usage = [50, 70]
+gpu_nvidia_temp      = [50, 70]
+gpu_intel_usage      = [50, 70]
+battery_sys          = [20, 80]
+battery_mouse        = [20, 80]
+battery_kbd          = [20, 80]
+wifi_signal          = [30, 60]
+
+# Single-value binary threshold: v > threshold -> green (active), otherwise no color.
+gpu_nvidia_dec_usage = 1
+gpu_intel_dec_usage  = 1
+
+# Load avg: thresholds as a fraction of cores (value / core count), so they hold
+# on any machine. Longer windows use lower thresholds (sustained load weighs more).
+load_avg_1           = [0.7, 1.0]
+load_avg_5           = [0.6, 0.9]
+load_avg_15          = [0.5, 0.8]
+
+
+# ── Notify thresholds ─────────────────────────────────────────────────────────
+# Thresholds that trigger the desktop notification
+
+[notify_thresholds]
+disk_usage      = 80
+cpu_temp        = 80
+hd_temp         = 60
+gpu_nvidia_temp = 80
+battery_sys     = 10
+battery_mouse   = 20
+battery_kbd     = 20
+
+# Load avg 15min: fraction of cores, sustained for load_avg_minutes before notifying.
+load_avg_15      = 0.9
+load_avg_minutes = 10
+
+
+# ── Notifications ─────────────────────────────────────────────────────────────
+
+[notifications]
+disk_usage      = true
+disk_smart      = true
+cpu_temp        = true
+hd_temp         = true
+gpu_nvidia_temp = true
+battery_sys     = true
+battery_mouse   = true
+battery_kbd     = true
+load_avg        = true
+server_check    = false
+
+
+# ── Disks ─────────────────────────────────────────────────────────────────────
+
+[disks]
+# "auto" discovers real mounts under auto_roots (+ "/" always); external drives
+# appear/disappear on their own. Or an explicit list, e.g. ["/", "/mnt/data"].
+mounts     = "auto"
+auto_roots = ["/mnt", "/media", "/run/media"]
+
+# SMART check TTL (seconds). Rotational disks (auto-detected) use the slower
+# interval since SmartUpdate wakes them from power-saving.
+smart_interval     = 3600     # SSD/NVMe: 1h
+smart_interval_hdd = 21600    # spinning HDDs: 6h
+
+
+# ── System updates ────────────────────────────────────────────────────────────
+
+# Path written by an external checker (e.g. `checkupdates | wc -l > FILE` on a
+# systemd --user timer). The daemon only reads it. Empty = disabled.
+[system_updates]
+file = ""   # e.g. "/run/user/1000/pirostats_updates"
+
+
+# ── Server check ──────────────────────────────────────────────────────────────
+
+# Path written by an external ping checker ("1" = reachable, "0" = not). The
+# daemon only reads it. Empty = disabled.
+[server_check]
+file = ""   # e.g. "/run/user/1000/pirostats_server"
