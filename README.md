@@ -12,6 +12,10 @@ by a lightweight Python daemon.
     <td align="center" width="50%"><img src="screenshots/graphs.png" alt="Graphs page" width="50%"><br><em>Graphs page</em></td>
     <td align="center" width="50%"><img src="screenshots/process.png" alt="Top processes page" width="50%"><br><em>Top processes page</em></td>
   </tr>
+  <tr>
+    <td align="center" width="50%"><img src="screenshots/desktop-white-text.png" alt="Desktop mode, white text" width="50%"><br><em>Desktop mode — transparent, white text</em></td>
+    <td align="center" width="50%"><img src="screenshots/desktop-black-text.png" alt="Desktop mode, black text" width="50%"><br><em>Desktop mode — transparent, black text</em></td>
+  </tr>
 </table>
 
 PiroStats renders CPU, memory, drives, GPU, temperatures, batteries, network and
@@ -30,6 +34,11 @@ there are **zero process forks in the hot path**.
   order them in the config.
 - **Pin** — middle-click keeps the tooltip open as a persistent popup, so you can
   watch the graphs live without holding the pointer over the widget.
+- **Desktop mode** — drop the widget straight onto the desktop for an always-on,
+  conky-style readout. Choose Plasma's background or keep it transparent on the
+  wallpaper, pick the text and outline colors for legibility over any image, and
+  scroll to page through the views. Set it in the widget's *Appearance* page (the
+  Desktop options appear only when it's on the desktop).
 - **Auto light/dark** — follows the Plasma color scheme, hot-reloaded.
 - **Per-machine overrides** — sensor mappings and item tweaks auto-detected from
   the DMI board/product name, so one config works across all your machines.
