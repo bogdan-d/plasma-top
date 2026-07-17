@@ -257,6 +257,12 @@ class NotifyThresholds:
     battery_sys: int = 10
     battery_mouse: int = 20
     battery_kbd: int = 20
+    # Debounce shared by cpu_temp/gpu_nvidia_temp/hd_temp (notifier._sustained):
+    # seconds a reading must hold over its threshold to notify, and degrees it
+    # must then fall below it to re-arm. Boost bursts cross the trip point for a
+    # fraction of a second, so without these an idle machine alerts on noise.
+    temp_sustain_seconds: int = 60
+    temp_hysteresis: int = 5
     # Load avg 15min: fraction of cores (v / nproc) and minimum duration above threshold.
     load_avg_15: float = 0.9
     load_avg_minutes: int = 10

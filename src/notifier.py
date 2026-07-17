@@ -1,6 +1,8 @@
 """
 Desktop notifications via gi.repository.Notify (GLib, part of python-gobject).
-Uses edge-triggered logic: notifies once when threshold is crossed, resets when clear.
+Uses edge-triggered logic: notifies once when a threshold is crossed, resets when
+clear. Crossings that are noisy at poll granularity (the temperatures, load avg)
+go through _sustained, which adds a hold time and hysteresis — see there.
 """
 from __future__ import annotations
 
@@ -36,19 +38,56 @@ def _send(title: str, body: str, icon: str = "dialog-error") -> None:
 # ── State ─────────────────────────────────────────────────────────────────────
 
 @dataclass
+class Latch:
+    """One _sustained alert's edge state: whether it's currently firing, and when
+    the value first reached the trip point (None whenever it's below it)."""
+    active: bool = False
+    since: float | None = None
+
+
+@dataclass
 class NotifState:
     """Tracks which alerts are currently active (to avoid re-sending)."""
-    cpu_temp: bool = False
-    gpu_nvidia_temp: bool = False
     disk: dict[str, bool] = field(default_factory=dict)         # mount → active
     disk_smart: dict[str, bool] = field(default_factory=dict)   # hd_temp label → active (failing)
-    hd_temp: dict[str, bool] = field(default_factory=dict)      # label → active
     battery_sys: dict[str, bool] = field(default_factory=dict)  # battery id → active
     battery_mouse: bool = False
     battery_kbd: bool = False
     server: bool = False
-    load_avg: bool = False
-    load_avg_high_since: float | None = None  # time.monotonic() when the threshold was first exceeded
+    # Debounced alerts (_sustained): a latch each, keyed by label where per-device.
+    cpu_temp: Latch = field(default_factory=Latch)
+    gpu_nvidia_temp: Latch = field(default_factory=Latch)
+    hd_temp: dict[str, Latch] = field(default_factory=dict)     # label → latch
+    load_avg: Latch = field(default_factory=Latch)
+
+
+def _sustained(latch: Latch, value: float, trip: float, clear: float,
+               hold: float, now: float) -> bool:
+    """True on the single poll where `value` completes `hold` seconds at or above
+    `trip`; False every other poll. Two guards a bare `value >= trip` lacks:
+
+    - hold: a CPU boost burst crosses the trip point for a fraction of a second
+      on an otherwise idle machine, so firing on one sample means alerting on
+      noise. The value must stay over it continuously — a single reading below
+      re-arms the wait from zero.
+    - hysteresis (clear < trip): once tripped, the alert stays latched until the
+      value falls below `clear`, so a value hovering on the trip point can't
+      rattle the notification off and on. Pass clear == trip for none.
+    """
+    if latch.active:
+        if value < clear:
+            latch.active = False
+            latch.since  = None
+        return False
+    if value < trip:
+        latch.since = None
+        return False
+    if latch.since is None:
+        latch.since = now
+    if now - latch.since < hold:
+        return False
+    latch.active = True
+    return True
 
 
 # ── Main check ────────────────────────────────────────────────────────────────
@@ -59,20 +98,23 @@ def check_and_notify(r: Readings, cfg: Config, state: NotifState, hw: HardwareIn
     n  = cfg.notify_thresholds
     lb = cfg.labels
     nl = lb.get("notify", {})  # notification-only wording, see lang/<language>.toml [notify]
+    now = time.monotonic()     # once per pass, so every latch below times off the same instant
+
+    # The three temperatures share one debounce (a spike is a spike whatever the
+    # chip), so they read the same two knobs rather than one pair each.
+    hold = n.temp_sustain_seconds
+    cool = n.temp_hysteresis
 
     # CPU temp
     if c.cpu_temp and r.cpu_temp is not None:
-        over = r.cpu_temp >= n.cpu_temp
-        if over and not state.cpu_temp:
+        if _sustained(state.cpu_temp, r.cpu_temp, n.cpu_temp, n.cpu_temp - cool, hold, now):
             _send("PiroStats", f"{lb.get('cpu_temp', 'Cpu temp')} {r.cpu_temp}{TEMP_SCALE}")
-        state.cpu_temp = over
 
     # GPU temp
     if c.gpu_nvidia_temp and r.gpu_temp is not None:
-        over = r.gpu_temp >= n.gpu_nvidia_temp
-        if over and not state.gpu_nvidia_temp:
+        if _sustained(state.gpu_nvidia_temp, r.gpu_temp, n.gpu_nvidia_temp,
+                      n.gpu_nvidia_temp - cool, hold, now):
             _send("PiroStats", f"{lb.get('gpu_nvidia_temp', 'Gpu temp')} {r.gpu_temp}{TEMP_SCALE}")
-        state.gpu_nvidia_temp = over
 
     # Disk usage
     if c.disk_usage:
@@ -103,12 +145,10 @@ def check_and_notify(r: Readings, cfg: Config, state: NotifState, hw: HardwareIn
         for label, temp in r.hd_temps.items():
             if temp is None:
                 continue
-            over = temp >= n.hd_temp
-            was  = state.hd_temp.get(label, False)
-            if over and not was:
+            latch = state.hd_temp.setdefault(label, Latch())
+            if _sustained(latch, temp, n.hd_temp, n.hd_temp - cool, hold, now):
                 _send("PiroStats", f"{lb.get('hd_temp', 'Disk')} {label} temp {temp}{TEMP_SCALE}",
                       icon="dialog-warning")
-            state.hd_temp[label] = over
 
     # System battery (notify when *below* threshold, ignore while charging)
     if c.battery_sys:
@@ -139,25 +179,18 @@ def check_and_notify(r: Readings, cfg: Config, state: NotifState, hw: HardwareIn
             _send("PiroStats", f"{name}: {r.battery_kbd.perc}", icon="battery-caution")
         state.battery_kbd = over
 
-    # Load avg 15min: notifies only if it stays above threshold for at least N
-    # consecutive minutes (edge-triggered like the others, but with a time debounce).
+    # Load avg 15min: the same latch as the temperatures, with no hysteresis and a
+    # far longer hold — a load spike is normal, a sustained one is the signal. The
+    # threshold is a fraction of cores (v / nproc), so it holds on any machine.
     if c.load_avg and r.load_avg is not None:
         fifteen = r.load_avg[2]
         ratio   = fifteen / hw.cpu_count
-        over    = ratio >= n.load_avg_15
-        if over:
-            if state.load_avg_high_since is None:
-                state.load_avg_high_since = time.monotonic()
-            sustained_min = (time.monotonic() - state.load_avg_high_since) / 60
-            if sustained_min >= n.load_avg_minutes and not state.load_avg:
-                _send("PiroStats",
-                      f"{lb.get('load_avg', 'Load avg')} 15m {nl.get('load_high_for', 'high for')} "
-                      f"{int(sustained_min)} min ({fifteen:.2f})",
-                      icon="dialog-warning")
-            state.load_avg = sustained_min >= n.load_avg_minutes
-        else:
-            state.load_avg_high_since = None
-            state.load_avg = False
+        if _sustained(state.load_avg, ratio, n.load_avg_15, n.load_avg_15,
+                      n.load_avg_minutes * 60, now):
+            _send("PiroStats",
+                  f"{lb.get('load_avg', 'Load avg')} 15m {nl.get('load_high_for', 'high for')} "
+                  f"{n.load_avg_minutes} min ({fifteen:.2f})",
+                  icon="dialog-warning")
 
     # Server check
     if c.server_check and r.server_ok is not None:

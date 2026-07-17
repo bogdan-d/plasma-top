@@ -179,6 +179,14 @@ battery_sys     = 10
 battery_mouse   = 20
 battery_kbd     = 20
 
+# Debounce shared by the three temperatures above. A CPU boost burst crosses the
+# threshold for a fraction of a second on an otherwise idle machine, so a reading
+# must hold over it for temp_sustain_seconds to notify, and then drop
+# temp_hysteresis degrees below it before the alert can fire again (no rattling
+# on the trip point). Set sustain to 0 to alert on the first reading over.
+temp_sustain_seconds = 60
+temp_hysteresis      = 5
+
 # Load avg 15min: fraction of cores, sustained for load_avg_minutes before notifying.
 load_avg_15      = 0.9
 load_avg_minutes = 10
