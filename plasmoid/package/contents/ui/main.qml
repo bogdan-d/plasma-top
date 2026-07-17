@@ -247,6 +247,34 @@ PlasmoidItem {
 	// on the tooltip's share of each watcher notification.
 	property bool tooltipHovered: false
 
+	// Desktop "no background" look: with the widget transparent on the wallpaper,
+	// the daemon's own base colors (grey labels, cyan titles, dark "good"/"active"
+	// values) lose contrast. Force those to one flat color — white or black, the
+	// user's pick — by appending a CSS rule that overrides exactly those classes.
+	// It lands last inside the daemon's <style>, so at equal specificity it wins.
+	// Threshold classes (.warn/.crit/.deactive) and the colored bars are left out,
+	// so alerts keep their meaning. Plain values carry no color class and inherit
+	// the Text color instead (set on pinText), so this rule need not name them.
+	function desktopRecolor(html, color) {
+		// The inactive pager dots (pages you haven't scrolled to) stay dimmer than
+		// the active one: the chosen text color blended halfway to mid-grey. Kept a
+		// solid 6-digit color on purpose — Qt's RichText CSS may not parse the
+		// 8-digit alpha form — and it works for any picked color, not a fixed grey.
+		var c = Qt.color(color)
+		var dim = Qt.rgba((c.r + 0.5) / 2, (c.g + 0.5) / 2, (c.b + 0.5) / 2, 1).toString()
+		// Each selector must be at least as specific as the base rule it overrides,
+		// or the base wins despite ours coming later: .active is set by the base as
+		// ".tooltip .active" (two classes), so a bare ".active" here would lose and
+		// e.g. the SMART "OK" value would keep its default color.
+		var rule = ".tooltip .title,.tooltip .label,.tooltip .aux,.good,.tooltip .active,"
+			+ ".tooltip .pager .on,.tooltip .page{color:" + color + ";}"
+			+ ".tooltip .pager .off{color:" + dim + ";}"
+			// The rule under each section title is a thin block tinted with
+			// background-color, not color, so recolor it separately to match.
+			+ ".tooltip .title-rule{background-color:" + color + ";}"
+		return html.replace("</style>", rule + "</style>")
+	}
+
 	function formatOutputText(stdout) {
 		var formattedText = stdout
 
@@ -452,6 +480,10 @@ PlasmoidItem {
 		}
 	}
 
+	// Plasma's own widget background, on when showBackground is set (the desktop
+	// "with background" look); off leaves the widget transparent on the wallpaper
+	// (the "conky" look, where legibility comes from the forced text color in
+	// pinText). In a panel the panel supplies the background regardless.
 	Plasmoid.backgroundHints: plasmoid.configuration.showBackground ? PlasmaCore.Types.DefaultBackground : PlasmaCore.Types.NoBackground
 
 	// The pinned popup (middle-click) is the only way this applet expands, and it
@@ -660,14 +692,30 @@ PlasmoidItem {
 		Layout.maximumHeight: Layout.minimumHeight
 		Layout.preferredHeight: Layout.minimumHeight
 
+		// This same full representation serves two very different contexts: inline
+		// on the desktop (the widget itself) and the pinned popup from a panel. The
+		// desktop-only behaviors below (its own background, outlined text, wheel
+		// paging) key off this — the popup keeps Plasma's dialog background and the
+		// panel drives its paging.
+		readonly property bool onDesktop: plasmoid.formFactor === PlasmaCore.Types.Planar
+
 		MouseArea {
 			anchors.fill: parent
 			acceptedButtons: Qt.MiddleButton
 			onClicked: widget.expanded = false   // middle-click again un-pins
-			// No wheel paging on the popup: scrolling it would resize it out from
-			// under the cursor on a shorter page (a stick, and any freeze-to-avoid
-			// it glitched on resize). Page from the panel while pinned — the popup
-			// follows, since it renders the same tooltipText.
+			// Wheel paging is enabled ONLY on the desktop, where this full
+			// representation IS the widget and there's no panel to page from. In
+			// the pinned popup it stays inert: scrolling would resize the popup out
+			// from under the cursor on a shorter page (a stick, glitchy on resize),
+			// so there you page from the panel and the popup follows. On the desktop
+			// the widget is inline — a resize just regrows it in place, no popup to
+			// lose focus.
+			onWheel: (wheel) => {
+				if (!pinItem.onDesktop)
+					return
+				wheel.accepted = true
+				widget.wheelStep(wheel.angleDelta.y || wheel.angleDelta.x)
+			}
 		}
 
 		Text {
@@ -689,9 +737,24 @@ PlasmoidItem {
 		Text {
 			id: pinText
 			anchors.fill: parent
-			text: widget.tooltipText
+			// In the transparent desktop mode, force the base text color (plain
+			// values inherit this Text color) and recolor the classed base text via
+			// the injected CSS rule; thresholds stay untouched. Elsewhere (panel
+			// popup, or desktop with a background) the daemon's own colors stand.
+			readonly property bool conkyMode: pinItem.onDesktop && !plasmoid.configuration.showBackground
+			// Empty config means "default" (ColorField stores "" for its default),
+			// so fall back to the kcfg defaults here.
+			readonly property string txtColor: plasmoid.configuration.desktopTextColor || "#ffffff"
+			readonly property string outlineColor: plasmoid.configuration.desktopOutlineColor || "#000000"
+			text: conkyMode ? widget.desktopRecolor(widget.tooltipText, txtColor)
+			                : widget.tooltipText
 			textFormat: Text.RichText
-			color: config.textColor
+			color: conkyMode ? txtColor : config.textColor
+			// Optional halo in conky mode so the text reads on a busy wallpaper; it
+			// rings every glyph, threshold colors included. Color is the user's pick
+			// (default black, which sits well under white text).
+			style: (conkyMode && plasmoid.configuration.desktopOutline) ? Text.Outline : Text.Normal
+			styleColor: outlineColor
 			horizontalAlignment: Text.AlignLeft
 			wrapMode: Text.NoWrap
 			elide: Text.ElideNone

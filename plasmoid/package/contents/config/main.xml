@@ -71,6 +71,20 @@
 		<entry name="showBackground" type="bool">
 			<default>false</default>
 		</entry>
+		<!-- Desktop-only, used when showBackground is off (transparent widget on the
+		     wallpaper): the base text color, forced white or black for legibility.
+		     Threshold colors (warn/crit) are kept — see the recolor in main.qml. -->
+		<entry name="desktopTextColor" type="string">
+			<default>#ffffff</default>
+		</entry>
+		<!-- Desktop-only, no-background mode: draw a halo around the glyphs for
+		     legibility on busy wallpapers, in desktopOutlineColor. -->
+		<entry name="desktopOutline" type="bool">
+			<default>false</default>
+		</entry>
+		<entry name="desktopOutlineColor" type="string">
+			<default>#000000</default>
+		</entry>
 		<!-- Absolute path to the system CLI: /usr/bin is always on the panel's
 		     PATH, and being explicit keeps it independent of the shell env. -->
 		<entry name="clickCommand" type="string">
