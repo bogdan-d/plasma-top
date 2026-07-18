@@ -8,8 +8,9 @@ Only integration owner edits this file. Lane agents write under `handoffs/`.
 - Working tree was clean at that commit before this `plans/` handoff package was
   created. No pre-existing user changes or exclusions need preservation.
 - Expected planning delta: only `plans/` until these documents are committed.
-- Current local validation blockers: pytest, ruff, vulture, and psutil unavailable
-  in observed shell environment.
+- Local baseline validation now succeeds in an isolated `.venv` created from
+  `requirements-dev.txt`: pytest, ruff, vulture, and `psutil` were installed and
+  verified against the current Python implementation.
 
 ## Decisions
 
@@ -24,7 +25,7 @@ Only integration owner edits this file. Lane agents write under `handoffs/`.
 
 | Lane | Phase | Status | Owner | Base/commit | Handoff | Verified checks/blocker |
 |---|---:|---|---|---|---|---|
-| BASE | 0 | ready | — | — | — | test environment unavailable |
+| BASE | 0 | active | GitHub Copilot | rust-migration-base-bootstrap | `plans/handoffs/base-copilot-20260719.md`; `plans/handoffs/base-oracle-20260719.md` | P0.2 verified (`.venv`, pytest, ruff, vulture, CLI smokes); starter P0.4/P0.5 render oracle verified; P0.1/P0.3/P0.6/P0.7 still pending |
 | SCAFFOLD | 1 | blocked | — | — | — | waits BASE |
 | DOMAIN | 2 | blocked | — | — | — | waits SCAFFOLD |
 | CONFIG | 2 | blocked | — | — | — | waits SCAFFOLD/FIXTURES |
@@ -57,6 +58,6 @@ None. Add rows with user approval, affected contract/tests, and rollback.
 
 ## Current blockers
 
-1. Reproducible Python test environment not established.
-2. Runtime dependency documentation disagrees about required `psutil`.
-3. No CI currently verifies baseline checks.
+1. No CI currently verifies baseline checks.
+2. Phase 0 still lacks committed baseline artifact capture for P0.1/P0.3.
+3. Phase 0 still lacks callable/call-edge inventory generation and broader live-hardware evidence for P0.6/P0.7.

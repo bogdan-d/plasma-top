@@ -20,7 +20,8 @@ by a lightweight Python daemon.
 
 PiroStats renders CPU, memory, drives, GPU, temperatures, batteries, network and
 load as HTML that a bundled Plasma applet displays. The daemon runs in memory and
-atomically writes the panel and tooltip to /tmp, and the applet just cats them, so
+atomically writes the panel and tooltip under `$XDG_RUNTIME_DIR/pirostats` (falling
+back to `/tmp/pirostats-$UID` when unavailable), and the applet just cats them, so
 there are **zero process forks in the hot path**.
 
 ## Features
@@ -46,12 +47,17 @@ there are **zero process forks in the hot path**.
 ## Requirements
 
 - **KDE Plasma 6**
-- **Python 3.11+** (standard library only)
+- **Python 3.11+**
+- **Base runtime dependencies**
+  - `psutil` — required today; `src/sensors.py` imports it unconditionally.
+  - `PyGObject` / `python-gobject` — packaged base dependency for full notifications + UPower/UDisks behavior; without it those integrations degrade gracefully.
 - A **Nerd Font** for the glyphs (the applet defaults to *NotoSansM Nerd Font Mono*).
   Pick it in the widget's *Appearance* page.
-- Optional, per page/sensor: ss (iproute2) for the connections page, fastfetch
-  for system info; psutil, pynvml (NVIDIA), and UPower/UDisks2 (via GDBus) for
-  the corresponding hardware.
+- **Optional feature dependencies**
+  - `python-nvidia-ml-py` (preferred) or `nvidia-utils` / `nvidia-smi` for NVIDIA GPU metrics.
+  - `iproute2` for the connections page (`ss`).
+  - `fastfetch` for the system info page.
+  - `hidapi` for Logitech Bolt/Unifying peripheral battery reads.
 
 ## Install
 
@@ -65,6 +71,8 @@ install.sh installs system-wide: the code tree under /usr/lib/pirostats, the
 pirostats CLI in /usr/bin, the applet and icon, and the systemd --user service.
 The file steps use sudo; enabling the service runs as you. Your settings live in
 ~/.config/pirostats and are never touched — see [Configuration](#configuration).
+For checkout-based development, use [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
+instead of the system-wide installer.
 
 Then add the widget: **right-click a panel → Add Widgets → search "PiroStats"**.
 

@@ -1,0 +1,12 @@
+# Baseline checkout/dev-test dependencies for the current Python implementation.
+# `psutil` is included because `src/sensors.py` imports it unconditionally today.
+# The other entries are the Phase 0 validation tools documented in
+# docs/DEVELOPMENT.md.
+psutil
+pytest
+ruff
+vulture
+
+# PyGObject is intentionally not listed here: for full packaged parity it is
+# usually installed from the distro package manager alongside the required GI
+# typelibs/libraries.

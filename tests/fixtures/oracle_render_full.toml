@@ -1,0 +1,106 @@
+# Deterministic full-hardware/full-readings fixture for the render oracle.
+
+[hardware]
+cpu_temp_path = "/x"
+cpu_freq_path = "/x"
+battery_sys_ids = ["/org/freedesktop/UPower/devices/battery_BAT0"]
+has_nvidia = true
+intel_gpu_freq_path = "/x"
+intel_gpu_pci = "0000:00:02.0"
+net_device = "wlan0"
+disk_io_device = "nvme0n1"
+cpu_count = 8
+cpu_turbo_supported = true
+has_backlight = true
+has_wifi = true
+battery_mouse_id = "/m"
+battery_kbd_id = "/k"
+
+[hardware.hd_temp_paths]
+nvme0 = "/x"
+sda = "/x"
+
+[hardware.fan_paths]
+"1" = "/x"
+"2" = "/x"
+
+[hardware.disk_smart_drives.nvme0]
+path = "/d0"
+kind = "nvme"
+rotational = false
+
+[hardware.disk_smart_drives.sda]
+path = "/d1"
+kind = "ata"
+rotational = true
+
+[readings]
+cpu_usage = 73
+cpu_temp = 55
+cpu_freq = 3200.0
+cpu_turbo = true
+cpu_history = [10, 20, 30, 40, 50, 60, 70, 80, 73, 65, 10, 20, 30, 40, 50, 60, 70, 80, 73, 65]
+mem_history = [15, 25, 35, 45, 55, 42, 38, 44, 50, 42, 15, 25, 35, 45, 55, 42, 38, 44, 50, 42]
+uptime = 123456
+load_avg = [1.2, 0.9, 0.7]
+top_process = [["plasmashell", 12], ["firefox", 8]]
+mem_usage = 42
+mem_used_gb = 13
+mem_total_gb = 32
+swap_usage = 10
+net_up_bps = 500000
+net_down_bps = 2000000
+net_device = "wlan0"
+ip_address = "192.168.1.5"
+wifi_ssid = "MyWifi"
+wifi_signal = 80
+disk_read_bps = 1500000
+disk_write_bps = 800000
+gpu_temp = 60
+gpu_usage = 30
+gpu_mem = 40
+gpu_dec = 5
+gpu_fan = 25
+gpu_intel_freq = 900
+gpu_intel_usage = 20
+gpu_intel_dec_usage = 2
+screen_brightness = 75
+system_updates = 3
+server_ok = true
+
+[readings.disk_usage."/"]
+percent = 50
+used_gb = 100
+total_gb = 200
+
+[readings.disk_usage."/mnt/data"]
+percent = 70
+used_gb = 700
+total_gb = 1000
+
+[readings.disk_smart]
+nvme0 = true
+sda = true
+
+[readings.hd_temps]
+nvme0 = 45
+sda = 50
+
+[readings.fan_speeds]
+"1" = 1200
+"2" = 0
+
+[[readings.battery_sys]]
+id = "/BAT0"
+perc = "80%"
+rate = 15
+state = "discharging"
+limit = 80
+
+[readings.battery_mouse]
+name = "Logi Mouse"
+perc = "90%"
+
+[readings.battery_kbd]
+name = "Logi Kbd"
+perc = "85%"
