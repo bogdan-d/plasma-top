@@ -9,6 +9,7 @@ qt_dir="$live_dir/qt-shots"
 summary_file="$artifact_root/summary.txt"
 tmp_panel_html="/tmp/pirostats_render_panel.html"
 tmp_tooltip_html="/tmp/pirostats_render_tooltip.html"
+deep_dive_pages=(processes cpu_cores connections fastfetch graphs)
 
 mkdir -p "$artifact_root"
 rm -rf "$baseline_dir" "$live_dir"
@@ -78,6 +79,13 @@ record_failure() {
 	local output_path="$3"
 	note "FAIL($exit_code) | $label | $(relpath "$output_path")"
 	failures=$((failures + 1))
+}
+
+record_optional_failure() {
+	local label="$1"
+	local exit_code="$2"
+	local output_path="$3"
+	note "SOFT_FAIL($exit_code) | $label | $(relpath "$output_path")"
 }
 
 write_skip() {
@@ -255,6 +263,31 @@ capture_render_html() {
 	return 0
 }
 
+capture_optional_render_html() {
+	local label="$1"
+	local log_path="$2"
+	local tmp_path="$3"
+	local artifact_html="$4"
+	shift 4
+
+	rm -f "$tmp_path"
+	if run_capture "$label" "$log_path" "$@"; then
+		record_success "$label" "$log_path"
+		if [[ -f "$tmp_path" ]]; then
+			cp "$tmp_path" "$artifact_html"
+			record_success "$label html" "$artifact_html"
+		else
+			printf 'Expected render artifact missing: %s\n' "$tmp_path" >"${artifact_html}.missing.txt"
+			record_optional_failure "$label html" 'missing' "${artifact_html}.missing.txt"
+		fi
+		return 0
+	fi
+
+	local exit_code=$?
+	record_optional_failure "$label" "$exit_code" "$log_path"
+	return 0
+}
+
 capture_qt_html() {
 	local label="$1"
 	local input_html="$2"
@@ -276,6 +309,50 @@ capture_qt_html() {
 	local exit_code=$?
 	record_failure "$label" "$exit_code" "$log_path"
 	return 0
+}
+
+capture_optional_qt_html() {
+	local label="$1"
+	local input_html="$2"
+	local output_png="$3"
+	local log_path="$4"
+	shift 4
+
+	if [[ ! -f "$input_html" ]]; then
+		write_skip "$log_path" "Skipped: source HTML missing for $label ($input_html)."
+		return 0
+	fi
+
+	if run_capture "$label" "$log_path" env QT_QPA_PLATFORM=offscreen "$python_bin" tools/qt_shot.py --html "$input_html" "$output_png" "$@"; then
+		record_success "$label" "$log_path"
+		record_success "$label png" "$output_png"
+		return 0
+	fi
+
+	local exit_code=$?
+	record_optional_failure "$label" "$exit_code" "$log_path"
+	return 0
+}
+
+capture_deep_dive_page_renders() {
+	local page_name
+	for page_name in "${deep_dive_pages[@]}"; do
+		capture_optional_render_html "render tooltip page ${page_name} html" \
+			"$live_dir/render-page-${page_name}.log" \
+			"$tmp_tooltip_html" "$live_dir/page-${page_name}.html" \
+			"$python_bin" ./pirostats render --page "$page_name" --format html
+	done
+}
+
+capture_deep_dive_page_qt_shots() {
+	local page_name
+	for page_name in "${deep_dive_pages[@]}"; do
+		capture_optional_qt_html "qt shot page ${page_name}" \
+			"$live_dir/page-${page_name}.html" \
+			"$qt_dir/page-${page_name}.png" \
+			"$qt_dir/page-${page_name}.log" \
+			--fit --scale 2
+	done
 }
 
 {
@@ -329,6 +406,7 @@ capture_render_html 'render panel horizontal html' "$live_dir/render-panel-horiz
 capture_render_html 'render panel vertical html' "$live_dir/render-panel-vertical.log" \
 	"$tmp_panel_html" "$live_dir/panel-vertical.html" \
 	"$python_bin" ./pirostats render --component panel --layout vertical --format html
+capture_deep_dive_page_renders
 
 if "$python_bin" -c 'import importlib.util, sys; sys.exit(0 if importlib.util.find_spec("PyQt6") else 1)' >/dev/null 2>&1; then
 	capture_qt_html 'qt shot tooltip' \
@@ -340,9 +418,10 @@ if "$python_bin" -c 'import importlib.util, sys; sys.exit(0 if importlib.util.fi
 	capture_qt_html 'qt shot panel vertical' \
 		"$live_dir/panel-vertical.html" "$qt_dir/panel-vertical.png" "$qt_dir/panel-vertical.log" \
 		--width 80 --height 1200 --point --size 8 --scale 2
+	capture_deep_dive_page_qt_shots
 else
 	write_skip "$qt_dir/qt-shots-skipped.txt" \
-		"Qt screenshots skipped: PyQt6 not available via $python_bin."
+		"Qt screenshots skipped: PyQt6 not available via $python_bin for panel, tooltip, and deep-dive pages."
 fi
 
 {
