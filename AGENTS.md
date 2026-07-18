@@ -1,7 +1,3 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## What this is
 
 A Python daemon that renders KDE Plasma panel + tooltip system stats as HTML. It runs in memory and atomically writes `<runtime>/{panel,tooltip}.html` (`<runtime>` = `$XDG_RUNTIME_DIR/pirostats`, see `src/runtime.py`); the bundled Plasma applet (`plasmoid/`, id `com.github.lucazade.pirostats`) watches that directory and `cat`s the files when they change. **There is one clock in the system, `display.poll_interval`** — the applet has none, so nothing aliases and no frame ages waiting to be noticed. See `README.md` for the full user-facing story — this file covers only what you need to work productively in the code.
