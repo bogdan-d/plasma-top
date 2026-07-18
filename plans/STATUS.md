@@ -25,7 +25,7 @@ Only integration owner edits this file. Lane agents write under `handoffs/`.
 
 | Lane | Phase | Status | Owner | Base/commit | Handoff | Verified checks/blocker |
 |---|---:|---|---|---|---|---|
-| BASE | 0 | active | GitHub Copilot | rust-migration-base-bootstrap | `plans/handoffs/base-copilot-20260719.md`; `plans/handoffs/base-oracle-20260719.md` | P0.2 verified (`.venv`, pytest, ruff, vulture, CLI smokes); starter P0.4/P0.5 render oracle verified; P0.1/P0.3/P0.6/P0.7 still pending |
+| BASE | 0 | active | GitHub Copilot | rust-migration-base-bootstrap | `plans/handoffs/base-copilot-20260719.md`; `plans/handoffs/base-oracle-20260719.md`; `plans/handoffs/base-baseline-capture-20260719.md` | P0.2 verified (`.venv`, pytest, ruff, vulture, CLI smokes); starter P0.4/P0.5 render oracle verified; P0.1/P0.3 baseline-capture harness verified on current host; P0.6 inventory generation and broader P0.7 multi-host evidence still pending |
 | SCAFFOLD | 1 | blocked | — | — | — | waits BASE |
 | DOMAIN | 2 | blocked | — | — | — | waits SCAFFOLD |
 | CONFIG | 2 | blocked | — | — | — | waits SCAFFOLD/FIXTURES |
@@ -59,5 +59,5 @@ None. Add rows with user approval, affected contract/tests, and rollback.
 ## Current blockers
 
 1. No CI currently verifies baseline checks.
-2. Phase 0 still lacks committed baseline artifact capture for P0.1/P0.3.
-3. Phase 0 still lacks callable/call-edge inventory generation and broader live-hardware evidence for P0.6/P0.7.
+2. Phase 0 still lacks callable/call-edge inventory generation for P0.6.
+3. Phase 0 still lacks broader multi-host live-hardware evidence for P0.7 (current-host capture exists; GPU/battery/HID/Qt-shot coverage remains incomplete).
