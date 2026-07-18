@@ -6,23 +6,19 @@ the shipped surfaces through the existing Python formatter.
 from __future__ import annotations
 
 import argparse
+import importlib
 import sys
 import tomllib
 from contextlib import contextmanager
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "src"
-if str(SRC) not in sys.path:
-    sys.path.insert(0, str(SRC))
-
-import config as config_module
-from config import PanelGeometry, apply_canonical_width, load_config
-from formatter import PanelFormatter
-from sensors import BatteryPeriph, BatterySys, DiskUsage, HardwareInfo, Readings
 
 
 FIXED_TIME = 1_000_000.0
@@ -35,8 +31,32 @@ COMPONENTS = {
 
 @dataclass(frozen=True)
 class OracleFixture:
-    hardware: HardwareInfo
-    readings: Readings
+    hardware: Any
+    readings: Any
+
+
+@lru_cache(maxsize=1)
+def _runtime_symbols() -> dict[str, Any]:
+    if str(SRC) not in sys.path:
+        sys.path.insert(0, str(SRC))
+
+    config_module = importlib.import_module("config")
+    config_exports = importlib.import_module("config")
+    formatter_exports = importlib.import_module("formatter")
+    sensors_exports = importlib.import_module("sensors")
+
+    return {
+        "config_module": config_module,
+        "PanelGeometry": config_exports.PanelGeometry,
+        "apply_canonical_width": config_exports.apply_canonical_width,
+        "load_config": config_exports.load_config,
+        "PanelFormatter": formatter_exports.PanelFormatter,
+        "BatteryPeriph": sensors_exports.BatteryPeriph,
+        "BatterySys": sensors_exports.BatterySys,
+        "DiskUsage": sensors_exports.DiskUsage,
+        "HardwareInfo": sensors_exports.HardwareInfo,
+        "Readings": sensors_exports.Readings,
+    }
 
 
 def _maybe_path(value: str | None) -> Path | None:
@@ -54,9 +74,10 @@ def _load_disk_smart_drives(raw: dict[str, dict[str, object]]) -> dict[str, tupl
     }
 
 
-def _load_disk_usage(raw: dict[str, dict[str, int]]) -> dict[str, DiskUsage]:
+def _load_disk_usage(raw: dict[str, dict[str, int]]) -> dict[str, Any]:
+    disk_usage_cls = _runtime_symbols()["DiskUsage"]
     return {
-        mount: DiskUsage(
+        mount: disk_usage_cls(
             percent=data.get("percent"),
             used_gb=data.get("used_gb"),
             total_gb=data.get("total_gb"),
@@ -65,14 +86,16 @@ def _load_disk_usage(raw: dict[str, dict[str, int]]) -> dict[str, DiskUsage]:
     }
 
 
-def _load_battery_periph(raw: dict[str, str] | None) -> BatteryPeriph | None:
+def _load_battery_periph(raw: dict[str, str] | None) -> Any | None:
     if not raw:
         return None
-    return BatteryPeriph(name=str(raw.get("name", "")), perc=str(raw.get("perc", "")))
+    battery_periph_cls = _runtime_symbols()["BatteryPeriph"]
+    return battery_periph_cls(name=str(raw.get("name", "")), perc=str(raw.get("perc", "")))
 
 
-def _load_hardware(raw: dict[str, object]) -> HardwareInfo:
-    return HardwareInfo(
+def _load_hardware(raw: dict[str, object]) -> Any:
+    hardware_info_cls = _runtime_symbols()["HardwareInfo"]
+    return hardware_info_cls(
         cpu_temp_path=_maybe_path(raw.get("cpu_temp_path")),
         cpu_freq_path=_maybe_path(raw.get("cpu_freq_path")),
         hd_temp_paths=_path_map(raw.get("hd_temp_paths", {})),
@@ -93,8 +116,11 @@ def _load_hardware(raw: dict[str, object]) -> HardwareInfo:
     )
 
 
-def _load_readings(raw: dict[str, object]) -> Readings:
-    return Readings(
+def _load_readings(raw: dict[str, object]) -> Any:
+    runtime = _runtime_symbols()
+    readings_cls = runtime["Readings"]
+    battery_sys_cls = runtime["BatterySys"]
+    return readings_cls(
         cpu_usage=raw.get("cpu_usage"),
         cpu_temp=raw.get("cpu_temp"),
         cpu_freq=raw.get("cpu_freq"),
@@ -120,7 +146,7 @@ def _load_readings(raw: dict[str, object]) -> Readings:
         disk_smart=dict(raw.get("disk_smart", {})),
         hd_temps=dict(raw.get("hd_temps", {})),
         fan_speeds=dict(raw.get("fan_speeds", {})),
-        battery_sys=[BatterySys(**entry) for entry in raw.get("battery_sys", [])],
+        battery_sys=[battery_sys_cls(**entry) for entry in raw.get("battery_sys", [])],
         battery_mouse=_load_battery_periph(raw.get("battery_mouse")),
         battery_kbd=_load_battery_periph(raw.get("battery_kbd")),
         gpu_temp=raw.get("gpu_temp"),
@@ -149,7 +175,10 @@ def load_fixture(path: str | Path) -> OracleFixture:
 
 @contextmanager
 def deterministic_render_env():
-    with patch.object(config_module, "detect_panel_geometry", return_value=PanelGeometry(vertical=True)):
+    runtime = _runtime_symbols()
+    config_module = runtime["config_module"]
+    panel_geometry_cls = runtime["PanelGeometry"]
+    with patch.object(config_module, "detect_panel_geometry", return_value=panel_geometry_cls(vertical=True)):
         with patch("time.time", return_value=FIXED_TIME):
             yield
 
@@ -160,9 +189,13 @@ def render_component(fixture: OracleFixture, component: str) -> str:
         raise ValueError(f"unknown component {component!r}; expected one of: {choices}")
 
     vertical, kind = COMPONENTS[component]
+    runtime = _runtime_symbols()
+    load_config = runtime["load_config"]
+    panel_formatter_cls = runtime["PanelFormatter"]
+    apply_canonical_width = runtime["apply_canonical_width"]
     with deterministic_render_env():
         cfg = load_config(vertical=vertical)
-        formatter = PanelFormatter(cfg, fixture.hardware)
+        formatter = panel_formatter_cls(cfg, fixture.hardware)
         if kind != "panel":
             apply_canonical_width(cfg, formatter.canonical_width(fixture.readings))
         return formatter.format_panel(fixture.readings) if kind == "panel" else formatter.format_tooltip(fixture.readings)
