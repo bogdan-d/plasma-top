@@ -80,18 +80,22 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [ ] | `tests/golden/panel_h.html` | preserve oracle | `FORMATTER` | byte snapshot |
 | [ ] | `tests/golden/panel_v.html` | preserve oracle | `FORMATTER` | byte snapshot |
 | [ ] | `tests/golden/tooltip.html` | preserve oracle | `FORMATTER` | byte snapshot |
+| [ ] | `tests/oracle.py` | retain then port/archive | `BASE/INTEGRATION` | oracle fixture/render parity mapped to Rust |
 | [ ] | `tests/test_config.py` | retain then port/archive | `BASE/CONFIG` | existing assertion mapped to Rust |
 | [ ] | `tests/test_deadcode.py` | retain then port/archive | `BASE/INTEGRATION` | existing assertion mapped to Rust |
 | [ ] | `tests/test_formatter.py` | retain then port/archive | `BASE/FORMATTER` | existing assertion mapped to Rust |
 | [ ] | `tests/test_golden_render.py` | retain then port/archive | `BASE/FORMATTER` | existing assertion mapped to Rust |
+| [ ] | `tests/test_inventory.py` | retain then port/archive | `BASE/INTEGRATION` | inventory gate + reporter smoke |
 | [ ] | `tests/test_items.py` | retain then port/archive | `BASE/DOMAIN` | existing assertion mapped to Rust |
 | [ ] | `tests/test_lint.py` | retain then port/archive | `BASE/INTEGRATION` | existing assertion mapped to Rust |
 | [ ] | `tests/test_mono_render.py` | retain then port/archive | `BASE/RENDER-CORE` | existing assertion mapped to Rust |
 | [ ] | `tests/test_notifier.py` | retain then port/archive | `BASE/NOTIFY` | existing assertion mapped to Rust |
+| [ ] | `tests/test_oracle.py` | retain then port/archive | `BASE/INTEGRATION` | oracle fixture/render parity mapped to Rust |
 | [ ] | `tests/test_render_model.py` | retain then port/archive | `BASE/RENDER-CORE` | existing assertion mapped to Rust |
 | [ ] | `tests/test_sensors.py` | retain then port/archive | `BASE/SENSOR-DISK` | existing assertion mapped to Rust |
 | [ ] | `tests/vulture_whitelist.py` | retain then port/archive | `BASE/INTEGRATION` | existing assertion mapped to Rust |
 | [ ] | `tools/demo_shot.py` | preserve/update invocation | `BASE/QML-VERIFY` | tool smoke + target parity |
+| [ ] | `tools/inventory_ast_reporter.py` | preserve/update invocation | `BASE/INTEGRATION` | tool smoke + exact inventory gate |
 | [ ] | `tools/manual_tooltip_preview.py` | preserve/update invocation | `BASE/QML-VERIFY` | tool smoke + target parity |
 | [ ] | `tools/qt_shot.py` | preserve/update invocation | `BASE/QML-VERIFY` | tool smoke + target parity |
 | [ ] | `uninstall.sh` | modify for native binary | `PACKAGING` | package/install/upgrade/uninstall |
@@ -537,6 +541,25 @@ Existing tests remain oracle evidence until mapped to a passing Rust test or int
 
 - [ ] No declared callable: preserve/port file-level behavior.
 
+### `tests/oracle.py`
+
+| Done | Line | Symbol | Kind | Lane | Evidence required |
+|---|---:|---|---|---|---|
+| [ ] | 33 | `OracleFixture` | class | `BASE/INTEGRATION` | D/I: preserve oracle fixture schema + render parity harness |
+| [ ] | 39 | `_runtime_symbols` | function | `BASE/INTEGRATION` | D/I: preserve deterministic oracle fixture/render harness |
+| [ ] | 62 | `_maybe_path` | function | `BASE/INTEGRATION` | D/I: preserve deterministic oracle fixture/render harness |
+| [ ] | 66 | `_path_map` | function | `BASE/INTEGRATION` | D/I: preserve deterministic oracle fixture/render harness |
+| [ ] | 70 | `_load_disk_smart_drives` | function | `BASE/INTEGRATION` | D/I: preserve deterministic oracle fixture/render harness |
+| [ ] | 77 | `_load_disk_usage` | function | `BASE/INTEGRATION` | D/I: preserve deterministic oracle fixture/render harness |
+| [ ] | 89 | `_load_battery_periph` | function | `BASE/INTEGRATION` | D/I: preserve deterministic oracle fixture/render harness |
+| [ ] | 96 | `_load_hardware` | function | `BASE/INTEGRATION` | D/I: preserve deterministic oracle fixture/render harness |
+| [ ] | 119 | `_load_readings` | function | `BASE/INTEGRATION` | D/I: preserve deterministic oracle fixture/render harness |
+| [ ] | 166 | `load_fixture` | function | `BASE/INTEGRATION` | D/I: preserve deterministic oracle fixture/render harness |
+| [ ] | 177 | `deterministic_render_env` | function | `BASE/INTEGRATION` | D/I: preserve deterministic oracle fixture/render harness |
+| [ ] | 186 | `render_component` | function | `BASE/INTEGRATION` | D/I: preserve deterministic oracle fixture/render harness |
+| [ ] | 204 | `render_fixture` | function | `BASE/INTEGRATION` | D/I: preserve deterministic oracle fixture/render harness |
+| [ ] | 208 | `main` | function | `BASE/INTEGRATION` | D/I: preserve deterministic oracle fixture/render harness |
+
 ### `tests/test_config.py`
 
 | Done | Line | Symbol | Kind | Lane | Evidence required |
@@ -683,6 +706,17 @@ Existing tests remain oracle evidence until mapped to a passing Rust test or int
 | [ ] | 65 | `_render` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
 | [ ] | 84 | `test_golden_render` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
 
+### `tests/test_inventory.py`
+
+| Done | Line | Symbol | Kind | Lane | Evidence required |
+|---|---:|---|---|---|---|
+| [ ] | 24 | `_run_report` | function | `BASE/INTEGRATION` | P/I: preserve inventory/reporter gate + exact markdown sync |
+| [ ] | 39 | `_names` | function | `BASE/INTEGRATION` | P/I: preserve inventory/reporter gate + exact markdown sync |
+| [ ] | 43 | `_file_counts` | function | `BASE/INTEGRATION` | P/I: preserve inventory/reporter gate + exact markdown sync |
+| [ ] | 54 | `_call_edge_rows` | function | `BASE/INTEGRATION` | P/I: preserve inventory/reporter gate + exact markdown sync |
+| [ ] | 82 | `test_inventory_ast_reporter_workspace_smoke` | function | `BASE/INTEGRATION` | P/I: preserve inventory/reporter gate + exact markdown sync |
+| [ ] | 135 | `test_inventory_call_edge_table_matches_ast_reporter` | function | `BASE/INTEGRATION` | P/I: preserve inventory/reporter gate + exact markdown sync |
+
 ### `tests/test_items.py`
 
 | Done | Line | Symbol | Kind | Lane | Evidence required |
@@ -752,6 +786,12 @@ Existing tests remain oracle evidence until mapped to a passing Rust test or int
 | [ ] | 145 | `test_sustained_fires_once_per_episode` | function | `BASE/NOTIFY` | P: preserve assertion; map to Rust test |
 | [ ] | 156 | `test_sustained_without_hysteresis_clears_at_the_trip_point` | function | `BASE/NOTIFY` | P: preserve assertion; map to Rust test |
 
+### `tests/test_oracle.py`
+
+| Done | Line | Symbol | Kind | Lane | Evidence required |
+|---|---:|---|---|---|---|
+| [ ] | 15 | `test_oracle_fixture_matches_existing_goldens` | function | `BASE/INTEGRATION` | P/D: preserve oracle golden assertion; map to Rust differential |
+
 ### `tests/test_render_model.py`
 
 | Done | Line | Symbol | Kind | Lane | Evidence required |
@@ -802,6 +842,36 @@ Existing tests remain oracle evidence until mapped to a passing Rust test or int
 | [ ] | 34 | `_demo_hw` | function | `BASE/QML-VERIFY` | I: tool smoke; E0/E4 result |
 | [ ] | 51 | `_demo_readings` | function | `BASE/QML-VERIFY` | I: tool smoke; E0/E4 result |
 | [ ] | 76 | `main` | function | `BASE/QML-VERIFY` | I: tool smoke; E0/E4 result |
+
+### `tools/inventory_ast_reporter.py`
+
+| Done | Line | Symbol | Kind | Lane | Evidence required |
+|---|---:|---|---|---|---|
+| [ ] | 39 | `CallContext` | class | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [ ] | 44 | `_display_path` | function | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [ ] | 51 | `_read_source` | function | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [ ] | 56 | `_callee_text` | function | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [ ] | 63 | `_callee_key` | function | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [ ] | 79 | `_iter_targets` | function | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [ ] | 107 | `FileAnalyzer` | class | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [ ] | 108 | `FileAnalyzer.__init__` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [ ] | 115 | `FileAnalyzer.analyze` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [ ] | 140 | `FileAnalyzer._visit_module_stmt` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [ ] | 149 | `FileAnalyzer._visit_recorded_class` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [ ] | 164 | `FileAnalyzer._visit_recorded_function` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [ ] | 178 | `FileAnalyzer._visit_class_header` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [ ] | 188 | `FileAnalyzer._visit_function_header` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [ ] | 197 | `FileAnalyzer._record_callable` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [ ] | 220 | `FileAnalyzer._context` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [ ] | 227 | `FileAnalyzer._current_context` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [ ] | 230 | `FileAnalyzer.visit_FunctionDef` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [ ] | 235 | `FileAnalyzer.visit_AsyncFunctionDef` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [ ] | 240 | `FileAnalyzer.visit_ClassDef` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [ ] | 245 | `FileAnalyzer.visit_Call` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [ ] | 265 | `analyze_file` | function | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [ ] | 272 | `build_report` | function | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [ ] | 312 | `build_parser` | function | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [ ] | 337 | `main` | function | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
 
 ### `tools/manual_tooltip_preview.py`
 

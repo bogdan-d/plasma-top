@@ -25,7 +25,7 @@ Only integration owner edits this file. Lane agents write under `handoffs/`.
 
 | Lane | Phase | Status | Owner | Base/commit | Handoff | Verified checks/blocker |
 |---|---:|---|---|---|---|---|
-| BASE | 0 | active | GitHub Copilot | rust-migration-base-bootstrap | `plans/handoffs/base-copilot-20260719.md`; `plans/handoffs/base-oracle-20260719.md`; `plans/handoffs/base-baseline-capture-20260719.md`; `plans/handoffs/base-inventory-20260719.md`; `plans/handoffs/base-inventory-gate-20260719.md` | P0.2 verified (`.venv`, pytest, ruff, vulture, CLI smokes); starter P0.4/P0.5 render oracle verified; P0.1/P0.3 baseline-capture harness verified on current host; P0.6 AST inventory generator and markdown gate verified; remaining BASE work is broader P0.7 multi-host/live-feature coverage and any residual inventory/detail closure |
+| BASE | 0 | active | GitHub Copilot | rust-migration-base-bootstrap | `plans/handoffs/base-copilot-20260719.md`; `plans/handoffs/base-oracle-20260719.md`; `plans/handoffs/base-baseline-capture-20260719.md`; `plans/handoffs/base-inventory-20260719.md`; `plans/handoffs/base-inventory-gate-20260719.md`; `plans/handoffs/base-inventory-detail-20260719.md` | P0.2 verified (`.venv`, pytest, ruff, vulture, CLI smokes); starter P0.4/P0.5 render oracle verified; P0.1/P0.3 baseline-capture harness verified on current host; P0.6 AST inventory generator, markdown gate, and explicit ledger coverage for oracle/inventory tooling verified; remaining BASE work is broader P0.7 multi-host/live-feature coverage |
 | SCAFFOLD | 1 | blocked | — | — | — | waits BASE |
 | DOMAIN | 2 | blocked | — | — | — | waits SCAFFOLD |
 | CONFIG | 2 | blocked | — | — | — | waits SCAFFOLD/FIXTURES |
@@ -60,4 +60,3 @@ None. Add rows with user approval, affected contract/tests, and rollback.
 
 1. No CI currently verifies baseline checks.
 2. Phase 0 still lacks broader multi-host live-hardware evidence for P0.7 (current-host capture exists; GPU/battery/HID/Qt-shot coverage remains incomplete).
-3. Phase 0 still lacks final BASE closure review for any newly added files that may need explicit markdown inventory/disposition detail beyond the call-edge gate.
