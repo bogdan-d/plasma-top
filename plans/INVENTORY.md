@@ -10,7 +10,7 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 
 | Done | Current file | Disposition | Lane | Required verification |
 |---|---|---|---|---|
-| [ ] | `.gitignore` | update only for generated Rust artifacts | `SCAFFOLD/QML-VERIFY` | ignore audit |
+| [x] | `.gitignore` | update only for generated Rust artifacts | `SCAFFOLD/QML-VERIFY` | ignore audit (Phase 1: `rust/target/` added; QML-VERIFY re-audits at Gate 6) |
 | [ ] | `CLAUDE.md` | update after cutover | `CUTOVER` | link/content audit |
 | [ ] | `LICENSE` | preserve | `PACKAGING` | license/package audit |
 | [ ] | `NOTICE` | preserve | `PACKAGING` | license/package audit |
@@ -46,6 +46,21 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [ ] | `plasmoid/package/contents/ui/main.qml` | preserve; edit only if approved | `QML-VERIFY` | T6 visual/interaction + package manifest |
 | [ ] | `plasmoid/package/metadata.json` | preserve; edit only if approved | `QML-VERIFY` | T6 visual/interaction + package manifest |
 | [ ] | `ruff.toml` | retain until Python removal | `BASE/CUTOVER` | ruff gate |
+| [x] | `rust-toolchain.toml` | new; pin stable Rust + clippy/rustfmt components | `SCAFFOLD` | P1.1 toolchain shell + toolchain present in CI |
+| [x] | `rust/Cargo.lock` | new; committed per parity plan | `SCAFFOLD` | P1.1 lockfile present + `cargo fetch --locked` no-op |
+| [x] | `rust/Cargo.toml` | new; single crate metadata, `test-support` feature | `SCAFFOLD` | P1.1 + P1.2 feature gate; integration-owner path after freeze |
+| [x] | `rust/DEPENDENCIES.md` | new; per-dep review ledger | `SCAFFOLD` | P1.4 baseline row + policy fields for future lanes |
+| [x] | `rust/rustfmt.toml` | new; rustfmt policy | `SCAFFOLD` | P1.1 fmt gate green |
+| [x] | `rust/src/lib.rs` | new; composition root, crate lint attrs | `SCAFFOLD` | P1.2 lint/fmt/clippy/test/doc green; integration-owner path after freeze |
+| [x] | `rust/src/main.rs` | new; thin binary entry | `SCAFFOLD` | P1.2 delegating shell; deny `unsafe_code` |
+| [x] | `rust/src/error.rs` | new; top-level user-facing error context | `SCAFFOLD` | P1.3 typed `Error` enum + `Result` alias |
+| [x] | `rust/src/cli.rs` | new; scaffold-only CLI contract for `daemon`/`render`/`probe`/`profiling`/`list-items`/`page`/`click` | `SCAFFOLD` | P1.3 command names/choices mirror Python `src/daemon.py` |
+| [x] | `rust/src/domain/mod.rs` | new; domain composition map | `SCAFFOLD` | P1.3 frozen re-exports |
+| [x] | `rust/src/domain/form.rs` | new; `Form`/`Shape`/`Surface`/`SurfaceSet` contracts | `SCAFFOLD` | P1.3 mirrors `src/forms.py`; invariant tests |
+| [x] | `rust/src/domain/metric.rs` | new; `Metric`/`MetricSpec`/`Capability` contracts | `SCAFFOLD` | P1.3 mirrors `src/metrics.py` + capability map |
+| [x] | `rust/src/domain/item.rs` | new; validated `metric[:form]` `ItemToken` | `SCAFFOLD` | P1.3 token rules mirror `src/registry.py` |
+| [x] | `rust/src/domain/boundary.rs` | new; boundary stubs (command/D-Bus/clock/FS/hardware/readings/state) | `SCAFFOLD` | P1.3 placeholders refined by downstream lanes |
+| [x] | `rust/src/test_support.rs` | new; test-support skeleton behind `test-support` feature | `SCAFFOLD` (skeleton) → `FIXTURES` (impl) | P1.2 module compiles under `--all-features`; marker types documented |
 | [ ] | `screenshots/desktop-black-text.png` | preserve reference | `QML-VERIFY` | visual comparison; regenerate only approved |
 | [ ] | `screenshots/desktop-white-text.png` | preserve reference | `QML-VERIFY` | visual comparison; regenerate only approved |
 | [ ] | `screenshots/graphs.png` | preserve reference | `QML-VERIFY` | visual comparison; regenerate only approved |
@@ -1073,6 +1088,89 @@ Existing tests remain oracle evidence until mapped to a passing Rust test or int
 ### `uninstall.sh`
 
 - [ ] No declared function: shell syntax plus full script scenario test.
+
+## Rust callable inventory
+
+Mirrors the Python ledger for new Rust callables introduced by the migration.
+Each entry's `Lane` is the lane that owns the *final* shape; `SCAFFOLD` rows
+are contracts that downstream lanes extend. Evidence codes follow the same
+legend as the rest of this file (U/D/F/I/L/P + E0–E5).
+
+### `rust/src/lib.rs`
+
+| Done | Symbol | Kind | Lane | Evidence required |
+|---|---|---|---|---|
+| [x] | `run` | function | `SCAFFOLD` | U: dispatch tests for `Help`/`Version`/`ScaffoldOnly` |
+
+### `rust/src/error.rs`
+
+| Done | Symbol | Kind | Lane | Evidence required |
+|---|---|---|---|---|
+| [x] | `Error` | enum | `SCAFFOLD` | U: variants surface `Cli` + `ScaffoldOnly` |
+| [x] | `Result` | alias | `SCAFFOLD` | U: alias used by `run` |
+
+### `rust/src/cli.rs`
+
+| Done | Symbol | Kind | Lane | Evidence required |
+|---|---|---|---|---|
+| [x] | `Cli` | struct | `SCAFFOLD` | U: defaults/help/version parse |
+| [x] | `Cli::parse` | method | `SCAFFOLD` | U: every command + flag choice; rejects unknown/duplicate/missing |
+| [x] | `Command` | enum | `SCAFFOLD` | U: variants match Python CLI contract |
+| [x] | `Command::name` | method | `SCAFFOLD` | U: stable command-name strings |
+| [x] | `RenderCommand` / `ConfigCommand` / `PageCommand` | structs | `SCAFFOLD` | U: default + override parse |
+| [x] | `RenderComponent` / `RenderFormat` / `PanelLayout` / `RenderPage` / `PageDirection` | enums | `SCAFFOLD` | U: choice matrix |
+| [x] | `CliError` | enum | `SCAFFOLD` | U: each variant reachable from `parse` |
+| [x] | `help_text` | function | `SCAFFOLD` | U: snapshot covers all command names |
+
+### `rust/src/domain/form.rs`
+
+| Done | Symbol | Kind | Lane | Evidence required |
+|---|---|---|---|---|
+| [x] | `Form` | enum | `SCAFFOLD`/`DOMAIN` | U: as_str/FromStr round-trip; mirrors `src/forms.py` |
+| [x] | `Form::allowed_surfaces` | method | `SCAFFOLD`/`DOMAIN` | U: panel/tooltip gate per `FORM_SURFACES` |
+| [x] | `Shape` | enum | `SCAFFOLD`/`DOMAIN` | U: intrinsic shape set |
+| [x] | `Surface` | enum | `SCAFFOLD`/`DOMAIN` | U: 3-surface model |
+| [x] | `SurfaceSet` | struct | `SCAFFOLD`/`DOMAIN` | U: bitset contains/intersection/empty |
+| [x] | `FormParseError` | struct | `SCAFFOLD` | U: error path |
+
+### `rust/src/domain/metric.rs`
+
+| Done | Symbol | Kind | Lane | Evidence required |
+|---|---|---|---|---|
+| [x] | `Metric` | enum | `SCAFFOLD`/`DOMAIN` | U: 35 variants + FromStr/as_str |
+| [x] | `MetricSpec` | struct | `SCAFFOLD`/`DOMAIN` | U: capabilities/forms/surfaces/intrinsic_shape |
+| [x] | `Capability` | enum | `SCAFFOLD`/`DOMAIN` | U: mirrors `src/registry.py` capability set |
+| [x] | `Metric::spec`/`supports_form`/`surfaces`/`intrinsic_shape`/`capabilities`/`all` | methods | `SCAFFOLD`/`DOMAIN` | U: per-metric invariants |
+| [x] | `MetricParseError` | struct | `SCAFFOLD` | U: unknown token |
+
+### `rust/src/domain/item.rs`
+
+| Done | Symbol | Kind | Lane | Evidence required |
+|---|---|---|---|---|
+| [x] | `ItemToken` | struct | `SCAFFOLD`/`DOMAIN` | U: token rules from `src/registry.py` parse |
+| [x] | `ItemToken::new`/`metric`/`rendering`/`form`/`effective_surfaces` | methods | `SCAFFOLD`/`DOMAIN` | U: pairing + intersection |
+| [x] | `ItemRendering` | enum | `SCAFFOLD`/`DOMAIN` | U: Generic vs Intrinsic |
+| [x] | `ItemParseError` | enum | `SCAFFOLD` | U: each error variant reachable |
+
+### `rust/src/domain/boundary.rs`
+
+| Done | Symbol | Kind | Lane | Evidence required |
+|---|---|---|---|---|
+| [x] | `CommandStatus` / `CommandOutput` | enum/struct | `SCAFFOLD`/`FIXTURES` | U: scaffold smoke; downstream refines adapter shape |
+| [x] | `BusKind` / `DbusOutput` | enum/struct | `SCAFFOLD`/`FIXTURES` | U: scaffold smoke; `POWER`/`NOTIFY` decode |
+| [x] | `ClockSnapshot` | struct | `SCAFFOLD`/`FIXTURES` | U: default at zero/UNIX_EPOCH |
+| [x] | `FilesystemRoots` | struct | `SCAFFOLD`/`FIXTURES` | U: default + `state_root()` derivation |
+| [x] | `HardwareSnapshot` / `ReadingsSnapshot` / `DaemonStateSnapshot` | structs | `SCAFFOLD`/`FIXTURES` | U: defaults match Python `DaemonState`/`HardwareInfo` shape placeholders |
+
+### `rust/src/test_support.rs`
+
+| Done | Symbol | Kind | Lane | Evidence required |
+|---|---|---|---|---|
+| [x] | `FixtureRoot` | struct | `FIXTURES` | U: skeleton default + `join` |
+| [x] | `FakeClock` | struct | `FIXTURES` | U: skeleton default |
+| [x] | `FakeCommandRunner` | struct | `FIXTURES` | skeleton; `FIXTURES` adds argv-keyed replies + call trace |
+| [x] | `FakeDbus` | struct | `FIXTURES` | skeleton; `FIXTURES` adds service/method fixtures |
+| [x] | `FixtureLoader` | struct | `FIXTURES` | U: skeleton carries root; `FIXTURES` adds deserializers |
 
 ## Call-edge accounting gate
 

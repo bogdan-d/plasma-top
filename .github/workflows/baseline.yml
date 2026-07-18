@@ -21,3 +21,46 @@ jobs:
 
       - name: Run baseline pytest suite
         run: python3 -m pytest tests/ -v
+
+  rust-scaffold:
+    # Phase 1 (P1.5): Rust joins aggregate validation while Python stays the
+    # primary oracle. The crate is currently std-only and remains a scaffold,
+    # so this job mirrors ARCHITECTURE.md's baseline gate verbatim.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install Rust toolchain (stable)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache cargo registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: rust-${{ runner.os }}-${{ hashFiles('rust/Cargo.lock', 'rust/Cargo.toml') }}
+
+      - name: Verify committed Cargo.lock stays in sync
+        run: |
+          cargo fetch --locked --manifest-path rust/Cargo.toml
+          git diff --exit-code -- rust/Cargo.lock
+
+      - name: cargo fmt
+        run: cargo fmt --manifest-path rust/Cargo.toml -- --check
+
+      - name: cargo check
+        run: cargo check --manifest-path rust/Cargo.toml --all-targets --all-features
+
+      - name: cargo clippy
+        run: cargo clippy --manifest-path rust/Cargo.toml --all-targets --all-features -- -D warnings
+
+      - name: cargo test
+        run: cargo test --manifest-path rust/Cargo.toml --all-targets --all-features
+
+      - name: cargo doc
+        run: cargo doc --manifest-path rust/Cargo.toml --no-deps

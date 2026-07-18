@@ -1,0 +1,24 @@
+[package]
+name = "pirostats"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "GPL-2.0-or-later"
+publish = false
+description = "Phase 1 scaffold for the Rust PiroStats migration"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "pirostats"
+path = "src/main.rs"
+
+[features]
+default = []
+# Exposes the test-support skeleton so integration tests and downstream lanes
+# can share fake adapters, fixture loaders, and oracle runners. The feature is
+# never enabled in production builds; CI enables it via `--all-features`.
+test-support = []
+
+[dependencies]
