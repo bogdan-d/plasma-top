@@ -1006,45 +1006,48 @@ Existing tests remain oracle evidence until mapped to a passing Rust test or int
 
 ## Call-edge accounting gate
 
-Phase 0 must generate a machine-readable AST call-edge report for every Python code file. Dynamic calls/closures are assigned to enclosing symbol and tested by ordered dependency traces. At planning time, static call totals are:
+Phase 0 must generate a machine-readable AST call-edge report for every Python code file. `tests/test_inventory.py` runs `tools/inventory_ast_reporter.py` across `src`, `tests`, `tools`, and `pirostats`, and this table must match the reporter's per-file `Call sites` and `Unique syntactic callees` counts. Dynamic calls/closures are assigned to enclosing symbol and tested by ordered dependency traces. At planning time, the checked static call totals are:
 
 | File | Call sites | Unique syntactic callees |
 |---|---:|---:|
 | `src/__init__.py` | 0 | 0 |
-| `src/bolt_battery.py` | 54 | 38 |
+| `src/bolt_battery.py` | 54 | 39 |
 | `src/chart.py` | 59 | 21 |
-| `src/config.py` | 211 | 93 |
-| `src/daemon.py` | 388 | 147 |
-| `src/formatter.py` | 311 | 101 |
+| `src/config.py` | 211 | 94 |
+| `src/daemon.py` | 388 | 148 |
+| `src/formatter.py` | 311 | 104 |
 | `src/forms.py` | 5 | 3 |
 | `src/items.py` | 62 | 27 |
 | `src/metrics.py` | 49 | 8 |
 | `src/mono_render.py` | 75 | 25 |
 | `src/notifier.py` | 55 | 24 |
-| `src/pages.py` | 100 | 57 |
-| `src/pagestate.py` | 18 | 15 |
+| `src/pages.py` | 100 | 59 |
+| `src/pagestate.py` | 18 | 16 |
 | `src/registry.py` | 147 | 66 |
 | `src/render_model.py` | 26 | 20 |
 | `src/runtime.py` | 6 | 5 |
-| `src/sensors.py` | 575 | 237 |
+| `src/sensors.py` | 575 | 265 |
 | `src/traces.py` | 56 | 23 |
 | `src/units.py` | 0 | 0 |
 | `tests/conftest.py` | 4 | 4 |
-| `tests/test_config.py` | 147 | 34 |
+| `tests/oracle.py` | 143 | 53 |
+| `tests/test_config.py` | 147 | 35 |
 | `tests/test_deadcode.py` | 15 | 10 |
 | `tests/test_formatter.py` | 301 | 62 |
 | `tests/test_golden_render.py` | 32 | 22 |
+| `tests/test_inventory.py` | 57 | 34 |
 | `tests/test_items.py` | 48 | 14 |
 | `tests/test_lint.py` | 5 | 5 |
 | `tests/test_mono_render.py` | 72 | 16 |
 | `tests/test_notifier.py` | 59 | 18 |
+| `tests/test_oracle.py` | 8 | 6 |
 | `tests/test_render_model.py` | 89 | 15 |
 | `tests/test_sensors.py` | 21 | 4 |
 | `tests/vulture_whitelist.py` | 0 | 0 |
 | `tools/demo_shot.py` | 38 | 29 |
+| `tools/inventory_ast_reporter.py` | 132 | 70 |
 | `tools/manual_tooltip_preview.py` | 51 | 16 |
 | `tools/qt_shot.py` | 58 | 39 |
 | `pirostats` | 10 | 9 |
 
 Closure requires each current call site/callee family to be marked one of: ported and directly asserted; covered by enclosing differential call trace; preserved QML/tool behavior; intentionally removed with proof of no observable behavior. No unclassified dynamic call remains.
-
