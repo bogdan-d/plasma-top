@@ -27,6 +27,7 @@ pub mod domain;
 pub mod error;
 pub mod render;
 pub mod runtime;
+pub mod sensors;
 
 #[cfg(feature = "test-support")]
 pub mod test_support;

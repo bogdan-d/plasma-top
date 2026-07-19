@@ -65,6 +65,8 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [x] | `rust/src/render/model.rs` | new; cells/rows/blocks, thresholds, grouping, inline HTML | `RENDER-CORE` | P3 unit tests + fixed Python byte corpus + no-table invariant |
 | [x] | `rust/src/render/mono.rs` | new; five-plan table-free monospace serializer | `RENDER-CORE` | P3 unit/width sweep + fixed Python byte corpus covering every plan |
 | [x] | `rust/src/render/traces.rs` | new; bar/column/spark/braille encodings + standalone/combo rows | `TRACES` | P3 ports `src/traces.py`; 12 focused tests + fixed Python byte corpus + combo-row structure parity |
+| [x] | `rust/src/sensors/mod.rs` | new; sensor composition map | `SENSOR-CPU` | P3 module registration for incremental sensor lanes |
+| [x] | `rust/src/sensors/cpu.rs` | new; CPU discovery, `/proc/stat` diffs, uptime/loadavg, cpufreq/turbo, and per-core histories | `SENSOR-CPU` | P3 ports CPU-owned pieces of `src/sensors.py`; 17 focused tests cover first/delta/reset/malformed/history/discovery/fallback |
 | [x] | `rust/src/runtime/mod.rs` | new; runtime path resolution (`runtime_dir`/`state_dir`/accessors) + `ensure_dirs` | `RUNTIME` | P2 ports `src/runtime.py`; lazy per-call path resolution for testability |
 | [x] | `rust/src/runtime/atomic.rs` | new; `write_atomic` primitive (PID-unique tmp + rename-over) | `RUNTIME` | P2 ports `src/daemon.py:_write_atomic` shape; atomicity + tmp-cleanup tests |
 | [x] | `rust/src/runtime/page.rs` | new; page counter (`read_page`/`set_page`/`npages`/`step_page`/`PageDirection`) with flock | `RUNTIME` | P2 ports `src/pagestate.py`; 32-thread concurrency test proves no lost updates |
@@ -474,8 +476,8 @@ Every top-level function/class and class method under `src/`, plus the root entr
 | [ ] | 656 | `_resolve_sensor` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 666 | `_read_path_millideg` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 676 | `_read_path_int` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 687 | `_find_cpu_temp` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 698 | `_find_cpu_freq_path` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 687 | `_find_cpu_temp` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 698 | `_find_cpu_freq_path` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 704 | `_find_hd_temps` | function | `SENSOR-DISK` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 730 | `_resolve_nvme_namespace` | function | `SENSOR-DISK` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 744 | `_hwmon_device_label` | function | `SENSOR-DISK` | U/D/F/L: fixture formula, call trace, failures, live where available |
@@ -496,15 +498,15 @@ Every top-level function/class and class method under `src/`, plus the root entr
 | [ ] | 1011 | `_read_disk_smart_cached` | function | `POWER` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1018 | `_find_battery_sys` | function | `POWER` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1022 | `_find_peripherals` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1061 | `_detect_cpu_turbo_supported` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 1061 | `_detect_cpu_turbo_supported` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1069 | `_detect_has_backlight` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1081 | `_detect_has_wifi` | function | `SENSOR-NET` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1091 | `_detect_nvidia` | function | `GPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1102 | `_detect_intel_gpu` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1126 | `_read_cpu_usage` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1168 | `_read_cpu_cores` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1213 | `_read_uptime` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1221 | `_read_load_avg` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 1126 | `_read_cpu_usage` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 1168 | `_read_cpu_cores` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 1213 | `_read_uptime` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 1221 | `_read_load_avg` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1234 | `_mem_total_bytes` | function | `SENSOR-MEM` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1242 | `_read_proc_stat_times` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1286 | `_cmdline_name` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
@@ -521,8 +523,8 @@ Every top-level function/class and class method under `src/`, plus the root entr
 | [ ] | 1496 | `_resolve_mounts` | function | `SENSOR-DISK` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1518 | `_read_disk_usage` | function | `SENSOR-DISK` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1528 | `_read_disk_io` | function | `SENSOR-DISK` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1538 | `_read_cpu_freq` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1548 | `_read_cpu_turbo` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 1538 | `_read_cpu_freq` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 1548 | `_read_cpu_turbo` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1558 | `_read_brightness` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1574 | `_sysfs_bat_rate` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1584 | `_sysfs_bat_charge_limit` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |

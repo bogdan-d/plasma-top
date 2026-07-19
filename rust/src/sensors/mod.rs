@@ -1,0 +1,7 @@
+//! Linux sensor collection building blocks.
+//!
+//! Wave 3 lands the sensor families incrementally. Each submodule owns one
+//! hardware domain and exposes deterministic, fixture-friendly readers that
+//! take explicit proc/sys roots and clock snapshots.
+
+pub mod cpu;
