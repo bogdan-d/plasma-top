@@ -37,15 +37,15 @@ Only integration owner edits this file. Lane agents write under `handoffs/`.
 | SENSOR-MEM | 3 | verified | GitHub Copilot | rust-migration-base-bootstrap | `plans/handoffs/sensor-mem-20260719.md` | P3 memory sensors verified: `rust/src/sensors/memory.rs` ports the memory-owned parts of `src/sensors.py` (`/proc/meminfo` total/available/used parsing, psutil-style `MemAvailable` fallback, swap usage, half-even GiB rounding, and bounded history cadence) behind explicit proc roots and `ClockSnapshot`; 12 focused Rust tests cover direct/fallback/zero/clamp/malformed/history/swap/rounding paths, full all-feature Rust gates green (276 tests total), direct Python `psutil` oracle checks matched the synthetic fallback fixtures, and Python sensor baseline remains green (`tests/test_sensors.py` 4/4); no dependency or lockfile change |
 | SENSOR-NET | 3 | verified | GitHub Copilot | rust-migration-base-bootstrap | `plans/handoffs/sensor-net-20260719.md` | P3 network sensors verified: `rust/src/sensors/network.rs` ports the network-owned parts of `src/sensors.py` (route-device detect, wifi SSID/signal, 10-second net-info TTL, sysfs tx/rx byte-rate diffs, and graph-page network history) behind explicit sys roots, command injection, and `ClockSnapshot`; 11 focused Rust tests cover `ip` fallback, wired/wireless parsing, TTL, interface-switch/counter-reset suppression, and history trimming, full all-feature Rust gates green (287 tests total), and Python sensor baseline remains green (`tests/test_sensors.py` 4/4); no dependency or lockfile change |
 | SENSOR-DISK | 3 | verified | GitHub Copilot | rust-migration-base-bootstrap | `plans/handoffs/sensor-disk-20260719.md` | P3 disk sensors verified: `rust/src/sensors/{disk,hwmon}.rs` port the disk-owned parts of `src/sensors.py` (mount resolution, `statvfs` usage math, root-disk topology walk, sysfs-backed disk identity, hwmon disk/fan discovery, 30-second caches, and `/proc/diskstats` byte-rate diffs) behind explicit proc/sys roots and `ClockSnapshot`; 17 focused `disk` tests plus 3 focused `hwmon` tests cover mount filters, NVMe/SCSI labels, partition stacks, TTLs, rate resets, and df-style percent/rounding; full all-feature Rust gates green (307 total tests), and Python sensor baseline remains green (`tests/test_sensors.py` 4/4); no dependency or lockfile change |
-| FORMATTER | 4 | ready | — | — | — | DOMAIN/CONFIG/RENDER-CORE/TRACES verified; ready for owner assignment |
+| FORMATTER | 4 | blocked | — | — | — | implementation dependencies are verified, but the integration owner must first replace placeholder-only `HardwareSnapshot`/`ReadingsSnapshot` with the typed aggregate render contract from `ARCHITECTURE.md` |
 | CHART | 4 | ready | — | — | — | FIXTURES verified; ready for owner assignment |
-| PAGES | 4 | ready | — | — | — | DOMAIN/RENDER-CORE/FIXTURES verified; ready for owner assignment |
+| PAGES | 4 | blocked | — | — | — | DOMAIN/RENDER-CORE/FIXTURES verified; waits integration-owner promotion of the command-runner trait out of feature-gated `test_support` into a production boundary |
 | PROCESS | 4 | ready | — | — | — | FIXTURES + SENSOR-CPU state types verified; ready for owner assignment |
-| POWER | 4 | ready | — | — | — | FIXTURES + SENSOR-DISK identity/cache groundwork verified; ready for owner assignment |
+| POWER | 4 | blocked | — | — | — | FIXTURES + SENSOR-DISK identity/cache groundwork verified; waits integration-owner production D-Bus facade contract shared with the fixture fake |
 | GPU | 4 | blocked | — | — | — | waits PROCESS/FIXTURES |
 | HID | 4 | ready | — | — | — | SCAFFOLD/FIXTURES verified; ready for owner assignment |
-| NOTIFY | 4 | ready | — | — | — | CONFIG/FIXTURES verified; ready for owner assignment |
-| COLLECTOR | 5 | ready | — | — | — | all Phase 3 sensor lanes verified; ready for owner assignment |
+| NOTIFY | 4 | blocked | — | — | — | CONFIG/FIXTURES verified; waits typed aggregate readings/hardware plus production notification-facade contracts |
+| COLLECTOR | 5 | blocked | — | — | — | waits Phase 4 sensor lanes PROCESS, POWER, GPU, and HID; `LANES.md` requires all sensor lanes before collection composition |
 | DAEMON-CLI | 5 | blocked | — | — | — | waits backend integration |
 | QML-VERIFY | 6 | blocked | — | — | — | waits DAEMON-CLI |
 | PACKAGING | 6 | blocked | — | — | — | waits DAEMON-CLI |
@@ -56,7 +56,7 @@ Only integration owner edits this file. Lane agents write under `handoffs/`.
 
 - **Wave 2 complete** (commit `eeb80bd`): all four Phase 2 lanes (DOMAIN, CONFIG, RUNTIME, FIXTURES) verified and integrated. Gate P2 green — Rust 217 tests pass, Python 175 passed + 1 skipped. Wave 3 `RENDER-CORE` and SENSOR-CPU/MEM/NET/DISK lanes are ready; `TRACES` starts after the `RENDER-CORE` API is integrated.
 - **Wave 3 complete**: `RENDER-CORE`, `TRACES`, `SENSOR-CPU`, `SENSOR-MEM`, `SENSOR-NET`, and `SENSOR-DISK` are verified. Gate P3 green — full Rust all-feature verification passes (`cargo fmt --check`, `cargo check`, `cargo clippy -D warnings`, `cargo test`, `cargo doc`) with 307 total Rust tests, and the Python sensor baseline remains green (`tests/test_sensors.py` 4/4).
-- **Wave 4/5 follow-on lanes unblocked**: `FORMATTER`, `CHART`, `PAGES`, `PROCESS`, `POWER`, `HID`, `NOTIFY`, and `COLLECTOR` are now ready for owner assignment; `GPU` remains blocked on `PROCESS` as planned.
+- **Wave 4 started**: `CHART`, `PROCESS`, and `HID` are ready for owner assignment. The integration owner must freeze typed aggregate readings/hardware and production command/D-Bus facade contracts before assigning `FORMATTER`, `PAGES`, `POWER`, or `NOTIFY`. `GPU` waits `PROCESS`; `COLLECTOR` waits all Phase 4 sensor lanes.
 
 ## Accepted deviations
 
@@ -65,3 +65,4 @@ None. Add rows with user approval, affected contract/tests, and rollback.
 ## Current blockers
 
 1. Phase 0 still lacks broader multi-host live-hardware evidence for P0.7. The current host has only an unsupported AMD Strix Halo iGPU (`1002:1586`, `amdgpu`), no Intel/NVIDIA GPU, no system battery, and no supported Bolt mouse/keyboard battery detected. Intel, NVIDIA NVML/fallback, UPower battery/peripheral, and Bolt/HID live paths require other hosts/devices; fixture coverage remains mandatory.
+2. Wave 4 shared contracts are not production-ready: `domain::boundary::{HardwareSnapshot, ReadingsSnapshot}` still contain only capability/metric sets, while `CommandRunner` and `DbusFacade` exist only behind the `test-support` feature. Integration must land the typed aggregate models and production adapter traits before their dependent lanes start.

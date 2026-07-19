@@ -22,7 +22,7 @@
 | 1 | `SCAFFOLD` | `BASE` |
 | 2 | `DOMAIN`, `CONFIG`, `RUNTIME`, `FIXTURES` | frozen scaffold contracts |
 | 3 | `RENDER-CORE`, `TRACES`, `SENSOR-CPU`, `SENSOR-MEM`, `SENSOR-NET`, `SENSOR-DISK` | relevant Wave 2 lanes |
-| 4 | `FORMATTER`, `CHART`, `PAGES`, `PROCESS`, `POWER`, `GPU`, `HID`, `NOTIFY` | relevant Wave 3 lanes |
+| 4 | `FORMATTER`, `CHART`, `PAGES`, `PROCESS`, `POWER`, `GPU`, `HID`, `NOTIFY` | relevant Wave 3 lanes plus integration-owned production boundary freeze where consumed |
 | 5 | `COLLECTOR` then `DAEMON-CLI` | all runtime dependencies |
 | 6 | `QML-VERIFY`, `PACKAGING` | integrated Rust binary |
 | 7 | `HARDWARE-*` validation lanes | packaged/shadow binary |
@@ -159,7 +159,8 @@ resolve cross-lane overlaps.
 - **Owns:** `rust/src/render/{registry,cells,formatter}.rs` and formatter tests.
 - **References:** `src/items.py`, render half of `src/registry.py`,
   `src/formatter.py`.
-- **Dependencies:** `DOMAIN`, `CONFIG`, `RENDER-CORE`, `TRACES`.
+- **Dependencies:** `DOMAIN`, `CONFIG`, `RENDER-CORE`, `TRACES`, and the
+  integration-owned typed aggregate hardware/readings render contract.
 - **Validation:** every item alone, every irregular layout, existing formatter
   suite, H/V/tooltip goldens, canonical-width guard.
 
@@ -179,7 +180,8 @@ resolve cross-lane overlaps.
   formatting, page shell/title/pager/click action.
 - **Owns:** `rust/src/{page_commands}.rs` and page-focused render file/tests.
 - **References:** `src/pages.py`.
-- **Dependencies:** `DOMAIN`, `RENDER-CORE`, `FIXTURES` command runner.
+- **Dependencies:** `DOMAIN`, `RENDER-CORE`, `FIXTURES`, and the
+  integration-owned production command-runner trait implemented by the fake.
 - **Validation:** every page and command outcome; ANSI/PTY/cache/ellipsize/service
   resolution; byte parity.
 
@@ -198,7 +200,8 @@ resolve cross-lane overlaps.
   calls.
 - **Owns:** `rust/src/sensors/power.rs`, D-Bus facade and fixtures/tests.
 - **References:** D-Bus/battery/SMART symbols in `src/sensors.py`.
-- **Dependencies:** `FIXTURES` D-Bus facade, SENSOR-DISK identity types.
+- **Dependencies:** `FIXTURES`, SENSOR-DISK identity types, and the
+  integration-owned production D-Bus facade contract implemented by the fake.
 - **Validation:** decoded success shapes plus bus/service/object/property absence,
   malformed variants, timeout/error, cache TTL, system/peripheral semantics.
 
@@ -226,7 +229,8 @@ resolve cross-lane overlaps.
 - **Objective:** exact latch/hysteresis/hold and emitted notification payloads.
 - **Owns:** `rust/src/notify.rs`, notifier tests/fake facade.
 - **References:** `src/notifier.py`, `tests/test_notifier.py`.
-- **Dependencies:** CONFIG/readings/hardware types, fake clock/D-Bus facade.
+- **Dependencies:** CONFIG, the typed aggregate readings/hardware contract, fake
+  clock, and the production notification facade shared with test support.
 - **Validation:** port full notifier suite plus every notification type, facade
   failure, per-device state cleanup/retention behavior.
 
@@ -283,4 +287,3 @@ Separate non-editing lanes: `HARDWARE-INTEL`, `HARDWARE-NVIDIA`,
   scripts, `plans/STATUS.md`, cross-lane fixes.
 - **Must not:** accept unverifiable claims, hide failures, or let lane agents
   self-certify integration.
-

@@ -108,6 +108,11 @@ Parallel lanes:
 
 **Objective:** complete domain behavior above foundations.
 
+Integration prerequisite: replace the scaffold-only aggregate hardware/readings
+snapshots with the typed render/collector contract and promote command/D-Bus
+traits from feature-gated test support into production boundaries. Lanes that do
+not consume those shared APIs may start while this contract slice lands.
+
 Parallel lanes:
 
 - **P4-FMT:** item registry rendering, formatter, canonical width, main tooltip.

@@ -868,12 +868,12 @@ Existing tests remain oracle evidence until mapped to a passing Rust test or int
 
 | Done | Line | Symbol | Kind | Lane | Evidence required |
 |---|---:|---|---|---|---|
-| [ ] | 5 | `_Part` | class | `BASE/SENSOR-DISK` | P: preserve assertion; map to Rust test |
-| [ ] | 7 | `_Part.__init__` | method | `BASE/SENSOR-DISK` | P: preserve assertion; map to Rust test |
-| [ ] | 13 | `test_resolve_mounts_explicit_list_used_as_is` | function | `BASE/SENSOR-DISK` | P: preserve assertion; map to Rust test |
-| [ ] | 19 | `test_resolve_mounts_auto_filters_to_roots_and_orders` | function | `BASE/SENSOR-DISK` | P: preserve assertion; map to Rust test |
-| [ ] | 33 | `test_resolve_mounts_auto_root_only_when_nothing_mounted` | function | `BASE/SENSOR-DISK` | P: preserve assertion; map to Rust test |
-| [ ] | 40 | `test_resolve_mounts_auto_ignores_bare_root_dir` | function | `BASE/SENSOR-DISK` | P: preserve assertion; map to Rust test |
+| [x] | 5 | `_Part` | class | `BASE/SENSOR-DISK` | P: fixture shape retained by the four passing Python assertions and mapped Rust mount tests |
+| [x] | 7 | `_Part.__init__` | method | `BASE/SENSOR-DISK` | P: fixture construction retained by the four passing Python assertions and mapped Rust mount tests |
+| [x] | 13 | `test_resolve_mounts_explicit_list_used_as_is` | function | `BASE/SENSOR-DISK` | P/U: mapped to Rust `resolve_mounts_explicit_list_used_as_is` |
+| [x] | 19 | `test_resolve_mounts_auto_filters_to_roots_and_orders` | function | `BASE/SENSOR-DISK` | P/U: mapped to Rust `resolve_mounts_auto_filters_to_roots_and_orders` |
+| [x] | 33 | `test_resolve_mounts_auto_root_only_when_nothing_mounted` | function | `BASE/SENSOR-DISK` | P/U: mapped to Rust `resolve_mounts_auto_root_only_when_nothing_under_auto_roots` |
+| [x] | 40 | `test_resolve_mounts_auto_ignores_bare_root_dir` | function | `BASE/SENSOR-DISK` | P/U: mapped to Rust `resolve_mounts_auto_ignores_bare_root_dirs` |
 
 ### `tests/vulture_whitelist.py`
 
@@ -1204,6 +1204,32 @@ legend as the rest of this file (U/D/F/I/L/P + E0–E5).
 | [x] | `FilesystemRoots` | struct | `SCAFFOLD`/`FIXTURES` | U: default + `state_root()` derivation |
 | [x] | `HardwareSnapshot` / `ReadingsSnapshot` / `DaemonStateSnapshot` | structs | `SCAFFOLD`/`FIXTURES` | U: defaults match Python `DaemonState`/`HardwareInfo` shape placeholders |
 
+### `rust/src/render/model.rs`
+
+| Done | Symbol | Kind | Lane | Evidence required |
+|---|---|---|---|---|
+| [x] | `Align` / `Cell` / `Ident` / `SeparatorSize` / `Separator` / `Entry` / `Block` / `Row` | enums/structs/alias | `RENDER-CORE` | U/D: row/cell identity, role, alignment, separator, and grouping corpus mirrors `src/render_model.py` |
+| [x] | `visible_width` / `value_cell` / `auxiliary_cell` / `format_percent` | functions | `RENDER-CORE` | U/D: entities, tags, missing values, panel/tooltip percentages, and state-class composition |
+| [x] | `css_class_from_thresholds` / `css_class_active` / `css_class_battery` | functions | `RENDER-CORE` | U/D: all threshold boundaries mapped from `tests/test_render_model.py` |
+| [x] | `group_rows_into_blocks` | function | `RENDER-CORE` | U/D: shape changes, explicit separators, spanning rows, and empty-edge cases |
+| [x] | `render_two_pair_row` / `render_three_col_row` / `render_row_inline` | functions | `RENDER-CORE` | U/D: fixed Python row corpus plus table-free horizontal output |
+
+### `rust/src/render/mono.rs`
+
+| Done | Symbol | Kind | Lane | Evidence required |
+|---|---|---|---|---|
+| [x] | `global_width_of` | function | `RENDER-CORE` | U/D: minimum width, full-surface right edge, title-rule exclusion, and layout-width overrides |
+| [x] | `render_blocks_monospace` | function | `RENDER-CORE` | U/D: fixed byte corpus covers all five plans; 80-case right-edge sweep; no `<table>` |
+
+### `rust/src/render/traces.rs`
+
+| Done | Symbol | Kind | Lane | Evidence required |
+|---|---|---|---|---|
+| [x] | `TraceMetric` | enum | `TRACES` | U/D: CPU/memory config, identity, glyph, label, and history selection |
+| [x] | `bar_html` / `column_html` / `spark_html` / `braille_html` | functions | `TRACES` | U/D: fixed Python byte corpus; missing/zero/boundary/history cases |
+| [x] | `bar_row` / `column_row` / `spark_row` / `braille_row` | functions | `TRACES` | U/D: standalone row structure and absent-data collapse |
+| [x] | `bar_spark_row` / `bar_braille_row` | functions | `TRACES` | U/D: combo structure, presence logic, labels, and Python half-even layout width |
+
 ### `rust/src/test_support.rs` (module root) + `rust/src/test_support/*` (submodules)
 
 | Done | Symbol | Kind | Lane | Evidence required |
@@ -1215,6 +1241,23 @@ legend as the rest of this file (U/D/F/I/L/P + E0–E5).
 | [x] | `FixtureLoader` + `OracleFixtureRaw` | struct + struct | `FIXTURES` | U: `load_text`/`load_bytes`/`load_oracle_fixture` (raw `toml::Value` view); typed deserialization deferred to Wave 3/4 |
 | [x] | `FixtureError` / `RuntimeError` | enums | `FIXTURES` | U: `Io`/`TomlParse`/`MissingTable`/`NotATable` (loader); `CommandNotQueued`/`DbusCallNotQueued` (fakes) |
 | [x] | `DbusCall` type alias | alias | `FIXTURES` | U: `(BusKind, String, String, String, String)` for trace slices |
+
+### `rust/src/sensors/cpu.rs`
+
+| Done | Symbol | Kind | Lane | Evidence required |
+|---|---|---|---|---|
+| [x] | `CpuPaths` / `CpuState` | structs | `SENSOR-CPU` | U: discovered path bundle plus aggregate/per-core diff and history state |
+| [x] | `discover_cpu_paths` / `find_cpu_temp_path` / `find_cpu_freq_path` / `detect_cpu_turbo_supported` | functions | `SENSOR-CPU` | U/F: override precedence, hwmon/sysfs discovery, missing paths, and fallback support |
+| [x] | `read_cpu_usage` / `read_cpu_cores` | functions | `SENSOR-CPU` | U/F: first/delta/reset/malformed/core-count/history cases; mirrors Python CPU formulas |
+| [x] | `read_uptime_seconds` / `read_load_average` | functions | `SENSOR-CPU` | U/F: proc fixture parsing plus missing/malformed results |
+| [x] | `read_cpu_frequency_mhz` / `read_cpu_turbo` | functions | `SENSOR-CPU` | U/F: sysfs fast path, cpuinfo/boost fallback, inversion, and malformed results |
+
+### `rust/src/sensors/hwmon.rs`
+
+| Done | Symbol | Kind | Lane | Evidence required |
+|---|---|---|---|---|
+| [x] | `hwmon_dirs_matching` / `resolve_sensor_spec` | functions | `SENSOR-DISK` | U/F: case-insensitive chip match, manual spec resolution, and absent files |
+| [x] | `read_path_millidegrees_celsius` / `read_path_int` | functions | `SENSOR-DISK` | U/F: milli-unit conversion, integer parsing, and absent/malformed paths |
 
 ### `rust/src/sensors/memory.rs`
 

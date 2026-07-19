@@ -18,7 +18,7 @@
 ## Result
 
 - Status: `handoff`.
-- Commits: final integration commit created after handoff drafting; see branch history.
+- Commits: `d9594ed` (`rust: port SENSOR-DISK lane`).
 - Changed files:
   - `rust/src/sensors/mod.rs` — registers the new disk and hwmon sensor modules.
   - `rust/src/sensors/hwmon.rs` — deterministic hwmon directory/spec/int helpers
