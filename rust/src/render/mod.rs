@@ -2,6 +2,7 @@
 
 pub mod model;
 pub mod mono;
+pub mod traces;
 
 pub use model::{
     Align, Block, Cell, EMPTY_VALUE, Entry, Ident, PERCENT_PANEL_WIDTH, Row, Separator,
@@ -10,3 +11,7 @@ pub use model::{
     render_two_pair_row, value_cell, visible_width,
 };
 pub use mono::{global_width_of, render_blocks_monospace};
+pub use traces::{
+    TraceMetric, bar_braille_row, bar_html, bar_row, bar_spark_row, braille_html, braille_row,
+    column_html, column_row, spark_html, spark_row,
+};

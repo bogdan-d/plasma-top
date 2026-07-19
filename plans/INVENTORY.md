@@ -64,6 +64,7 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [x] | `rust/src/render/mod.rs` | new; render composition and public API | `RENDER-CORE` | P3 module registration + documented re-exports |
 | [x] | `rust/src/render/model.rs` | new; cells/rows/blocks, thresholds, grouping, inline HTML | `RENDER-CORE` | P3 unit tests + fixed Python byte corpus + no-table invariant |
 | [x] | `rust/src/render/mono.rs` | new; five-plan table-free monospace serializer | `RENDER-CORE` | P3 unit/width sweep + fixed Python byte corpus covering every plan |
+| [x] | `rust/src/render/traces.rs` | new; bar/column/spark/braille encodings + standalone/combo rows | `TRACES` | P3 ports `src/traces.py`; 12 focused tests + fixed Python byte corpus + combo-row structure parity |
 | [x] | `rust/src/runtime/mod.rs` | new; runtime path resolution (`runtime_dir`/`state_dir`/accessors) + `ensure_dirs` | `RUNTIME` | P2 ports `src/runtime.py`; lazy per-call path resolution for testability |
 | [x] | `rust/src/runtime/atomic.rs` | new; `write_atomic` primitive (PID-unique tmp + rename-over) | `RUNTIME` | P2 ports `src/daemon.py:_write_atomic` shape; atomicity + tmp-cleanup tests |
 | [x] | `rust/src/runtime/page.rs` | new; page counter (`read_page`/`set_page`/`npages`/`step_page`/`PageDirection`) with flock | `RUNTIME` | P2 ports `src/pagestate.py`; 32-thread concurrency test proves no lost updates |
@@ -545,22 +546,22 @@ Every top-level function/class and class method under `src/`, plus the root entr
 
 | Done | Line | Symbol | Kind | Lane | Evidence required |
 |---|---:|---|---|---|---|
-| [ ] | 56 | `_surface_cfg` | function | `TRACES` | U/D: direct + Python differential; boundaries |
-| [ ] | 64 | `bar_html` | function | `TRACES` | U/D: direct + Python differential; boundaries |
-| [ ] | 84 | `column_html` | function | `TRACES` | U/D: direct + Python differential; boundaries |
-| [ ] | 102 | `spark_html` | function | `TRACES` | U/D: direct + Python differential; boundaries |
-| [ ] | 124 | `_braille_level` | function | `TRACES` | U/D: direct + Python differential; boundaries |
-| [ ] | 135 | `_braille_char` | function | `TRACES` | U/D: direct + Python differential; boundaries |
-| [ ] | 148 | `braille_html` | function | `TRACES` | U/D: direct + Python differential; boundaries |
-| [ ] | 183 | `_bar_layout_width` | function | `TRACES` | U/D: direct + Python differential; boundaries |
-| [ ] | 195 | `_standalone` | function | `TRACES` | U/D: direct + Python differential; boundaries |
-| [ ] | 204 | `bar_row` | function | `TRACES` | U/D: direct + Python differential; boundaries |
-| [ ] | 209 | `column_row` | function | `TRACES` | U/D: direct + Python differential; boundaries |
-| [ ] | 213 | `spark_row` | function | `TRACES` | U/D: direct + Python differential; boundaries |
-| [ ] | 217 | `braille_row` | function | `TRACES` | U/D: direct + Python differential; boundaries |
-| [ ] | 221 | `_bar_history_row` | function | `TRACES` | U/D: direct + Python differential; boundaries |
-| [ ] | 245 | `bar_spark_row` | function | `TRACES` | U/D: direct + Python differential; boundaries |
-| [ ] | 252 | `bar_braille_row` | function | `TRACES` | U/D: direct + Python differential; boundaries |
+| [x] | 56 | `_surface_cfg` | function | `TRACES` | U/D: direct + Python differential; boundaries |
+| [x] | 64 | `bar_html` | function | `TRACES` | U/D: direct + Python differential; boundaries |
+| [x] | 84 | `column_html` | function | `TRACES` | U/D: direct + Python differential; boundaries |
+| [x] | 102 | `spark_html` | function | `TRACES` | U/D: direct + Python differential; boundaries |
+| [x] | 124 | `_braille_level` | function | `TRACES` | U/D: direct + Python differential; boundaries |
+| [x] | 135 | `_braille_char` | function | `TRACES` | U/D: direct + Python differential; boundaries |
+| [x] | 148 | `braille_html` | function | `TRACES` | U/D: direct + Python differential; boundaries |
+| [x] | 183 | `_bar_layout_width` | function | `TRACES` | U/D: direct + Python differential; boundaries |
+| [x] | 195 | `_standalone` | function | `TRACES` | U/D: direct + Python differential; boundaries |
+| [x] | 204 | `bar_row` | function | `TRACES` | U/D: direct + Python differential; boundaries |
+| [x] | 209 | `column_row` | function | `TRACES` | U/D: direct + Python differential; boundaries |
+| [x] | 213 | `spark_row` | function | `TRACES` | U/D: direct + Python differential; boundaries |
+| [x] | 217 | `braille_row` | function | `TRACES` | U/D: direct + Python differential; boundaries |
+| [x] | 221 | `_bar_history_row` | function | `TRACES` | U/D: direct + Python differential; boundaries |
+| [x] | 245 | `bar_spark_row` | function | `TRACES` | U/D: direct + Python differential; boundaries |
+| [x] | 252 | `bar_braille_row` | function | `TRACES` | U/D: direct + Python differential; boundaries |
 
 ### `src/units.py`
 
