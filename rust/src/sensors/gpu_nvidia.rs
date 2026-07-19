@@ -14,6 +14,9 @@ use crate::domain::boundary::{ClockSnapshot, CommandRunner, CommandStatus};
 use crate::domain::readings::{HardwareSnapshot, ReadingsSnapshot};
 use crate::domain::state::{DaemonStateSnapshot, GpuCache};
 
+#[cfg(feature = "nvml")]
+use nvml_wrapper::{Nvml, enum_wrappers::device::TemperatureSensor};
+
 /// `nvidia-smi` executable token used by the Python backend.
 pub const NVIDIA_SMI_PROGRAM: &str = "nvidia-smi";
 /// Timeout for the `nvidia-smi` fallback.
@@ -64,6 +67,78 @@ pub trait NvmlFacade {
     fn read_device_zero(&mut self) -> Result<NvidiaMetrics, NvmlError>;
 }
 
+/// Runtime-loaded production NVML adapter for NVIDIA GPU 0.
+///
+/// Initialization is lazy so the daemon's fast first paint does not load the
+/// driver library. A missing library or GPU-0 handle returns [`NvmlError::Init`]
+/// once; [`read_nvidia`] then permanently selects its `nvidia-smi` fallback.
+#[cfg(feature = "nvml")]
+#[derive(Debug, Default)]
+pub struct ProductionNvml {
+    nvml: Option<Nvml>,
+    init_failed: bool,
+}
+
+#[cfg(feature = "nvml")]
+impl ProductionNvml {
+    /// Creates an uninitialized adapter. NVML is loaded on the first metric
+    /// read, not during daemon construction.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            nvml: None,
+            init_failed: false,
+        }
+    }
+}
+
+#[cfg(feature = "nvml")]
+impl NvmlFacade for ProductionNvml {
+    fn read_device_zero(&mut self) -> Result<NvidiaMetrics, NvmlError> {
+        if self.init_failed {
+            return Err(NvmlError::Init);
+        }
+        if self.nvml.is_none() {
+            match Nvml::init() {
+                Ok(nvml) => self.nvml = Some(nvml),
+                Err(_) => {
+                    self.init_failed = true;
+                    return Err(NvmlError::Init);
+                }
+            }
+        }
+
+        let Some(nvml) = self.nvml.as_ref() else {
+            self.init_failed = true;
+            return Err(NvmlError::Init);
+        };
+        let device = nvml.device_by_index(0).map_err(|_| {
+            self.init_failed = true;
+            NvmlError::Init
+        })?;
+        let temp = device
+            .temperature(TemperatureSensor::Gpu)
+            .map_err(|_| NvmlError::Read)?;
+        let usage = device.utilization_rates().map_err(|_| NvmlError::Read)?;
+
+        Ok(NvidiaMetrics {
+            temp_celsius: u32_to_i32(temp),
+            usage_percent: u32_to_i32(usage.gpu),
+            memory_percent: u32_to_i32(usage.memory),
+            decoder_percent: device
+                .decoder_utilization()
+                .ok()
+                .and_then(|value| u32_to_i32(value.utilization)),
+            fan_percent: device.fan_speed(0).ok().and_then(u32_to_i32),
+        })
+    }
+}
+
+#[cfg(feature = "nvml")]
+fn u32_to_i32(value: u32) -> Option<i32> {
+    i32::try_from(value).ok()
+}
+
 /// Detects an NVIDIA display-class PCI device below `sys_root`.
 #[must_use]
 pub fn detect_nvidia(sys_root: &Path) -> bool {
@@ -107,7 +182,7 @@ pub fn nvidia_cap(value: Option<i32>) -> Option<i32> {
 pub fn read_nvidia(
     state: &mut GpuCache,
     mut nvml: Option<&mut dyn NvmlFacade>,
-    runner: &mut impl CommandRunner,
+    runner: &mut dyn CommandRunner,
     clock: ClockSnapshot,
 ) -> NvidiaMetrics {
     let ttl = gpu_cache_ttl(nvml.is_some(), state.nvml_init_failed);
@@ -136,7 +211,7 @@ pub fn read_nvidia(
 
 /// Reads and parses the `nvidia-smi` CSV fallback.
 #[must_use]
-pub fn read_nvidia_smi(runner: &mut impl CommandRunner) -> NvidiaMetrics {
+pub fn read_nvidia_smi(runner: &mut dyn CommandRunner) -> NvidiaMetrics {
     let args = [
         OsString::from(NVIDIA_SMI_QUERY),
         OsString::from(NVIDIA_SMI_FORMAT),

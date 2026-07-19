@@ -20,6 +20,9 @@ default = []
 # can share fake adapters, fixture loaders, and oracle runners. The feature is
 # never enabled in production builds; CI enables it via `--all-features`.
 test-support = []
+# Enables the safe, runtime-loaded NVML adapter. Missing libnvidia-ml or GPU 0
+# remains non-fatal and selects the nvidia-smi fallback.
+nvml = ["dep:nvml-wrapper"]
 
 [dependencies]
 # Safe wrappers for flock(2), getuid(2), and the HID report poll(2) timeout.
@@ -55,3 +58,8 @@ serde = { version = "1", features = ["derive"] }
 # script; transitive footprint is tiny (`adler2`). See
 # `rust/DEPENDENCIES.md` for the review row.
 miniz_oxide = "0.8"
+# Safe, runtime-loaded NVIDIA Management Library adapter. Optional so the
+# default build remains portable; release packaging may enable `nvml` without a
+# link-time libnvidia-ml dependency.
+# License: MIT. GPL-2.0-or-later compatible. See `rust/DEPENDENCIES.md`.
+nvml-wrapper = { version = "0.11", optional = true, default-features = false }

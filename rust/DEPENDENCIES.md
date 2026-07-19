@@ -28,6 +28,12 @@ integration owner verifies it before accepting the lane.
 |---|---|---|---|---|---|---|
 | `miniz_oxide` | 0.8.9 | MIT OR Zlib OR Apache-2.0 | Pure-Rust DEFLATE/zlib used by `rust/src/render/chart.rs` to encode the graphs page's PNG images and decode them in focused round-trip tests. Chosen over the `png` crate because PiroStats already rasterizes pixels itself and needs only compression/decompression, and over `flate2`/system zlib to avoid native build/runtime dependencies and backend feature complexity. | none (pure-Rust; no native code, no build.rs) | runtime: `adler2` | CHART lane |
 
+## Phase 5
+
+| Crate | Version | License | Purpose | Native/build | Transitive | Reviewed by |
+|---|---|---|---|---|---|---|
+| [`nvml-wrapper`](https://github.com/Cldfire/nvml-wrapper) | 0.11 | MIT | Safe optional production NVML adapter for NVIDIA GPU 0. The standard library cannot load or call NVML safely. `default-features = false`; the crate is enabled only by PiroStats' additive `nvml` feature, while missing `libnvidia-ml.so` remains a runtime initialization failure that selects the existing `nvidia-smi` fallback. Replacement cost is isolated behind `NvmlFacade`; `Cargo.lock` pins the resolved version. | no native build or link step; uses runtime dynamic loading, so Arch packaging needs no compile-time NVIDIA dependency and the driver-provided library remains optional | runtime: `bitflags`, `libloading`/`cfg-if`, `nvml-wrapper-sys`, `static_assertions`, `thiserror`; proc macros: `thiserror-impl`, `wrapcenum-derive` and their `darling`/`syn`/`quote` support stack | COLLECTOR lane |
+
 The crate declares `license = "GPL-2.0-or-later"` to match the project's
 existing `LICENSE` / `NOTICE` / packaging metadata. Adding any dependency with
 an incompatible license (e.g. GPLv3-only, AGPL, proprietary) is a blocker.
