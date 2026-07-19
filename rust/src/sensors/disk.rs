@@ -420,7 +420,7 @@ fn disk_kind_for_label(label: &str) -> Option<DiskKind> {
     }
 }
 
-fn is_rotational(sys_root: &Path, label: &str) -> bool {
+pub(crate) fn is_rotational(sys_root: &Path, label: &str) -> bool {
     fs::read_to_string(sys_root.join("block").join(label).join("queue/rotational"))
         .ok()
         .is_some_and(|value| value.trim() == "1")

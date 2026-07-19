@@ -38,6 +38,34 @@ pub enum BusKind {
     System,
 }
 
+/// Typed argument needed by the currently ported D-Bus methods.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum DbusArgument {
+    /// A D-Bus string (`s`).
+    String(String),
+    /// An empty string-to-variant dictionary (`a{sv}`).
+    EmptyStringVariantDict,
+}
+
+/// Exact D-Bus method request passed to production adapters and test fakes.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct DbusRequest {
+    /// Bus carrying the request.
+    pub bus: BusKind,
+    /// Remote service name.
+    pub service: String,
+    /// Remote object path.
+    pub object_path: String,
+    /// Interface containing the method.
+    pub interface: String,
+    /// Method member name.
+    pub member: String,
+    /// Ordered typed method arguments.
+    pub arguments: Vec<DbusArgument>,
+    /// Per-call timeout; `None` selects the adapter default.
+    pub timeout: Option<Duration>,
+}
+
 /// Stringly placeholder for a D-Bus response until typed facades land.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DbusOutput {
@@ -187,20 +215,12 @@ pub trait CommandRunner {
 
 /// Generic D-Bus call facade implemented by production adapters and test fakes.
 pub trait DbusFacade {
-    /// Invokes `member` on `interface` at `object_path` exposed by `service`
-    /// on `bus`, returning the decoded reply.
+    /// Invokes an exact method request and returns the decoded reply.
     ///
     /// # Errors
     ///
     /// Returns [`BoundaryError`] when the adapter cannot dispatch the call.
-    fn call(
-        &mut self,
-        bus: BusKind,
-        service: &str,
-        path: &str,
-        iface: &str,
-        member: &str,
-    ) -> Result<DbusOutput, BoundaryError>;
+    fn call(&mut self, request: DbusRequest) -> Result<DbusOutput, BoundaryError>;
 }
 
 /// Clock snapshot stub used by daemon and collection boundaries.

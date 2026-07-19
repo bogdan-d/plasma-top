@@ -24,8 +24,8 @@ pub mod fixture_loader;
 pub mod fixture_root;
 
 pub use crate::domain::boundary::{
-    BoundaryError, BusKind, ClockSnapshot, CommandOutput, CommandRunner, CommandStatus, DbusFacade,
-    DbusOutput,
+    BoundaryError, BusKind, ClockSnapshot, CommandOutput, CommandRunner, CommandStatus,
+    DbusArgument, DbusFacade, DbusOutput, DbusRequest,
 };
 pub use fake_clock::FakeClock;
 pub use fake_command_runner::{CommandCall, FakeCommandRunner};

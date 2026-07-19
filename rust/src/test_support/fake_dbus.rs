@@ -8,13 +8,15 @@
 
 use std::collections::{HashMap, VecDeque};
 
-use crate::domain::boundary::{BoundaryError, BusKind, DbusFacade, DbusOutput};
+use crate::domain::boundary::{BoundaryError, BusKind, DbusFacade, DbusOutput, DbusRequest};
 
 /// `(bus, service, object_path, interface, member)` signature of a D-Bus call.
 ///
 /// Public so differential tests can hold a `&[DbusCall]` slice returned by
 /// [`FakeDbus::call_trace`] without unpacking the tuple on every assertion.
-pub type DbusCall = (BusKind, String, String, String, String);
+pub type DbusCall = DbusRequest;
+
+type DbusSignature = (BusKind, String, String, String, String);
 
 /// In-memory `DbusFacade` fake keyed by `(bus, service, path, iface, member)`.
 ///
@@ -25,7 +27,7 @@ pub type DbusCall = (BusKind, String, String, String, String);
 #[derive(Debug, Default)]
 pub struct FakeDbus {
     /// Signature-keyed FIFO of pending replies.
-    outputs: HashMap<DbusCall, VecDeque<DbusOutput>>,
+    outputs: HashMap<DbusSignature, VecDeque<DbusOutput>>,
     /// Ordered signatures of every invocation seen by this fake.
     call_trace: Vec<DbusCall>,
 }
@@ -56,7 +58,7 @@ impl FakeDbus {
         member: impl Into<String>,
         output: DbusOutput,
     ) -> &mut Self {
-        let key = (
+        let key: DbusSignature = (
             bus,
             service.into(),
             path.into(),
@@ -86,10 +88,12 @@ impl FakeDbus {
     pub fn call_trace(&self) -> &[DbusCall] {
         &self.call_trace
     }
-}
 
-impl DbusFacade for FakeDbus {
-    fn call(
+    /// Calls the facade without arguments or a custom timeout.
+    ///
+    /// This convenience keeps generic fake tests compact; production sensor
+    /// tests call through [`DbusFacade`] and assert the full request trace.
+    pub fn call(
         &mut self,
         bus: BusKind,
         service: &str,
@@ -97,14 +101,31 @@ impl DbusFacade for FakeDbus {
         iface: &str,
         member: &str,
     ) -> Result<DbusOutput, BoundaryError> {
-        let key: DbusCall = (
-            bus,
-            service.to_owned(),
-            path.to_owned(),
-            iface.to_owned(),
-            member.to_owned(),
+        DbusFacade::call(
+            self,
+            DbusRequest {
+                bus,
+                service: service.to_owned(),
+                object_path: path.to_owned(),
+                interface: iface.to_owned(),
+                member: member.to_owned(),
+                arguments: Vec::new(),
+                timeout: None,
+            },
+        )
+    }
+}
+
+impl DbusFacade for FakeDbus {
+    fn call(&mut self, request: DbusRequest) -> Result<DbusOutput, BoundaryError> {
+        let key: DbusSignature = (
+            request.bus,
+            request.service.clone(),
+            request.object_path.clone(),
+            request.interface.clone(),
+            request.member.clone(),
         );
-        self.call_trace.push(key.clone());
+        self.call_trace.push(request);
         match self.outputs.get_mut(&key).and_then(VecDeque::pop_front) {
             Some(output) => Ok(output),
             None => Err(BoundaryError::DbusCallNotQueued {
@@ -246,8 +267,8 @@ mod tests {
 
         let trace = facade.call_trace();
         assert_eq!(trace.len(), 2, "every invocation is recorded");
-        assert_eq!(trace[0].4, "Get");
-        assert_eq!(trace[1].4, "Other");
+        assert_eq!(trace[0].member, "Get");
+        assert_eq!(trace[1].member, "Other");
     }
 
     #[test]
@@ -274,7 +295,7 @@ mod tests {
         let Some(head) = facade.next_call() else {
             panic!("trace non-empty");
         };
-        assert_eq!(head.4, "Get");
+        assert_eq!(head.member, "Get");
     }
 
     #[test]

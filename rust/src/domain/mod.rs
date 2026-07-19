@@ -9,8 +9,8 @@ pub mod registry;
 pub mod state;
 
 pub use boundary::{
-    BoundaryError, BusKind, ClockSnapshot, CommandOutput, CommandRunner, CommandStatus, DbusFacade,
-    DbusOutput, FilesystemRoots,
+    BoundaryError, BusKind, ClockSnapshot, CommandOutput, CommandRunner, CommandStatus,
+    DbusArgument, DbusFacade, DbusOutput, DbusRequest, FilesystemRoots,
 };
 pub use form::{Form, Shape, Surface, SurfaceSet};
 pub use item::{ItemParseError, ItemRendering, ItemToken};

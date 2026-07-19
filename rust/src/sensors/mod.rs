@@ -10,4 +10,5 @@ pub mod gpu_intel;
 pub mod hwmon;
 pub mod memory;
 pub mod network;
+pub mod power;
 pub mod process;
