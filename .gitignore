@@ -3,6 +3,9 @@ __pycache__/
 *.pyo
 
 rust/target/
+# Per-lane isolated target dirs (avoids collisions when multiple lanes build
+# in parallel); see plans/LANES.md.
+rust/target-*/
 
 # Tooling caches / agent config (not part of the shipped tool)
 .claude/

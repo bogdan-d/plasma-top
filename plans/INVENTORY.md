@@ -64,6 +64,11 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [x] | `rust/src/runtime/mod.rs` | new; runtime path resolution (`runtime_dir`/`state_dir`/accessors) + `ensure_dirs` | `RUNTIME` | P2 ports `src/runtime.py`; lazy per-call path resolution for testability |
 | [x] | `rust/src/runtime/atomic.rs` | new; `write_atomic` primitive (PID-unique tmp + rename-over) | `RUNTIME` | P2 ports `src/daemon.py:_write_atomic` shape; atomicity + tmp-cleanup tests |
 | [x] | `rust/src/runtime/page.rs` | new; page counter (`read_page`/`set_page`/`npages`/`step_page`/`PageDirection`) with flock | `RUNTIME` | P2 ports `src/pagestate.py`; 32-thread concurrency test proves no lost updates |
+| [x] | `rust/src/config/mod.rs` | new; typed `Config` tree + sub-structs + `load_config` + `apply_canonical_width` + drop guardrails | `CONFIG` | P2 ports `src/config.py` lines 76–376 + 719–735 + 772–848 + 863–885; `domain::registry` consumed directly (no duplicate unknown/misplaced helpers) |
+| [x] | `rust/src/config/merge.rs` | new; TOML merge pipeline (`deep_merge_tables`/`resolve_items`/`parse_surface`/`load_toml_at`/`load_machines`) | `CONFIG` | P2 ports `src/config.py` lines 30–67 + 424–456 + 738–769 |
+| [x] | `rust/src/config/geometry.rs` | new; `PanelGeometry` + DMI machine detect + appletsrc vertical detect + geom live/cache + auto-fit | `CONFIG` | P2 ports `src/config.py` lines 380–401 + 471–716; every disk-touch fn has `_at`/`_text`/`_with_dmi` test seam |
+| [x] | `rust/src/config/assets.rs` | new; asset root resolution (`code_root`/`xdg_dir`/`home_dir`/`shipped_*`) with `PIROSTATS_CODE_ROOT` env override | `CONFIG` | P2 replaces Python's `__file__`-relative resolution with `CARGO_MANIFEST_DIR/..` + env override for packaged installs |
+| [x] | `rust/tests/config_default_load.rs` | new; integration test loading shipped `config/config.toml` end-to-end | `CONFIG` | P2 asserts typed fields, threshold vectors, horizontal override, no unknown/misplaced items |
 | [x] | `rust/tests/runtime_paths.rs` | new; integration tests for path resolution + `XDG_RUNTIME_DIR` fallback | `RUNTIME` | env mutation serialized via `ENV_GUARD: Mutex<()>` |
 | [x] | `rust/tests/runtime_atomic.rs` | new; integration tests for atomic writes | `RUNTIME` | success/failure/cleanup matrix |
 | [x] | `rust/tests/runtime_page.rs` | new; integration tests for page counter + concurrency | `RUNTIME` | 32-thread stress + permission-failure path |
@@ -1223,6 +1228,45 @@ legend as the rest of this file (U/D/F/I/L/P + E0–E5).
 | [x] | `read_page` / `npages` | functions | `RUNTIME` | U: missing-file + garbage defaults (0 / 1); mirrors `src/pagestate.py` |
 | [x] | `set_page` | function | `RUNTIME` | I: atomic write via `write_atomic`; PID-unique tmp matches Python's `page.{pid}.tmp` scheme |
 | [x] | `step_page` | function | `RUNTIME` | I: flock serialization (`nix::fcntl::Flock::LockExclusive`); early-out when `npages ≤ 1`; `rem_euclid` wrap for negative deltas; **32-thread concurrency test proves no lost updates**; readonly-dir permission failure propagates `Err` |
+
+### `rust/src/config/mod.rs`
+
+| Done | Symbol | Kind | Lane | Evidence required |
+|---|---|---|---|---|
+| [x] | `Config` + sub-structs (`DisplayConfig`/`PagesConfig`/`BarConfig`/`SparkConfig`/`BrailleConfig`/`ColumnConfig`/`ThresholdConfig`/`NotifyThresholds`/`NotificationConfig`/`SensorOverrides`/`DiskConfig`/`BatteryConfig`/`SystemUpdatesConfig`/`ServerCheckConfig`) | structs | `CONFIG` | U: every field/default ports `src/config.py:76–376`; `Mounts` enum for `list[str] \| str` |
+| [x] | `Section` / `Surface` (config-local) | structs | `CONFIG` | U: section order + items + glyphs; surface item_set + has |
+| [x] | `load_config` / `load_config_with_dmi` / `load_config_with_machine` | functions | `CONFIG` | U+I: ports `src/config.py:load_config`; `_with_dmi` test seam replaces Python's monkeypatch pattern |
+| [x] | `apply_canonical_width` | function | `CONFIG` | U: non-ratcheting tooltip-width resolver; floors at `TOOLTIP_WIDTH_FLOOR` |
+| [x] | `drop_unknown_items` / `drop_misplaced_items` / `drop_items` | functions | `CONFIG` | U: delegates to `domain::registry::{unknown_item_names, misplaced_items}` — NO local duplicates |
+| [x] | `ConfigError` | enum | `CONFIG` | U: `Io`/`Toml` variants; `Error::Config` promotion proposed for Wave 5 |
+| [x] | constants `TOOLTIP_WIDTH_FLOOR`/`BRAILLE_LENGTH_MULTIPLIER`/`CSS_ADVANCE_RATIO`/`BAR_SAFETY_PX`/`COLUMN_DIGIT_RATIO` | consts | `CONFIG` | U: mirror `src/config.py` underscored variants |
+
+### `rust/src/config/merge.rs`
+
+| Done | Symbol | Kind | Lane | Evidence required |
+|---|---|---|---|---|
+| [x] | `deep_merge_tables` | function | `CONFIG` | U: scalar replace + recursive dict merge; mirrors `_deep_merge` |
+| [x] | `resolve_items` / `parse_surface` | functions | `CONFIG` | U: section-order-driven parse; `glyphs` surface option survives merge |
+| [x] | `load_toml_at` / `load_machines` / `default_config_path` / `resolve_style` / `user_machines_path` / `machines_path_for` / `machine_source_paths` | functions | `CONFIG` | U: asset-path selection; `Path::exists()` race documented |
+
+### `rust/src/config/geometry.rs`
+
+| Done | Symbol | Kind | Lane | Evidence required |
+|---|---|---|---|---|
+| [x] | `PanelGeometry` | struct | `CONFIG` | U: 4-field (height/main_advance/vertical/tooltip_advance) |
+| [x] | `parse_kde_ini` / `applet_root_containment` | functions | `CONFIG` | U: KDE INI header/keyval split; manual port of `_APPLET_ROOT_RE` (no `regex` dep) |
+| [x] | `detect_vertical_from_appletsrc[_text|_at]` | functions | `CONFIG` | U: panel-edge detection; `_text`/`_at` test seams |
+| [x] | `parse_geom` | function | `CONFIG` | U: 3-field + 4-field (tooltip advance) parsing |
+| [x] | `read_geom_file[_at]` / `cache_live_geom[_at]` | functions | `CONFIG` | U: prefers live over cache; falls back to cache when live absent |
+| [x] | `detect_panel_geometry[_at]` / `detect_vertical_layout` / `auto_fit_panel` | functions | `CONFIG` | U: full geometry pipeline; auto-fit derives bar/column/spark dims |
+| [x] | `detect_machine[_with_dmi]` | functions | `CONFIG` | U: pure `_with_dmi` core takes board+product strings; `detect_machine` reads `/sys/class/dmi/id/*` |
+
+### `rust/src/config/assets.rs`
+
+| Done | Symbol | Kind | Lane | Evidence required |
+|---|---|---|---|---|
+| [x] | `code_root` / `xdg_dir` / `home_dir` / `shipped_config` / `shipped_machines` / `shipped_language` / `parent_or_dot` | functions | `CONFIG` | U: asset root resolution; `PIROSTATS_CODE_ROOT` env override for packaged installs |
+| [x] | `compute_*` (pure cores) | functions | `CONFIG` | U: pure helpers tested without host env mutation |
 
 ## Call-edge accounting gate
 

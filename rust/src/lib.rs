@@ -22,6 +22,7 @@
 //! Runtime collection, rendering, and daemon behavior land in later phases.
 
 pub mod cli;
+pub mod config;
 pub mod domain;
 pub mod error;
 pub mod runtime;

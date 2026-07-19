@@ -38,3 +38,12 @@ nix = { version = "0.29", default-features = false, features = ["fs", "process",
 # License: MIT OR Apache-2.0. GPL-2.0-or-later compatible. Pure-Rust, no native
 # build script. See `rust/DEPENDENCIES.md` for the full review row.
 toml = "1"
+# Derive-based deserialization for the typed `Config` tree (CONFIG lane,
+# Wave 2) and the `Mounts` enum (`list[str] | str`). Used by `config::*` to
+# decode `config.toml`/`machines.toml` sub-tables into typed structs while
+# keeping "ignore unknown keys" (Python's `_from_dict` semantics) for free.
+# Hard dep: production config loading needs it. License: MIT OR Apache-2.0.
+# GPL-2.0-or-later compatible. Pure-Rust, no native build script; pulls in
+# `serde_derive` (already in the lock via `toml`'s transitive `serde_core`)
+# and re-uses `serde_core` already vendored. See `rust/DEPENDENCIES.md`.
+serde = { version = "1", features = ["derive"] }
