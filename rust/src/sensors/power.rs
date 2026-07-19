@@ -88,17 +88,17 @@ const MICROWATTS_PER_WATT: u128 = 1_000_000;
 
 /// Decoded UPower device properties retained for battery reads.
 #[derive(Debug, Clone, PartialEq)]
-struct UpowerDeviceProps {
+pub(crate) struct UpowerDeviceProps {
     /// `Percentage` (0–100) when reported.
-    percentage: Option<f64>,
+    pub(crate) percentage: Option<f64>,
     /// `State` enum (1=charging, 2=discharging, 4=fully-charged).
-    state: Option<i64>,
+    pub(crate) state: Option<i64>,
     /// `EnergyRate` in watts when reported.
-    energy_rate: Option<f64>,
+    pub(crate) energy_rate: Option<f64>,
     /// `Model` device name when reported.
-    model: Option<String>,
+    pub(crate) model: Option<String>,
     /// `Type` enum (5=mouse, 6=keyboard).
-    kind: Option<i64>,
+    pub(crate) kind: Option<i64>,
 }
 
 impl UpowerDeviceProps {
@@ -253,7 +253,10 @@ pub fn upower_enumerate(dbus: &mut dyn DbusFacade) -> Vec<String> {
 /// `[key, val, ...]` of all device properties, from which this function picks
 /// `Percentage`/`State`/`EnergyRate`/`Model`/`Type`. Returns `None` on any
 /// D-Bus failure, matching Python's blanket exception handler.
-fn upower_device_props(dbus: &mut dyn DbusFacade, path: &str) -> Option<UpowerDeviceProps> {
+pub(crate) fn upower_device_props(
+    dbus: &mut dyn DbusFacade,
+    path: &str,
+) -> Option<UpowerDeviceProps> {
     let body = dbus_call(
         dbus,
         UPOWER_NAME,

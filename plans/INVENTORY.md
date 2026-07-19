@@ -79,6 +79,7 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [x] | `rust/src/sensors/network.rs` | new; route/device detection, wifi identity/signal, sysfs byte rates, and bounded network history | `SENSOR-NET` | P3 ports network-owned pieces of `src/sensors.py`; 11 focused tests cover `ip` fallback, wired/wireless paths, TTL caching, interface-switch/counter-reset rate resets, and graph-history trimming |
 | [x] | `rust/src/sensors/hwmon.rs` | new; shared hwmon directory/spec/int helpers for disk-owned sensor paths | `SENSOR-DISK` | P3 ports the disk lane's generic hwmon helpers; 3 focused tests cover substring matching, manual spec resolution, and parse failures |
 | [x] | `rust/src/sensors/disk.rs` | new; mount resolution, statvfs usage, block-device identity/topology, hwmon disk/fan caches, and `/proc/diskstats` byte rates | `SENSOR-DISK` | P3 ports disk-owned pieces of `src/sensors.py`; 17 focused tests cover mount filters, NVMe/SCSI labels, partition stacks, TTL caching, rate resets, and df-style usage math |
+| [x] | `rust/src/sensors/power.rs` | new; UPower enumeration/properties, UDisks2 SMART discovery/health, sysfs+UPower system-battery reads with fallback, peripheral-battery reads, and Bolt HID++ queries behind a lane-local facade | `POWER` | P4 ports power-owned pieces of `src/sensors.py`; 38 focused tests cover exact D-Bus arguments/timeouts, bus/service/object/property absence, malformed variants, all three cache TTLs, sysfs→UPower fallback, charge-limit collapse, zero-peripheral suppression, and HID failure/no-level parity |
 | [x] | `rust/src/runtime/mod.rs` | new; runtime path resolution (`runtime_dir`/`state_dir`/accessors) + `ensure_dirs` | `RUNTIME` | P2 ports `src/runtime.py`; lazy per-call path resolution for testability |
 | [x] | `rust/src/runtime/atomic.rs` | new; `write_atomic` primitive (PID-unique tmp + rename-over) | `RUNTIME` | P2 ports `src/daemon.py:_write_atomic` shape; atomicity + tmp-cleanup tests |
 | [x] | `rust/src/runtime/page.rs` | new; page counter (`read_page`/`set_page`/`npages`/`step_page`/`PageDirection`) with flock | `RUNTIME` | P2 ports `src/pagestate.py`; 32-thread concurrency test proves no lost updates |
@@ -94,7 +95,7 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [x] | `rust/src/test_support/fixture_root.rs` | new; virtual FS root (`proc`/`sys`/`run` subtrees, `from_env`, `join`) | `FIXTURES` | P2 no host boundaries touched |
 | [x] | `rust/src/test_support/fake_clock.rs` | new; deterministic clock (`at`/`advance`/`tick`/`set_advance_step`) | `FIXTURES` | P2 saturating overflow invariants |
 | [x] | `rust/src/test_support/fake_command_runner.rs` | new; argv-keyed FIFO replies/errors + timeout-aware production `CommandRunner` implementation + call trace | `FIXTURES/INTEGRATION` | distinct-argv isolation, exhausted queue, queued adapter failure, and exact 3s/5s timeout traces |
-| [x] | `rust/src/test_support/fake_dbus.rs` | new; signature-keyed D-Bus replies + production `DbusFacade` implementation + call trace | `FIXTURES/INTEGRATION` | FIFO order + empty-queue error |
+| [x] | `rust/src/test_support/fake_dbus.rs` | new; signature-keyed D-Bus replies + production `DbusFacade` implementation + exact request trace | `FIXTURES/INTEGRATION` | FIFO order, arguments/timeouts, and empty-queue error |
 | [x] | `rust/src/test_support/fixture_loader.rs` | new; `load_text`/`load_bytes`/`load_oracle_fixture` + `OracleFixtureRaw` untyped view | `FIXTURES` | P2 typed deserialization deferred to Wave 3/4 |
 | [x] | `rust/tests/fixtures/**` | new; 8 sample fixtures (proc/sys text, oracle TOML, cmd JSON, dbus TOML) | `FIXTURES` | P2 mirrors BASE schema; consumed by loader tests |
 | [x] | `rust/tests/parity_runner.sh` | new; Python/Rust parity diff stub | `FIXTURES` | exits 77 until DAEMON-CLI exposes the Rust `render` command; formatter internals are now integrated |
@@ -463,9 +464,9 @@ Every top-level function/class and class method under `src/`, plus the root entr
 
 | Done | Line | Symbol | Kind | Lane | Evidence required |
 |---|---:|---|---|---|---|
-| [ ] | 65 | `_bus` | function | `POWER` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 78 | `_upower_enumerate` | function | `POWER` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 93 | `_upower_device_props` | function | `POWER` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 65 | `_bus` | function | `POWER` | U: folded into the shared `DbusFacade::call` boundary; system bus connection owned by the production adapter, tests use `FakeDbus` |
+| [x] | 78 | `_upower_enumerate` | function | `POWER` | U/D/F: Rust `power::upower_enumerate` issues `EnumerateDevices` on the system bus and decodes the flat `[path1, ...]` reply body; empty when the bus/service/call is unavailable |
+| [x] | 93 | `_upower_device_props` | function | `POWER` | U/D/F: Rust `power::upower_device_props` models Python's proxy cached-property read as one `GetAll` call whose interleaved `[k, v, ...]` body decodes `Percentage`/`State`/`EnergyRate`/`Model`/`Type`; None on any failure |
 | [ ] | 116 | `timed_section` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 131 | `BatterySys` | class | `INTEGRATION` | U: mapped to typed `BatterySystemReading`; default/state token invariants tested |
 | [x] | 140 | `BatteryPeriph` | class | `INTEGRATION` | U: mapped to typed `BatteryPeripheralReading`; empty aggregate invariants tested |
@@ -504,11 +505,11 @@ Every top-level function/class and class method under `src/`, plus the root entr
 | [x] | 875 | `_whole_disk_of` | function | `SENSOR-DISK` | U/F: Rust `whole_disk_of` preserves partition-parent discovery with mapper fallback |
 | [x] | 892 | `_detect_disk_io_device` | function | `SENSOR-DISK` | U/F: Rust `detect_disk_io_device` mirrors mount→whole-disk topology walk |
 | [x] | 914 | `_is_rotational` | function | `SENSOR-DISK` | U/F: Rust `is_rotational` preserves kernel queue flag behavior |
-| [ ] | 924 | `_udisks_prop` | function | `POWER` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 924 | `_udisks_prop` | function | `POWER` | U/D/F: Rust `power::udisks_get` issues exact `org.freedesktop.DBus.Properties.Get` with interface/property arguments; used by `read_disk_smart` for `SmartCriticalWarning`/`SmartFailing` |
 | [x] | 940 | `_detect_disks` | function | `SENSOR-DISK` | U/F: Rust `detect_disks` enumerates supported whole disks and preserves rotational classification |
-| [ ] | 984 | `_read_disk_smart` | function | `POWER` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1011 | `_read_disk_smart_cached` | function | `POWER` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1018 | `_find_battery_sys` | function | `POWER` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 984 | `_read_disk_smart` | function | `POWER` | U/D/F: Rust `power::read_disk_smart` triggers `SmartUpdate` then decodes NVMe `SmartCriticalWarning` (healthy iff empty) / ATA `SmartFailing` (healthy iff false); None when any call fails |
+| [x] | 1011 | `_read_disk_smart_cached` | function | `POWER` | U/F: Rust `power::read_disk_smart_cached` mirrors `_cached_by_label` TTL semantics with per-drive intervals (HDD vs SSD) and caches None until TTL elapses |
+| [x] | 1018 | `_find_battery_sys` | function | `POWER` | U/F: Rust `power::find_battery_sys` filters/sorts UPower paths containing `/battery_BAT` |
 | [ ] | 1022 | `_find_peripherals` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1061 | `_detect_cpu_turbo_supported` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1069 | `_detect_has_backlight` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
@@ -538,12 +539,12 @@ Every top-level function/class and class method under `src/`, plus the root entr
 | [x] | 1538 | `_read_cpu_freq` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1548 | `_read_cpu_turbo` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1558 | `_read_brightness` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1574 | `_sysfs_bat_rate` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1584 | `_sysfs_bat_charge_limit` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1604 | `_sysfs_bat_read` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1616 | `_read_battery_sys` | function | `POWER` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1652 | `_read_battery_periph` | function | `POWER` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1677 | `_read_battery_bolt` | function | `POWER` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 1574 | `_sysfs_bat_rate` | function | `POWER` | U/F: Rust `power::sysfs_bat_rate` reads `power_now` (µW) and applies banker's-rounding watts via `round_half_even_ratio`; returns 0 on read/parse failure. Pulled forward from COLLECTOR because `_read_battery_sys` needs it. |
+| [x] | 1584 | `_sysfs_bat_charge_limit` | function | `POWER` | U/F: Rust `power::sysfs_bat_charge_limit` reads `charge_control_end_threshold`, returning None when absent or reporting 100 (no meaningful limit). Pulled forward from COLLECTOR. |
+| [x] | 1604 | `_sysfs_bat_read` | function | `POWER` | U/F: Rust `power::sysfs_bat_read` reads `capacity`/`status`/`power_now`, maps status via `_SYSFS_BAT_STATUS_MAP`, returns None on sysfs absence (triggers the UPower fallback in `read_battery_sys`). Pulled forward from COLLECTOR. |
+| [x] | 1616 | `_read_battery_sys` | function | `POWER` | U/D/F: Rust `power::read_battery_sys` tries sysfs first (`capacity`/`status`/`power_now`/`charge_control_end_threshold`) with banker's-rounding watts, falls back to UPower `GetAll` on sysfs absence, and uses sysfs `power_now` when UPower reports a zero rate while charging/discharging |
+| [x] | 1652 | `_read_battery_periph` | function | `POWER` | U/D/F: Rust `power::read_battery_periph` decodes `Percentage`/`Model` via UPower `GetAll`, caches the model name once, and suppresses zero/missing charge so the row disappears from the tooltip |
+| [x] | 1677 | `_read_battery_bolt` | function | `POWER` | U/D/F: Rust `power::read_battery_bolt` consumes a lane-local `BoltBatteryFacade` trait (HID lane will land the production impl), caches name+level with the 1h TTL, advances the timestamp even on `level=None` to suppress the wake-up cost, and skips timestamp advance on HID failure (immediate retry) |
 | [x] | 1710 | `_read_intel_gpu_engine_times` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1760 | `_read_intel_gpu_metrics` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1789 | `_read_intel_gpu_metrics_cached` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
@@ -1208,6 +1209,7 @@ legend as the rest of this file (U/D/F/I/L/P + E0–E5).
 |---|---|---|---|---|
 | [x] | `CommandStatus` / `CommandOutput` | enum/struct | `SCAFFOLD`/`INTEGRATION` | U: shared command payload contract used by production boundaries and fixture fakes |
 | [x] | `BusKind` / `DbusOutput` | enum/struct | `SCAFFOLD`/`INTEGRATION` | U: shared D-Bus payload contract used by production boundaries and fixture fakes |
+| [x] | `DbusArgument` / `DbusRequest` | enum/struct | `INTEGRATION/POWER` | U/F: exact typed method arguments and per-call timeout are recorded by `FakeDbus`; POWER asserts `Properties.Get/GetAll` and 15-second `SmartUpdate` requests |
 | [x] | `BoundaryError` | enum | `INTEGRATION` | U: promoted shared boundary error contract for command/D-Bus production traits and fixture failures |
 | [x] | `CommandRunner` / `DbusFacade` | traits | `INTEGRATION` | U: promoted production boundary traits implemented by fakes; command contract records exact program/argv/timeout (`3s` network, `5s` pages) |
 | [x] | `ClockSnapshot` | struct | `SCAFFOLD`/`FIXTURES` | U: default at zero/UNIX_EPOCH |
@@ -1319,7 +1321,7 @@ legend as the rest of this file (U/D/F/I/L/P + E0–E5).
 | [x] | `FixtureRoot` | struct | `FIXTURES` | U: default + `join` + `proc`/`sys`/`run` subtrees + `from_env` (`CARGO_MANIFEST_DIR`-resolved) |
 | [x] | `FakeClock` | struct | `FIXTURES` | U: `at` + `advance` + `tick` + `set_advance_step`; saturating overflow on monotonic + wall |
 | [x] | `FakeCommandRunner` / `CommandCall` + re-exported `CommandRunner` trait | structs + trait | `FIXTURES`/`INTEGRATION` | U: argv-keyed FIFO output/error queues + exact program/argv/timeout call trace + `next_call`; implements production `CommandRunner` |
-| [x] | `FakeDbus` + re-exported `DbusFacade` trait | struct + trait | `FIXTURES`/`INTEGRATION` | U: signature-keyed `(bus,service,path,iface,member)` FIFO + `call_trace`; implements promoted `domain::boundary::DbusFacade` |
+| [x] | `FakeDbus` + re-exported `DbusFacade` trait | struct + trait | `FIXTURES`/`INTEGRATION` | U: signature-keyed reply FIFO + exact `DbusRequest` trace including typed arguments and timeout; implements promoted `domain::boundary::DbusFacade` |
 | [x] | `FixtureLoader` + `OracleFixtureRaw` | struct + struct | `FIXTURES` | U: `load_text`/`load_bytes`/`load_oracle_fixture` (raw `toml::Value` view); typed deserialization deferred to Wave 3/4 |
 | [x] | `FixtureError` / re-exported `BoundaryError` | enums | `FIXTURES`/`INTEGRATION` | U: loader errors stay test-local; fake boundary failures now use the promoted production `BoundaryError` contract |
 | [x] | `DbusCall` type alias | alias | `FIXTURES` | U: `(BusKind, String, String, String, String)` for trace slices |
@@ -1381,6 +1383,22 @@ legend as the rest of this file (U/D/F/I/L/P + E0–E5).
 | [x] | `detect_disks` | function | `SENSOR-DISK` | U/F: supported whole-disk enumeration with rotational classification; mirrors `src/sensors.py:_detect_disks` |
 | [x] | `read_disk_usage` | function | `SENSOR-DISK` | U/F: `statvfs`-backed df/psutil percent semantics plus half-even GiB rounding; mirrors `src/sensors.py:_read_disk_usage` |
 | [x] | `read_disk_io` | function | `SENSOR-DISK` | U/F: `/proc/diskstats` byte-rate diffs with first-sample/device-switch/rollback suppression; mirrors `src/sensors.py:_read_disk_io` |
+
+### `rust/src/sensors/power.rs`
+
+| Done | Symbol | Kind | Lane | Evidence required |
+|---|---|---|---|---|
+| [x] | `BoltBattery` / `BoltBatteryFacade` | struct/trait | `POWER` | U: lane-local HID++ facade; production impl deferred to HID lane; `Ok(None)` = device responded but no battery, `Err` = HID failure (drives timestamp/no-retry split) |
+| [x] | `upower_enumerate` | function | `POWER` | U/D/F: `EnumerateDevices` system-bus call decoding flat `[path, ...]` body; empty list on any failure |
+| [x] | `upower_device_props` | function | `POWER` | U/D/F: models Python's `proxy.get_cached_property` round-trip as one `GetAll` call with interleaved `[k, v, ...]` body; decodes Percentage/State/EnergyRate/Model/Type |
+| [x] | `find_battery_sys` | function | `POWER` | U/F: filters and sorts UPower paths containing `/battery_BAT` |
+| [x] | `detect_smart_disks` | function | `POWER` | U/D/F: UDisks2 `GetManagedObjects` walk with partition/optical/empty-drive/missing-drive filtering plus sysfs rotational; replaces SENSOR-DISK's sysfs-only identity view with the typed `SmartDisk` shape |
+| [x] | `read_disk_smart` / `read_disk_smart_cached` | functions | `POWER` | U/D/F: `SmartUpdate` + NVMe `SmartCriticalWarning`/ATA `SmartFailing` decode; label-keyed TTL cache (per-drive interval) caches None until TTL elapses |
+| [x] | `sysfs_bat_read` / `sysfs_bat_rate` / `sysfs_bat_charge_limit` | functions | `POWER` | U/F: `/sys/class/power_supply/<name>/{capacity,status,power_now,charge_control_end_threshold}` readers; banker's-rounding watts; pulled forward from COLLECTOR because `_read_battery_sys` needs them |
+| [x] | `read_battery_sys` | function | `POWER` | U/D/F: sysfs-primary with UPower `GetAll` fallback; zero-rate sysfs `power_now` back-channel when UPower reports 0 while charging/discharging; charge-limit-100 collapse; 30s TTL |
+| [x] | `read_battery_periph` | function | `POWER` | U/D/F: UPower `GetAll` Percentage/Model decode; caches model once; suppresses zero/missing charge so the row disappears from the tooltip; 30s TTL |
+| [x] | `read_battery_bolt` | function | `POWER` | U/D/F: `BoltBatteryFacade` consumer; caches name+level with 1h TTL; advances timestamp on `Ok(None)` (suppresses wake-up cost); skips timestamp advance on HID failure (immediate retry) |
+| [x] | `parse_managed_objects` / `parse_property_map` / `parse_object_paths` / `parse_bool` / `round_half_even_ratio` / `round_half_even_f64` | helpers | `POWER` | U: body decoders + numeric parity helpers; documented D-Bus body encoding (empty-string-separated object chunks, interleaved key/value pairs, flat path lists) |
 
 ### `rust/src/runtime/mod.rs`
 
