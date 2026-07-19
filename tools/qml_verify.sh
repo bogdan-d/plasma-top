@@ -4,7 +4,7 @@
 set -euo pipefail
 
 usage() {
-	cat <<'EOF'
+    cat <<'EOF'
 Usage: tools/qml_verify.sh [--smoke] [--no-build]
 
 Launch an isolated Plasma applet backed by the Rust daemon.
@@ -21,12 +21,12 @@ EOF
 smoke=false
 build=true
 for arg in "$@"; do
-	case "$arg" in
-		--smoke) smoke=true ;;
-		--no-build) build=false ;;
-		-h|--help) usage; exit 0 ;;
-		*) echo "unknown argument: $arg" >&2; usage >&2; exit 2 ;;
-	esac
+    case "$arg" in
+        --smoke) smoke=true ;;
+        --no-build) build=false ;;
+        -h|--help) usage; exit 0 ;;
+        *) echo "unknown argument: $arg" >&2; usage >&2; exit 2 ;;
+    esac
 done
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -37,34 +37,34 @@ daemon_pid=""
 qml_pid=""
 
 cleanup() {
-	if [[ -n "$qml_pid" ]]; then
-		kill -TERM "$qml_pid" 2>/dev/null || true
-		wait "$qml_pid" 2>/dev/null || true
-	fi
-	if [[ -n "$daemon_pid" ]]; then
-		kill -TERM "$daemon_pid" 2>/dev/null || true
-		wait "$daemon_pid" 2>/dev/null || true
-	fi
-	rm -rf "$test_root"
+    if [[ -n "$qml_pid" ]]; then
+        kill -TERM "$qml_pid" 2>/dev/null || true
+        wait "$qml_pid" 2>/dev/null || true
+    fi
+    if [[ -n "$daemon_pid" ]]; then
+        kill -TERM "$daemon_pid" 2>/dev/null || true
+        wait "$daemon_pid" 2>/dev/null || true
+    fi
+    rm -rf "$test_root"
 }
 trap cleanup EXIT INT TERM
 
 commands=(kpackagetool6 plasmawindowed python3)
 if [[ "$build" == true ]]; then
-	commands+=(cargo)
+    commands+=(cargo)
 fi
 for command in "${commands[@]}"; do
-	if ! command -v "$command" >/dev/null 2>&1; then
-		echo "required command not found: $command" >&2
-		exit 1
-	fi
+    if ! command -v "$command" >/dev/null 2>&1; then
+        echo "required command not found: $command" >&2
+        exit 1
+    fi
 done
 
 if [[ "$build" == true ]]; then
-	cargo build --manifest-path "$repo_dir/rust/Cargo.toml" --release --locked
+    cargo build --manifest-path "$repo_dir/rust/Cargo.toml" --release --locked
 elif [[ ! -x "$binary" ]]; then
-	echo "Rust binary not found: $binary" >&2
-	exit 1
+    echo "Rust binary not found: $binary" >&2
+    exit 1
 fi
 
 mkdir -p "$test_root"/{runtime,config,cache,data,home,package,bin}
@@ -74,8 +74,8 @@ ln -s "$binary" "$test_root/bin/pirostats"
 # A Wayland display name is relative to XDG_RUNTIME_DIR. Expose only that socket
 # inside the disposable root; X11 sessions need no equivalent setup.
 if [[ -n "${WAYLAND_DISPLAY:-}" && -n "$original_runtime" \
-	&& -S "$original_runtime/$WAYLAND_DISPLAY" ]]; then
-	ln -s "$original_runtime/$WAYLAND_DISPLAY" "$test_root/runtime/$WAYLAND_DISPLAY"
+    && -S "$original_runtime/$WAYLAND_DISPLAY" ]]; then
+    ln -s "$original_runtime/$WAYLAND_DISPLAY" "$test_root/runtime/$WAYLAND_DISPLAY"
 fi
 
 export XDG_RUNTIME_DIR="$test_root/runtime"
@@ -106,15 +106,15 @@ kpackagetool6 --type Plasma/Applet --install "$test_root/package" >/dev/null
 daemon_pid=$!
 
 wait_for_file() {
-	local path="$1"
-	for _ in $(seq 1 100); do
-		[[ -s "$path" ]] && return 0
-		kill -0 "$daemon_pid" 2>/dev/null || break
-		sleep 0.05
-	done
-	echo "timed out waiting for $path" >&2
-	cat "$test_root/daemon.log" >&2
-	return 1
+    local path="$1"
+    for _ in $(seq 1 100); do
+        [[ -s "$path" ]] && return 0
+        kill -0 "$daemon_pid" 2>/dev/null || break
+        sleep 0.05
+    done
+    echo "timed out waiting for $path" >&2
+    cat "$test_root/daemon.log" >&2
+    return 1
 }
 
 runtime_root="$XDG_RUNTIME_DIR/pirostats"
@@ -124,33 +124,33 @@ wait_for_file "$runtime_root/tooltip.html"
 expected_entries=$'panel.html\nstate\ntooltip.html'
 actual_entries=""
 for _ in $(seq 1 40); do
-	actual_entries="$(find "$runtime_root" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)"
-	[[ "$actual_entries" == "$expected_entries" ]] && break
-	sleep 0.05
+    actual_entries="$(find "$runtime_root" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)"
+    [[ "$actual_entries" == "$expected_entries" ]] && break
+    sleep 0.05
 done
 if [[ "$actual_entries" != "$expected_entries" ]]; then
-	echo "unexpected runtime-root entries:" >&2
-	printf '%s\n' "$actual_entries" >&2
-	exit 1
+    echo "unexpected runtime-root entries:" >&2
+    printf '%s\n' "$actual_entries" >&2
+    exit 1
 fi
 
 plasmawindowed com.github.lucazade.pirostats >"$test_root/qml.log" 2>&1 &
 qml_pid=$!
 
 if [[ "$smoke" == true ]]; then
-	sleep 3
-	if ! kill -0 "$qml_pid" 2>/dev/null; then
-		echo "plasmawindowed exited during smoke test" >&2
-		cat "$test_root/qml.log" >&2
-		exit 1
-	fi
-	if grep -Eiq '(^| )(error|fatal):|failed to load|is not installed|ReferenceError|TypeError' "$test_root/qml.log"; then
-		echo "QML load errors detected" >&2
-		cat "$test_root/qml.log" >&2
-		exit 1
-	fi
-	echo "QML smoke passed: isolated Rust daemon + plasmawindowed applet"
-	exit 0
+    sleep 3
+    if ! kill -0 "$qml_pid" 2>/dev/null; then
+        echo "plasmawindowed exited during smoke test" >&2
+        cat "$test_root/qml.log" >&2
+        exit 1
+    fi
+    if grep -Eiq '(^| )(error|fatal):|failed to load|is not installed|ReferenceError|TypeError' "$test_root/qml.log"; then
+        echo "QML load errors detected" >&2
+        cat "$test_root/qml.log" >&2
+        exit 1
+    fi
+    echo "QML smoke passed: isolated Rust daemon + plasmawindowed applet"
+    exit 0
 fi
 
 cat <<EOF
