@@ -16,13 +16,13 @@
     clippy::unimplemented
 )]
 
-//! Phase 1 scaffold for the Rust PiroStats migration.
-//!
-//! This crate intentionally exposes only frozen contracts and build shells.
-//! Runtime collection, rendering, and daemon behavior land in later phases.
+//! Native PiroStats backend.
 
+pub mod adapters;
 pub mod cli;
 pub mod config;
+pub mod daemon;
+pub mod diagnostics;
 pub mod domain;
 pub mod error;
 pub mod notify;
@@ -39,16 +39,14 @@ use std::ffi::OsString;
 pub use cli::{Cli, Command};
 pub use error::{Error, Result};
 
-/// Parses a command line and executes only the scaffold-level shell behavior.
+/// Parses and executes one command.
 ///
 /// Phase 1 intentionally stops after help/version output or after confirming
 /// that a requested runtime command is recognized but not yet implemented.
 ///
 /// # Errors
 ///
-/// Returns [`Error::Cli`] when the command line is invalid and
-/// [`Error::ScaffoldOnly`] for any runtime command that belongs to a later
-/// migration slice.
+/// Returns a contextual [`Error`] on invalid input or runtime failure.
 pub fn run(args: impl IntoIterator<Item = OsString>) -> Result<()> {
     let cli = Cli::parse(args)?;
     match cli.command {
@@ -56,13 +54,21 @@ pub fn run(args: impl IntoIterator<Item = OsString>) -> Result<()> {
             println!("{}", cli::help_text());
             Ok(())
         }
+        Command::HelpFor(command) => {
+            println!("{}", cli::subcommand_help(command));
+            Ok(())
+        }
         Command::Version => {
             println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
             Ok(())
         }
-        command => Err(Error::ScaffoldOnly {
-            command: command.name(),
-        }),
+        Command::Daemon(command) => daemon::run_daemon(command.config.as_deref()),
+        Command::Render(command) => diagnostics::run_render(&command),
+        Command::Probe(command) => diagnostics::run_probe(command.config.as_deref()),
+        Command::Profiling(command) => diagnostics::run_profiling(command.config.as_deref()),
+        Command::ListItems => diagnostics::run_list_items(),
+        Command::Page(command) => daemon::run_page(command.direction),
+        Command::Click => daemon::run_click(),
     }
 }
 
@@ -80,14 +86,7 @@ mod tests {
     }
 
     #[test]
-    fn run_rejects_runtime_commands_until_later_phase() {
-        let args = [OsString::from("pirostats"), OsString::from("daemon")];
-
-        let result = run(args);
-
-        assert!(matches!(
-            result,
-            Err(Error::ScaffoldOnly { command: "daemon" })
-        ));
+    fn help_text_no_longer_describes_a_scaffold() {
+        assert!(!cli::help_text().contains("scaffold"));
     }
 }

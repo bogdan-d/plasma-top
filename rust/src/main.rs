@@ -16,13 +16,17 @@
     clippy::unimplemented
 )]
 
-//! Binary entry point for the Phase 1 Rust scaffold.
+//! PiroStats process entry point.
 
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
     match pirostats::run(std::env::args_os()) {
         Ok(()) => ExitCode::SUCCESS,
+        Err(pirostats::Error::Cli(error)) => {
+            eprintln!("{error}");
+            ExitCode::from(2)
+        }
         Err(error) => {
             eprintln!("{error}");
             ExitCode::FAILURE

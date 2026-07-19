@@ -1,4 +1,4 @@
-//! Thin CLI contract for the Rust scaffold.
+//! Command-line parser and stable command contract.
 
 use std::collections::VecDeque;
 use std::error::Error as StdError;
@@ -18,6 +18,8 @@ pub struct Cli {
 pub enum Command {
     /// Prints the top-level help text.
     Help,
+    /// Prints one subcommand's argparse-compatible help text.
+    HelpFor(&'static str),
     /// Prints the crate version.
     Version,
     /// Future daemon entry point.
@@ -158,13 +160,6 @@ pub enum CliError {
         /// The flag missing its following value.
         flag: &'static str,
     },
-    /// A repeated flag attempted to set the same field twice.
-    DuplicateArgument {
-        /// The owning command.
-        command: &'static str,
-        /// The repeated flag.
-        flag: &'static str,
-    },
     /// A flag value was syntactically present but not one of the accepted choices.
     InvalidValue {
         /// The owning command.
@@ -184,8 +179,8 @@ impl Cli {
     ///
     /// # Errors
     ///
-    /// Returns [`CliError`] when an argument is malformed, duplicated, or
-    /// outside the current contract.
+    /// Returns [`CliError`] when an argument is malformed or outside the
+    /// current contract. Repeated options keep their last value like argparse.
     pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Self, CliError> {
         let mut args = args.into_iter();
         let _program = args.next();
@@ -210,9 +205,9 @@ impl Cli {
 
         let command_name = into_text(command)?;
         let tail_values: Vec<OsString> = args.collect();
-        if tail_values.iter().any(is_help) {
+        if command_name != "page" && tail_values.iter().any(is_help) {
             return Ok(Self {
-                command: Command::Help,
+                command: Command::HelpFor(command_name_static(&command_name)),
             });
         }
         let tail = TailArgs::new(tail_values);
@@ -241,6 +236,7 @@ impl Command {
     pub const fn name(&self) -> &'static str {
         match self {
             Self::Help => "help",
+            Self::HelpFor(_) => "help",
             Self::Version => "version",
             Self::Daemon(_) => "daemon",
             Self::Render(_) => "render",
@@ -260,34 +256,71 @@ impl Display for CliError {
                 formatter,
                 "non-unicode arguments are not supported by the scaffold parser"
             ),
-            Self::UnknownCommand { command } => write!(formatter, "unknown command: {command}"),
+            Self::UnknownCommand { command } => write!(
+                formatter,
+                "usage: pirostats [-h] <command> ...\npirostats: error: argument <command>: invalid choice: '{command}' (choose from 'daemon', 'render', 'probe', 'profiling', 'list-items', 'page', 'click')"
+            ),
             Self::UnknownArgument { command, argument } => {
-                write!(formatter, "unknown argument for `{command}`: {argument}")
+                write!(
+                    formatter,
+                    "{}\npirostats {command}: error: unrecognized arguments: {argument}",
+                    usage_text(command)
+                )
             }
             Self::MissingValue { command, flag } => {
-                write!(formatter, "missing value for `{flag}` on `{command}`")
-            }
-            Self::DuplicateArgument { command, flag } => {
-                write!(formatter, "duplicate argument `{flag}` on `{command}`")
+                write!(
+                    formatter,
+                    "{}\npirostats {command}: error: argument {flag}: expected one argument",
+                    usage_text(command)
+                )
             }
             Self::InvalidValue {
                 command,
                 flag,
                 value,
-            } => write!(
-                formatter,
-                "invalid value for `{flag}` on `{command}`: {value}"
-            ),
+            } => {
+                let choices = match (*command, *flag) {
+                    ("render", "--component") => "'panel', 'tooltip', 'both'",
+                    ("render", "--format") => "'text', 'html'",
+                    ("render", "--layout") => "'auto', 'horizontal', 'vertical'",
+                    ("render", "--page") => {
+                        "'full', 'processes', 'connections', 'fastfetch', 'cpu_cores', 'graphs'"
+                    }
+                    ("page", "step") => "'next', 'prev'",
+                    _ => "",
+                };
+                write!(
+                    formatter,
+                    "{}\npirostats {command}: error: argument {flag}: invalid choice: '{value}' (choose from {choices})",
+                    usage_text(command)
+                )
+            }
         }
+    }
+}
+
+fn usage_text(command: &str) -> &'static str {
+    match command {
+        "render" => {
+            "usage: pirostats render [-h] [--config PATH]\n                        [--component {panel,tooltip,both}]\n                        [--format {text,html}]\n                        [--layout {auto,horizontal,vertical}]\n                        [--page {full,processes,connections,fastfetch,cpu_cores,graphs}]"
+        }
+        "daemon" => "usage: pirostats daemon [-h] [--config PATH]",
+        "probe" => "usage: pirostats probe [-h] [--config PATH]",
+        "profiling" => "usage: pirostats profiling [-h] [--config PATH]",
+        "list-items" => "usage: pirostats list-items [-h]",
+        "page" => "usage: pirostats page [-h] {next,prev}",
+        "click" => "usage: pirostats click [-h]",
+        _ => "usage: pirostats [-h] <command> ...",
     }
 }
 
 impl StdError for CliError {}
 
 pub(crate) fn help_text() -> &'static str {
+    #[cfg(any())]
     concat!(
         "pirostats\n\n",
-        "Phase 1 Rust scaffold: commands are parsed but runtime behavior is intentionally deferred.\n\n",
+        "KDE Plasma panel and tooltip system statistics.\n\n",
         "USAGE:\n",
         "    pirostats <command> [options]\n\n",
         "COMMANDS:\n",
@@ -301,7 +334,48 @@ pub(crate) fn help_text() -> &'static str {
         "    click\n",
         "    --help\n",
         "    --version\n",
-    )
+    );
+    "usage: pirostats [-h] <command> ...\n\npositional arguments:\n  <command>\n    daemon      Production loop: renders continuously and writes the files the\n                widget reads\n    render      One-shot render of panel/tooltip, then exits\n    probe       One-shot: probe the hardware and print the raw readings (no\n                render)\n    profiling   One-shot timing report (cold/warm cache, per-section/item)\n    list-items  Lists the available items and where they can go, then exits\n    page        Switch the tooltip page (bind to the widget's mouse-wheel\n                commands)\n    click       Run the current page's click action (bind to the widget's\n                click command)\n\noptions:\n  -h, --help    show this help message and exit"
+}
+
+pub(crate) fn subcommand_help(command: &str) -> &'static str {
+    match command {
+        "daemon" => {
+            "usage: pirostats daemon [-h] [--config PATH]\n\noptions:\n  -h, --help     show this help message and exit\n  --config PATH  Path to the TOML (default: ~/.config/pirostats/config.toml,\n                 else the shipped config)"
+        }
+        "probe" => {
+            "usage: pirostats probe [-h] [--config PATH]\n\noptions:\n  -h, --help     show this help message and exit\n  --config PATH  Path to the TOML (default: ~/.config/pirostats/config.toml,\n                 else the shipped config)"
+        }
+        "profiling" => {
+            "usage: pirostats profiling [-h] [--config PATH]\n\noptions:\n  -h, --help     show this help message and exit\n  --config PATH  Path to the TOML (default: ~/.config/pirostats/config.toml,\n                 else the shipped config)"
+        }
+        "list-items" => {
+            "usage: pirostats list-items [-h]\n\noptions:\n  -h, --help  show this help message and exit"
+        }
+        "click" => {
+            "usage: pirostats click [-h]\n\noptions:\n  -h, --help  show this help message and exit"
+        }
+        "page" => {
+            "usage: pirostats page [-h] {next,prev}\n\npositional arguments:\n  {next,prev}  Move to the next/previous page (wraps around)\n\noptions:\n  -h, --help   show this help message and exit"
+        }
+        "render" => {
+            "usage: pirostats render [-h] [--config PATH]\n                        [--component {panel,tooltip,both}]\n                        [--format {text,html}]\n                        [--layout {auto,horizontal,vertical}]\n                        [--page {full,processes,connections,fastfetch,cpu_cores,graphs}]\n\noptions:\n  -h, --help            show this help message and exit\n  --config PATH         Path to the TOML (default:\n                        ~/.config/pirostats/config.toml, else the shipped\n                        config)\n  --component {panel,tooltip,both}\n                        What to render (default: both)\n  --format {text,html}  text = stripped to stdout; html =\n                        /tmp/pirostats_render_* files (default: text)\n  --layout {auto,horizontal,vertical}\n                        Forces the panel orientation (horizontal = column,\n                        vertical = inline bar); auto = detection like the\n                        daemon (default)\n  --page {full,processes,connections,fastfetch,cpu_cores,graphs}\n                        Render a tooltip deep-dive page (any page, even one\n                        not in pages.order) instead of the full view; implies\n                        --component tooltip. Image pages (graphs) show only\n                        their legends in text format"
+        }
+        _ => "",
+    }
+}
+
+fn command_name_static(command: &str) -> &'static str {
+    match command {
+        "daemon" => "daemon",
+        "render" => "render",
+        "probe" => "probe",
+        "profiling" => "profiling",
+        "list-items" => "list-items",
+        "page" => "page",
+        "click" => "click",
+        _ => "",
+    }
 }
 
 fn parse_config_command(
@@ -313,12 +387,9 @@ fn parse_config_command(
     while let Some(argument) = args.pop_front() {
         let flag = into_text(argument)?;
         match flag.as_str() {
-            "--config" => set_once_path(
-                command,
-                "--config",
-                &mut parsed.config,
-                args.take_value_path(command, "--config")?,
-            )?,
+            "--config" => {
+                parsed.config = Some(args.take_value_path(command, "--config")?);
+            }
             _ => {
                 return Err(CliError::UnknownArgument {
                     command,
@@ -338,12 +409,9 @@ fn parse_render_command(mut args: TailArgs) -> Result<RenderCommand, CliError> {
     while let Some(argument) = args.pop_front() {
         let flag = into_text(argument)?;
         match flag.as_str() {
-            "--config" => set_once_path(
-                command,
-                "--config",
-                &mut parsed.config,
-                args.take_value_path(command, "--config")?,
-            )?,
+            "--config" => {
+                parsed.config = Some(args.take_value_path(command, "--config")?);
+            }
             "--component" => {
                 let value = into_text(args.take_value(command, "--component")?)?;
                 let component = match value.as_str() {
@@ -358,13 +426,7 @@ fn parse_render_command(mut args: TailArgs) -> Result<RenderCommand, CliError> {
                         });
                     }
                 };
-                set_once_copy(
-                    command,
-                    "--component",
-                    &mut parsed.component,
-                    component,
-                    RenderComponent::Both,
-                )?;
+                parsed.component = component;
             }
             "--format" => {
                 let value = into_text(args.take_value(command, "--format")?)?;
@@ -379,13 +441,7 @@ fn parse_render_command(mut args: TailArgs) -> Result<RenderCommand, CliError> {
                         });
                     }
                 };
-                set_once_copy(
-                    command,
-                    "--format",
-                    &mut parsed.format,
-                    format,
-                    RenderFormat::Text,
-                )?;
+                parsed.format = format;
             }
             "--layout" => {
                 let value = into_text(args.take_value(command, "--layout")?)?;
@@ -401,13 +457,7 @@ fn parse_render_command(mut args: TailArgs) -> Result<RenderCommand, CliError> {
                         });
                     }
                 };
-                set_once_copy(
-                    command,
-                    "--layout",
-                    &mut parsed.layout,
-                    layout,
-                    PanelLayout::Auto,
-                )?;
+                parsed.layout = layout;
             }
             "--page" => {
                 let value = into_text(args.take_value(command, "--page")?)?;
@@ -426,7 +476,7 @@ fn parse_render_command(mut args: TailArgs) -> Result<RenderCommand, CliError> {
                         });
                     }
                 };
-                set_once_option(command, "--page", &mut parsed.page, page)?;
+                parsed.page = Some(page);
             }
             _ => {
                 return Err(CliError::UnknownArgument {
@@ -452,25 +502,18 @@ fn parse_list_items_command(mut args: TailArgs) -> Result<Command, CliError> {
 }
 
 fn parse_page_command(mut args: TailArgs) -> Result<PageCommand, CliError> {
-    let value = into_text(args.take_value("page", "step")?)?;
-    let direction = match value.as_str() {
-        "next" => PageDirection::Next,
-        "prev" => PageDirection::Prev,
-        _ => {
-            return Err(CliError::InvalidValue {
-                command: "page",
-                flag: "step",
-                value,
-            });
+    // Root Python entrypoint fast-path bypasses argparse: only exact `next`
+    // advances; missing/unknown values step backward and trailing args are
+    // ignored. Preserve that observable process behavior.
+    let direction = if let Some(value) = args.pop_front() {
+        if into_text(value)? == "next" {
+            PageDirection::Next
+        } else {
+            PageDirection::Prev
         }
+    } else {
+        PageDirection::Prev
     };
-
-    if let Some(argument) = args.pop_front() {
-        return Err(CliError::UnknownArgument {
-            command: "page",
-            argument: into_text(argument)?,
-        });
-    }
 
     Ok(PageCommand { direction })
 }
@@ -484,49 +527,6 @@ fn parse_click_command(mut args: TailArgs) -> Result<Command, CliError> {
     }
 
     Ok(Command::Click)
-}
-
-fn set_once_path(
-    command: &'static str,
-    flag: &'static str,
-    slot: &mut Option<PathBuf>,
-    value: PathBuf,
-) -> Result<(), CliError> {
-    if slot.is_some() {
-        return Err(CliError::DuplicateArgument { command, flag });
-    }
-
-    *slot = Some(value);
-    Ok(())
-}
-
-fn set_once_option<T>(
-    command: &'static str,
-    flag: &'static str,
-    slot: &mut Option<T>,
-    value: T,
-) -> Result<(), CliError> {
-    if slot.is_some() {
-        return Err(CliError::DuplicateArgument { command, flag });
-    }
-
-    *slot = Some(value);
-    Ok(())
-}
-
-fn set_once_copy<T: Copy + PartialEq>(
-    command: &'static str,
-    flag: &'static str,
-    slot: &mut T,
-    value: T,
-    default: T,
-) -> Result<(), CliError> {
-    if *slot != default {
-        return Err(CliError::DuplicateArgument { command, flag });
-    }
-
-    *slot = value;
-    Ok(())
 }
 
 fn is_help(argument: &OsString) -> bool {
@@ -654,13 +654,30 @@ mod tests {
     }
 
     #[test]
-    fn subcommand_help_resolves_to_top_level_help() {
+    fn page_fast_path_treats_missing_and_unknown_as_previous() {
+        for arguments in [
+            &["pirostats", "page"][..],
+            &["pirostats", "page", "unknown", "ignored"][..],
+        ] {
+            assert!(matches!(
+                parse(arguments),
+                Ok(Cli {
+                    command: Command::Page(PageCommand {
+                        direction: PageDirection::Prev
+                    })
+                })
+            ));
+        }
+    }
+
+    #[test]
+    fn subcommand_help_resolves_to_its_own_help() {
         let cli = parse(&["pirostats", "render", "--help"]);
 
         assert!(matches!(
             cli,
             Ok(Cli {
-                command: Command::Help
+                command: Command::HelpFor("render")
             })
         ));
     }
@@ -688,6 +705,26 @@ mod tests {
             Err(CliError::UnknownArgument {
                 command: "list-items",
                 argument: String::from("--config"),
+            })
+        );
+    }
+
+    #[test]
+    fn repeated_render_flags_keep_last_value_like_argparse() {
+        assert_eq!(
+            parse(&[
+                "pirostats",
+                "render",
+                "--component",
+                "both",
+                "--component",
+                "panel",
+            ]),
+            Ok(Cli {
+                command: Command::Render(RenderCommand {
+                    component: RenderComponent::Panel,
+                    ..RenderCommand::default()
+                }),
             })
         );
     }

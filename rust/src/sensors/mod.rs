@@ -94,34 +94,34 @@ pub struct CollectorState {
 /// Grouping the `&mut` boundaries keeps [`collect`]'s parameter list reviewable
 /// and makes the daemon's per-poll wiring explicit. The collector never stores
 /// the context; it borrows for the duration of one [`collect`] call.
-pub struct CollectCtx<'a> {
+pub struct CollectCtx<'io, 'optional> {
     /// `/proc` fixture root (production: `/proc`).
-    pub proc_root: &'a Path,
+    pub proc_root: &'io Path,
     /// `/sys` fixture root (production: `/sys`).
-    pub sys_root: &'a Path,
+    pub sys_root: &'io Path,
     /// Command runner for `ip`/`iw`/`nvidia-smi`.
-    pub commands: &'a mut dyn CommandRunner,
+    pub commands: &'io mut dyn CommandRunner,
     /// D-Bus facade for UPower/UDisks2.
-    pub dbus: &'a mut dyn DbusFacade,
+    pub dbus: &'io mut dyn DbusFacade,
     /// Optional NVML facade. `None` selects the `nvidia-smi` fallback path
     /// (matches Python with `python-nvidia-ml-py` absent).
-    pub nvml: Option<&'a mut dyn NvmlFacade>,
+    pub nvml: Option<&'optional mut (dyn NvmlFacade + 'optional)>,
     /// Optional Bolt HID facade. `None` suppresses Bolt battery reads.
-    pub bolt: Option<&'a mut dyn BoltBatteryFacade>,
+    pub bolt: Option<&'optional mut (dyn BoltBatteryFacade + 'optional)>,
     /// Single monotonic/wall snapshot for the whole pass.
     pub clock: ClockSnapshot,
     /// First-paint flag: skip the cache-cold slow sensors.
     pub skip_slow: bool,
 }
 
-impl<'a> CollectCtx<'a> {
+impl<'io, 'optional> CollectCtx<'io, 'optional> {
     /// Builds a context from a [`FilesystemRoots`] plus the boundary trait
     /// objects the daemon holds, defaulting `skip_slow = false`.
     #[must_use]
     pub fn new(
-        roots: &'a FilesystemRoots,
-        commands: &'a mut dyn CommandRunner,
-        dbus: &'a mut dyn DbusFacade,
+        roots: &'io FilesystemRoots,
+        commands: &'io mut dyn CommandRunner,
+        dbus: &'io mut dyn DbusFacade,
         clock: ClockSnapshot,
     ) -> Self {
         Self {
@@ -294,12 +294,12 @@ pub fn needs_periph_rescan(hw: &HardwareSnapshot, cfg: &Config) -> bool {
 /// `timings` is `Some`, accumulates per-section wall-clock elapsed for the
 /// profiling subcommand; `None` is zero-overhead and deterministic.
 #[allow(clippy::too_many_lines)]
-pub fn collect<'a>(
+pub fn collect(
     lanes: &mut CollectorState,
     state: &mut DaemonStateSnapshot,
     hw: &mut HardwareSnapshot,
     cfg: &Config,
-    ctx: &'a mut CollectCtx<'a>,
+    ctx: &mut CollectCtx<'_, '_>,
     timings: Option<&mut Timings>,
 ) -> ReadingsSnapshot {
     let proc_root = ctx.proc_root;
@@ -573,14 +573,17 @@ pub fn collect<'a>(
 
     // ── GPU (NVIDIA then Intel) ────────────────────────────────────────────
     if caps.contains(&Capability::GpuNvidia) && hw.has_nvidia && !skip_slow {
-        let metrics = timed(&mut timings, "gpu_nvidia", || {
-            gpu_nvidia::read_nvidia(
+        let mut nvml = ctx.nvml.take();
+        let metrics = timed(&mut timings, "gpu_nvidia", || match nvml.as_mut() {
+            Some(facade) => gpu_nvidia::read_nvidia(
                 &mut state.gpu_cache,
-                ctx.nvml.as_deref_mut(),
+                Some(&mut **facade),
                 ctx.commands,
                 clock,
-            )
+            ),
+            None => gpu_nvidia::read_nvidia(&mut state.gpu_cache, None, ctx.commands, clock),
         });
+        ctx.nvml = nvml;
         readings.gpu_temp = metrics.temp_celsius;
         readings.gpu_usage = metrics.usage_percent;
         readings.gpu_mem = metrics.memory_percent;
