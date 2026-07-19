@@ -622,7 +622,7 @@ mod tests {
 
             // Panel pass: a token is misplaced on the panel iff its effective
             // surfaces don't admit either panel orientation.
-            let (panel_bad, _) = misplaced_items([token.as_str()].into_iter(), std::iter::empty());
+            let (panel_bad, _) = misplaced_items([token.as_str()], std::iter::empty());
             assert_eq!(
                 panel_bad.contains(&token),
                 !on_panel,
@@ -631,8 +631,7 @@ mod tests {
 
             // Tooltip pass: a token is misplaced on the tooltip iff its
             // effective surfaces don't admit the tooltip.
-            let (_, tooltip_bad) =
-                misplaced_items(std::iter::empty(), [token.as_str()].into_iter());
+            let (_, tooltip_bad) = misplaced_items(std::iter::empty(), [token.as_str()]);
             assert_eq!(
                 tooltip_bad.contains(&token),
                 !on_tooltip,

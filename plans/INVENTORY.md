@@ -61,6 +61,9 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [x] | `rust/src/domain/item.rs` | new; validated `metric[:form]` `ItemToken` | `SCAFFOLD` | P1.3 token rules mirror `src/registry.py` |
 | [x] | `rust/src/domain/registry.rs` | new; token/capability derivation layer (`parse`/`unknown_item_names`/`misplaced_items`/`needed_capabilities`/`SEPARATOR_ITEMS`/`list_items`) | `DOMAIN` | P2 mirrors token+capability half of `src/registry.py`; 51-row `list-items` corpus + 51×2 misplaced matrix |
 | [x] | `rust/src/domain/boundary.rs` | new; boundary stubs (command/D-Bus/clock/FS/hardware/readings/state) | `SCAFFOLD` | P1.3 placeholders refined by downstream lanes |
+| [x] | `rust/src/render/mod.rs` | new; render composition and public API | `RENDER-CORE` | P3 module registration + documented re-exports |
+| [x] | `rust/src/render/model.rs` | new; cells/rows/blocks, thresholds, grouping, inline HTML | `RENDER-CORE` | P3 unit tests + fixed Python byte corpus + no-table invariant |
+| [x] | `rust/src/render/mono.rs` | new; five-plan table-free monospace serializer | `RENDER-CORE` | P3 unit/width sweep + fixed Python byte corpus covering every plan |
 | [x] | `rust/src/runtime/mod.rs` | new; runtime path resolution (`runtime_dir`/`state_dir`/accessors) + `ensure_dirs` | `RUNTIME` | P2 ports `src/runtime.py`; lazy per-call path resolution for testability |
 | [x] | `rust/src/runtime/atomic.rs` | new; `write_atomic` primitive (PID-unique tmp + rename-over) | `RUNTIME` | P2 ports `src/daemon.py:_write_atomic` shape; atomicity + tmp-cleanup tests |
 | [x] | `rust/src/runtime/page.rs` | new; page counter (`read_page`/`set_page`/`npages`/`step_page`/`PageDirection`) with flock | `RUNTIME` | P2 ports `src/pagestate.py`; 32-thread concurrency test proves no lost updates |
@@ -343,18 +346,18 @@ Every top-level function/class and class method under `src/`, plus the root entr
 
 | Done | Line | Symbol | Kind | Lane | Evidence required |
 |---|---:|---|---|---|---|
-| [ ] | 40 | `_pad` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
-| [ ] | 51 | `_cell_width` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
-| [ ] | 62 | `_span` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
-| [ ] | 70 | `_is_title_rule` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
-| [ ] | 77 | `_Plan` | class | `RENDER-CORE` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 91 | `_is_two_pair` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
-| [ ] | 101 | `_col_widths` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
-| [ ] | 110 | `_render_cols` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
-| [ ] | 124 | `_plan_row` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
-| [ ] | 171 | `_emit` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
-| [ ] | 210 | `global_width_of` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
-| [ ] | 225 | `render_blocks_monospace` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
+| [x] | 40 | `_pad` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
+| [x] | 51 | `_cell_width` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
+| [x] | 62 | `_span` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
+| [x] | 70 | `_is_title_rule` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
+| [x] | 77 | `_Plan` | class | `RENDER-CORE` | U/D: defaults, construction, invariants, round-trip |
+| [x] | 91 | `_is_two_pair` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
+| [x] | 101 | `_col_widths` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
+| [x] | 110 | `_render_cols` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
+| [x] | 124 | `_plan_row` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
+| [x] | 171 | `_emit` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
+| [x] | 210 | `global_width_of` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
+| [x] | 225 | `render_blocks_monospace` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
 
 ### `src/notifier.py`
 
@@ -412,27 +415,27 @@ Every top-level function/class and class method under `src/`, plus the root entr
 
 | Done | Line | Symbol | Kind | Lane | Evidence required |
 |---|---:|---|---|---|---|
-| [ ] | 23 | `Cell` | class | `RENDER-CORE` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 58 | `Ident` | class | `RENDER-CORE` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 68 | `Ident.css` | method | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
-| [ ] | 75 | `visible_width` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
-| [ ] | 83 | `_nbsp` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
-| [ ] | 88 | `cell_inner` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
-| [ ] | 104 | `_val_cell` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
-| [ ] | 110 | `_aux_cell` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
-| [ ] | 122 | `_fmt_perc` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
-| [ ] | 140 | `Separator` | class | `RENDER-CORE` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 156 | `Block` | class | `RENDER-CORE` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 168 | `css_class_from_thresholds` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
-| [ ] | 178 | `css_class_active` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
-| [ ] | 183 | `css_class_battery` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
-| [ ] | 194 | `_cell_role` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
-| [ ] | 200 | `_row_shape` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
-| [ ] | 210 | `group_rows_into_blocks` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
-| [ ] | 247 | `render_two_pair_row` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
-| [ ] | 257 | `render_three_col_row` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
-| [ ] | 272 | `_separator_rule_html` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
-| [ ] | 284 | `render_row_inline` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
+| [x] | 23 | `Cell` | class | `RENDER-CORE` | U/D: defaults, construction, invariants, round-trip |
+| [x] | 58 | `Ident` | class | `RENDER-CORE` | U/D: defaults, construction, invariants, round-trip |
+| [x] | 68 | `Ident.css` | method | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
+| [x] | 75 | `visible_width` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
+| [x] | 83 | `_nbsp` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
+| [x] | 88 | `cell_inner` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
+| [x] | 104 | `_val_cell` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
+| [x] | 110 | `_aux_cell` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
+| [x] | 122 | `_fmt_perc` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
+| [x] | 140 | `Separator` | class | `RENDER-CORE` | U/D: defaults, construction, invariants, round-trip |
+| [x] | 156 | `Block` | class | `RENDER-CORE` | U/D: defaults, construction, invariants, round-trip |
+| [x] | 168 | `css_class_from_thresholds` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
+| [x] | 178 | `css_class_active` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
+| [x] | 183 | `css_class_battery` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
+| [x] | 194 | `_cell_role` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
+| [x] | 200 | `_row_shape` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
+| [x] | 210 | `group_rows_into_blocks` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
+| [x] | 247 | `render_two_pair_row` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
+| [x] | 257 | `render_three_col_row` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
+| [x] | 272 | `_separator_rule_html` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
+| [x] | 284 | `render_row_inline` | function | `RENDER-CORE` | U/D: direct + Python differential; boundaries |
 
 ### `src/runtime.py`
 
@@ -782,19 +785,19 @@ Existing tests remain oracle evidence until mapped to a passing Rust test or int
 
 | Done | Line | Symbol | Kind | Lane | Evidence required |
 |---|---:|---|---|---|---|
-| [ ] | 7 | `_label` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
-| [ ] | 11 | `_val` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
-| [ ] | 15 | `_line_widths` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
-| [ ] | 22 | `test_visible_width_strips_tags_and_decodes_entities` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
-| [ ] | 30 | `test_plain_blocks_emit_no_table` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
-| [ ] | 42 | `test_values_share_a_global_right_edge` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
-| [ ] | 55 | `test_value_sits_at_the_right_edge` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
-| [ ] | 66 | `test_two_pair_row_splits_into_two_halves` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
-| [ ] | 77 | `test_separator_small_emits_rule_div` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
-| [ ] | 86 | `test_separator_big_emits_rule_div` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
-| [ ] | 94 | `test_no_rule_without_explicit_separator` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
-| [ ] | 105 | `test_title_is_left_aligned` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
-| [ ] | 118 | `test_title_rule_is_full_width_bar` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
+| [x] | 7 | `_label` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
+| [x] | 11 | `_val` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
+| [x] | 15 | `_line_widths` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
+| [x] | 22 | `test_visible_width_strips_tags_and_decodes_entities` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
+| [x] | 30 | `test_plain_blocks_emit_no_table` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
+| [x] | 42 | `test_values_share_a_global_right_edge` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
+| [x] | 55 | `test_value_sits_at_the_right_edge` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
+| [x] | 66 | `test_two_pair_row_splits_into_two_halves` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
+| [x] | 77 | `test_separator_small_emits_rule_div` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
+| [x] | 86 | `test_separator_big_emits_rule_div` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
+| [x] | 94 | `test_no_rule_without_explicit_separator` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
+| [x] | 105 | `test_title_is_left_aligned` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
+| [x] | 118 | `test_title_rule_is_full_width_bar` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
 
 ### `tests/test_notifier.py`
 
@@ -830,29 +833,29 @@ Existing tests remain oracle evidence until mapped to a passing Rust test or int
 
 | Done | Line | Symbol | Kind | Lane | Evidence required |
 |---|---:|---|---|---|---|
-| [ ] | 16 | `test_css_class_below_mid_is_good` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
-| [ ] | 20 | `test_css_class_at_mid_boundary_is_warn` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
-| [ ] | 24 | `test_css_class_at_high_boundary_is_crit` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
-| [ ] | 28 | `test_css_class_above_high_is_crit` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
-| [ ] | 34 | `test_css_class_active_above_threshold` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
-| [ ] | 38 | `test_css_class_active_at_or_below_threshold` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
-| [ ] | 44 | `test_css_class_battery_low_charge_is_crit` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
-| [ ] | 48 | `test_css_class_battery_mid_charge_is_warn` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
-| [ ] | 52 | `test_css_class_battery_high_charge_is_good` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
-| [ ] | 58 | `_row` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
-| [ ] | 62 | `test_consecutive_same_shape_rows_form_one_block` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
-| [ ] | 68 | `test_separator_splits_into_two_blocks` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
-| [ ] | 75 | `test_shape_change_splits_without_explicit_separator` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
-| [ ] | 82 | `test_spanning_row_gets_its_own_block` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
-| [ ] | 97 | `test_same_cell_count_but_different_roles_splits` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
-| [ ] | 113 | `test_same_role_pattern_merges_even_with_different_state_classes` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
-| [ ] | 120 | `test_separator_marks_following_block_with_its_size` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
-| [ ] | 126 | `test_shape_change_does_not_set_separator_size` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
-| [ ] | 131 | `test_leading_and_trailing_separators_produce_no_empty_block` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
-| [ ] | 136 | `test_empty_input_produces_no_blocks` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
-| [ ] | 142 | `test_render_row_inline_no_table_tags` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
-| [ ] | 151 | `test_render_row_inline_separates_multi_cell_rows` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
-| [ ] | 160 | `test_render_row_inline_reserves_min_width_fixed_footprint` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
+| [x] | 16 | `test_css_class_below_mid_is_good` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
+| [x] | 20 | `test_css_class_at_mid_boundary_is_warn` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
+| [x] | 24 | `test_css_class_at_high_boundary_is_crit` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
+| [x] | 28 | `test_css_class_above_high_is_crit` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
+| [x] | 34 | `test_css_class_active_above_threshold` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
+| [x] | 38 | `test_css_class_active_at_or_below_threshold` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
+| [x] | 44 | `test_css_class_battery_low_charge_is_crit` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
+| [x] | 48 | `test_css_class_battery_mid_charge_is_warn` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
+| [x] | 52 | `test_css_class_battery_high_charge_is_good` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
+| [x] | 58 | `_row` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
+| [x] | 62 | `test_consecutive_same_shape_rows_form_one_block` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
+| [x] | 68 | `test_separator_splits_into_two_blocks` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
+| [x] | 75 | `test_shape_change_splits_without_explicit_separator` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
+| [x] | 82 | `test_spanning_row_gets_its_own_block` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
+| [x] | 97 | `test_same_cell_count_but_different_roles_splits` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
+| [x] | 113 | `test_same_role_pattern_merges_even_with_different_state_classes` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
+| [x] | 120 | `test_separator_marks_following_block_with_its_size` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
+| [x] | 126 | `test_shape_change_does_not_set_separator_size` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
+| [x] | 131 | `test_leading_and_trailing_separators_produce_no_empty_block` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
+| [x] | 136 | `test_empty_input_produces_no_blocks` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
+| [x] | 142 | `test_render_row_inline_no_table_tags` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
+| [x] | 151 | `test_render_row_inline_separates_multi_cell_rows` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
+| [x] | 160 | `test_render_row_inline_reserves_min_width_fixed_footprint` | function | `BASE/RENDER-CORE` | P: preserve assertion; map to Rust test |
 
 ### `tests/test_sensors.py`
 
