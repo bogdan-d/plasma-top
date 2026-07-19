@@ -1,12 +1,17 @@
 //! Table-free render model and monospace HTML serialization.
 
 pub mod cells;
+pub mod chart;
 pub mod formatter;
 pub mod model;
 pub mod mono;
 pub mod registry;
 pub mod traces;
 
+pub use chart::{
+    AreaChartOptions, BLUE_FILL, BLUE_LINE, GREEN_FILL, GREEN_LINE, GRID, LABEL, ORANGE_LINE,
+    PURPLE_FILL, PURPLE_LINE, RED_LINE, RGBA, TEAL_FILL, TEAL_LINE, area_chart_png,
+};
 pub use formatter::PanelFormatter;
 pub use model::{
     Align, Block, Cell, EMPTY_VALUE, Entry, Ident, PERCENT_PANEL_WIDTH, Row, Separator,

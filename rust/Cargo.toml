@@ -47,3 +47,11 @@ toml = "1"
 # `serde_derive` (already in the lock via `toml`'s transitive `serde_core`)
 # and re-uses `serde_core` already vendored. See `rust/DEPENDENCIES.md`.
 serde = { version = "1", features = ["derive"] }
+# Pure-Rust DEFLATE/zlib used by `render::chart` to encode deterministic PNG
+# bytes for the graphs page. Chosen over the `png` crate because PiroStats
+# already rasterizes pixels itself and needs only compression/decompression,
+# and over `flate2`/system zlib to avoid native build/runtime dependencies.
+# License: MIT OR Zlib OR Apache-2.0. GPL-2.0-or-later compatible. No build
+# script; transitive footprint is tiny (`adler2`). See
+# `rust/DEPENDENCIES.md` for the review row.
+miniz_oxide = "0.8"

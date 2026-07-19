@@ -70,6 +70,7 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [x] | `rust/src/render/cells.rs` | new; formatter shared helpers for labels/ellipsis/disk text/separator normalization | `FORMATTER` | P4 helper parity via Rust formatter suite + shipped goldens |
 | [x] | `rust/src/render/registry.rs` | new; formatter-side token resolution, CSS form tokens, trace-metric mapping, and hardware gates | `FORMATTER` | P4 gate parity via Rust formatter suite + shipped goldens |
 | [x] | `rust/src/render/formatter.rs` | new; main panel/tooltip formatter, item dispatch, canonical width, and formatter-owned irregular rows | `FORMATTER` | P4 byte-identical panel H/V + tooltip goldens, canonical-width guard, and mapped Python formatter oracle |
+| [x] | `rust/src/render/chart.rs` | new; deterministic tooltip graph PNG rasterizer (grid/labels/fill/line/overlay) and PNG encode/decode test corpus | `CHART` | P4 decoded-pixel parity against `src/chart.py` for empty/overlay/single/constant corpora + PNG chunk/CRC round-trip |
 | [x] | `rust/src/sensors/mod.rs` | new; sensor composition map | `SENSOR-CPU` | P3 module registration for incremental sensor lanes |
 | [x] | `rust/src/sensors/cpu.rs` | new; CPU discovery, `/proc/stat` diffs, uptime/loadavg, cpufreq/turbo, and per-core histories | `SENSOR-CPU` | P3 ports CPU-owned pieces of `src/sensors.py`; 17 focused tests cover first/delta/reset/malformed/history/discovery/fallback |
 | [x] | `rust/src/sensors/memory.rs` | new; `/proc/meminfo` memory/swap readers, total-memory helper, and bounded memory history | `SENSOR-MEM` | P3 ports memory-owned pieces of `src/sensors.py`; 12 focused tests cover direct/fallback/zero/clamp/malformed/history/swap/rounding |
@@ -104,7 +105,7 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [ ] | `service/pirostats.service` | modify for native binary | `PACKAGING` | package/install/upgrade/uninstall |
 | [ ] | `src/__init__.py` | port then remove | `CUTOVER` | symbol + differential parity |
 | [ ] | `src/bolt_battery.py` | port then remove | `HID` | symbol + differential parity |
-| [ ] | `src/chart.py` | port then remove | `CHART` | symbol + differential parity |
+| [x] | `src/chart.py` | port then remove | `CHART` | symbol + differential parity via Rust chart pixel corpus |
 | [ ] | `src/config.py` | port then remove | `CONFIG` | symbol + differential parity |
 | [ ] | `src/daemon.py` | port then remove | `DAEMON-CLI` | symbol + differential parity |
 | [ ] | `src/formatter.py` | port then remove | `FORMATTER` | symbol + differential parity |
@@ -173,8 +174,8 @@ Every top-level function/class and class method under `src/`, plus the root entr
 
 | Done | Line | Symbol | Kind | Lane | Evidence required |
 |---|---:|---|---|---|---|
-| [ ] | 57 | `_encode_png` | function | `CHART` | U/D: direct + Python differential; boundaries |
-| [ ] | 76 | `area_chart_png` | function | `CHART` | U/D: direct + Python differential; boundaries |
+| [x] | 57 | `_encode_png` | function | `CHART` | U/D: mapped to `rust/src/render/chart.rs:encode_png`; Rust tests validate PNG chunk order, CRCs, scanline filter bytes, and decoded round-trip |
+| [x] | 76 | `area_chart_png` | function | `CHART` | U/D: mapped to `rust/src/render/chart.rs:area_chart_png`; Rust tests pin Python-oracle decoded-pixel CRCs + sampled RGBA pixels for empty/overlay/single/constant corpora |
 
 ### `src/config.py`
 
@@ -1270,6 +1271,15 @@ legend as the rest of this file (U/D/F/I/L/P + E0–E5).
 | [x] | `PanelFormatter` | struct | `FORMATTER` | U/D: borrowed config/hardware formatter shell for main panel/tooltip parity |
 | [x] | `PanelFormatter::new` / `with_now_unix` / `format_panel` / `format_tooltip` / `canonical_width` | methods | `FORMATTER` | U/D: shipped panel H/V + tooltip goldens, deterministic battery alternation, and canonical-width guard |
 | [x] | `PanelFormatter::build_entries` + item-render helper family | methods | `FORMATTER` | U/D: section collapse, titles, separators, regular/irregular rows, paired rows, batteries, dual-rate rows, and formatter-owned dispatch from `src/formatter.py` |
+
+### `rust/src/render/chart.rs`
+
+| Done | Symbol | Kind | Lane | Evidence required |
+|---|---|---|---|---|
+| [x] | `RGBA` + palette constants (`GRID`, `LABEL`, `BLUE_*`, `PURPLE_*`, `GREEN_*`, `ORANGE_LINE`, `TEAL_*`, `RED_LINE`) | type alias + consts | `CHART` | U: stable color contract mirrors `src/chart.py`'s baked tooltip graph palette |
+| [x] | `AreaChartOptions` | struct | `CHART` | U: defaults mirror `src/chart.py` keyword defaults (`vmax`, colors, grid levels, left_pad, overlay, label_values) |
+| [x] | `encode_png` | function | `CHART` | U/D: Rust PNG round-trip test validates scanline filter bytes, chunk order, CRCs, and decoded RGBA reconstruction for the `_encode_png` parity slice |
+| [x] | `area_chart_png` | function | `CHART` | U/D: fixed Python decoded-pixel CRC corpus covers empty/overlay/single/constant charts, clipped labels, fill, line AA, overlay, and repeated-call determinism |
 
 ### `rust/src/render/traces.rs`
 

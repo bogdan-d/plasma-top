@@ -22,6 +22,12 @@ integration owner verifies it before accepting the lane.
 | `toml` | 1 | MIT OR Apache-2.0 | Parse shared oracle TOML fixtures in `test_support::fixture_loader` (FIXTURES lane) and parse `config.toml`/`machines.toml`/`icons.toml`/`lang/*.toml` in production `config` (CONFIG lane). Hard dep because CONFIG needs it in production; the `test-support` feature gates the test-support module, not the parser. FIXTURES originally proposed `toml = "0.8"` optional/feature-gated; unified to `1` (hard) so both lanes share one version. `toml_edit` rejected (preserves formatting we don't need for read-only config). Default features kept. | none (pure-Rust; no native code, no build.rs) | runtime: `serde_core`, `serde_spanned`, `toml_datetime`, `toml_parser` → `winnow`, `toml_writer`; plus `indexmap`/`equivalent`/`hashbrown` via `toml::Table`'s ordered map | FIXTURES lane (row updated by integration owner when CONFIG lane lands in the same wave) |
 | `serde` | 1 | MIT OR Apache-2.0 | Derive-based `Deserialize` for the typed `Config` tree (CONFIG lane) and the `Mounts` enum (`list[str] \| str`). Each leaf struct uses `#[serde(default)]` at the container level so missing fields fall back to the struct's `Default` impl — mirrors Python's `_from_dict` (ignore unknown keys, fall back to dataclass defaults). `serde_derive` proc-macro was already vendored transitively via `toml`'s `serde_core`; this hard dep adds only the `serde` facade (re-exports `serde_core` + wires `serde_derive`). | none (pure-Rust; `serde_derive` proc-macro already vendored) | reuses `serde_core`, `serde_derive` already in the lock — **zero new transitive crates** | CONFIG lane |
 
+## Phase 4
+
+| Crate | Version | License | Purpose | Native/build | Transitive | Reviewed by |
+|---|---|---|---|---|---|---|
+| `miniz_oxide` | 0.8.9 | MIT OR Zlib OR Apache-2.0 | Pure-Rust DEFLATE/zlib used by `rust/src/render/chart.rs` to encode the graphs page's PNG images and decode them in focused round-trip tests. Chosen over the `png` crate because PiroStats already rasterizes pixels itself and needs only compression/decompression, and over `flate2`/system zlib to avoid native build/runtime dependencies and backend feature complexity. | none (pure-Rust; no native code, no build.rs) | runtime: `adler2` | CHART lane |
+
 The crate declares `license = "GPL-2.0-or-later"` to match the project's
 existing `LICENSE` / `NOTICE` / packaging metadata. Adding any dependency with
 an incompatible license (e.g. GPLv3-only, AGPL, proprietary) is a blocker.
