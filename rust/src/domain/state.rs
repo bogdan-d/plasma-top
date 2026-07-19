@@ -80,6 +80,11 @@ pub struct GpuCache {
     pub decoder_percent: Option<i32>,
     /// GPU fan percentage.
     pub fan_percent: Option<i32>,
+    /// Whether NVML initialization/handle lookup permanently failed.
+    ///
+    /// Read failures remain retryable; only initialization failure selects the
+    /// three-second `nvidia-smi` cache for the rest of the process.
+    pub nvml_init_failed: bool,
     /// Monotonic instant of the cached sample.
     pub sampled_at: Option<Duration>,
 }

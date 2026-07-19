@@ -62,7 +62,7 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [x] | `rust/src/domain/registry.rs` | new; token/capability derivation layer (`parse`/`unknown_item_names`/`misplaced_items`/`needed_capabilities`/`SEPARATOR_ITEMS`/`list_items`) | `DOMAIN` | P2 mirrors token+capability half of `src/registry.py`; 51-row `list-items` corpus + 51×2 misplaced matrix |
 | [x] | `rust/src/domain/boundary.rs` | new; production boundary contracts (`CommandRunner`/`DbusFacade`/`BoundaryError`) plus command/D-Bus payloads, clock, and filesystem roots | `INTEGRATION` | P4 contract slice: promoted traits out of feature-gated `test_support`; fixture fakes implement the production traits |
 | [x] | `rust/src/domain/readings.rs` | new; typed aggregate hardware/readings contracts (`HardwareSnapshot`, `ReadingsSnapshot`, batteries, load, process rows, SMART identity) | `INTEGRATION` | P4 contract slice: replaces placeholder capability sets with formatter/collector-ready typed models |
-| [x] | `rust/src/domain/state.rs` | new; typed aggregate mutable daemon/cache state (`DaemonStateSnapshot`, caches, timed values, rate state, GPU cache) | `INTEGRATION` | P4 contract slice: replaces placeholder state with typed cross-poll mutation contract |
+| [x] | `rust/src/domain/state.rs` | new; typed aggregate mutable daemon/cache state (`DaemonStateSnapshot`, caches, timed values, rate state, GPU cache) | `INTEGRATION/GPU` | P4 contract slice plus NVIDIA permanent-init-failure cache selection; typed cross-poll state tests and GPU cache fixtures |
 | [x] | `rust/src/render/mod.rs` | new; render composition and public API | `RENDER-CORE` | P3 module registration + documented re-exports |
 | [x] | `rust/src/render/model.rs` | new; cells/rows/blocks, thresholds, grouping, inline HTML | `RENDER-CORE` | P3 unit tests + fixed Python byte corpus + no-table invariant |
 | [x] | `rust/src/render/mono.rs` | new; five-plan table-free monospace serializer | `RENDER-CORE` | P3 unit/width sweep + fixed Python byte corpus covering every plan |
@@ -79,6 +79,7 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [x] | `rust/src/sensors/network.rs` | new; route/device detection, wifi identity/signal, sysfs byte rates, and bounded network history | `SENSOR-NET` | P3 ports network-owned pieces of `src/sensors.py`; 11 focused tests cover `ip` fallback, wired/wireless paths, TTL caching, interface-switch/counter-reset rate resets, and graph-history trimming |
 | [x] | `rust/src/sensors/hwmon.rs` | new; shared hwmon directory/spec/int helpers for disk-owned sensor paths | `SENSOR-DISK` | P3 ports the disk lane's generic hwmon helpers; 3 focused tests cover substring matching, manual spec resolution, and parse failures |
 | [x] | `rust/src/sensors/disk.rs` | new; mount resolution, statvfs usage, block-device identity/topology, hwmon disk/fan caches, and `/proc/diskstats` byte rates | `SENSOR-DISK` | P3 ports disk-owned pieces of `src/sensors.py`; 17 focused tests cover mount filters, NVMe/SCSI labels, partition stacks, TTL caching, rate resets, and df-style usage math |
+| [x] | `rust/src/sensors/gpu_nvidia.rs` | new; NVIDIA PCI detection, NVML/fallback orchestration, `nvidia-smi` CSV parsing/cache, clamps, and active-GPU history | `GPU` | P4 ports GPU-owned pieces of `src/sensors.py`; 10 focused tests cover no GPU, NVML success/init/read failure, exact fallback request, malformed/error results, all-absent caching, TTL boundary, vendor preference, cadence, gaps, and trimming |
 | [x] | `rust/src/sensors/power.rs` | new; UPower enumeration/properties, UDisks2 SMART discovery/health, sysfs+UPower system-battery reads with fallback, peripheral-battery reads, and Bolt HID++ queries behind a lane-local facade | `POWER` | P4 ports power-owned pieces of `src/sensors.py`; 38 focused tests cover exact D-Bus arguments/timeouts, bus/service/object/property absence, malformed variants, all three cache TTLs, sysfs→UPower fallback, charge-limit collapse, zero-peripheral suppression, and HID failure/no-level parity |
 | [x] | `rust/src/sensors/hid.rs` | new; Bolt hidraw discovery, timeout-bound report I/O, and HID++ 2.0 ROOT/device-name/unified-battery protocol | `HID` | P4 ports `src/bolt_battery.py`; 16 focused tests cover exact packet bytes, discovery, absent/open/write/read failures, timeout, short/mismatch filtering, ten-read bound, feature absence, ASCII replacement, and battery conversion; direct hidraw + safe `nix::poll`, no unsafe/native HID dependency |
 | [x] | `rust/src/runtime/mod.rs` | new; runtime path resolution (`runtime_dir`/`state_dir`/accessors) + `ensure_dirs` | `RUNTIME` | P2 ports `src/runtime.py`; lazy per-call path resolution for testability |
@@ -515,7 +516,7 @@ Every top-level function/class and class method under `src/`, plus the root entr
 | [x] | 1061 | `_detect_cpu_turbo_supported` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1069 | `_detect_has_backlight` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1081 | `_detect_has_wifi` | function | `SENSOR-NET` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1091 | `_detect_nvidia` | function | `GPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 1091 | `_detect_nvidia` | function | `GPU` | U/F: Rust `detect_nvidia` uses explicit sys root and requires vendor `0x10de` plus display class `0x03`; missing/malformed fixture trees return false; live NVIDIA deferred to Phase 7 |
 | [x] | 1102 | `_detect_intel_gpu` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1126 | `_read_cpu_usage` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1168 | `_read_cpu_cores` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
@@ -529,7 +530,7 @@ Every top-level function/class and class method under `src/`, plus the root entr
 | [x] | 1349 | `_read_top_process` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1360 | `read_top_process_page` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1383 | `_read_mem_usage` | function | `SENSOR-MEM` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1408 | `_sample_gpu_history` | function | `GPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 1408 | `_sample_gpu_history` | function | `GPU` | U/D: Rust `sample_gpu_history` covers graphs gating, NVIDIA preference, Intel fallback, cadence, decoder-zero fill, missing-sample buffer exposure, and bounded trimming; fixed Python oracle assertions match |
 | [x] | 1438 | `_sample_net_history` | function | `SENSOR-NET` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1461 | `_read_swap_usage` | function | `SENSOR-MEM` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1468 | `_counter_rate` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
@@ -549,12 +550,12 @@ Every top-level function/class and class method under `src/`, plus the root entr
 | [x] | 1710 | `_read_intel_gpu_engine_times` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1760 | `_read_intel_gpu_metrics` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1789 | `_read_intel_gpu_metrics_cached` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1802 | `_gpu_cache_ttl` | function | `GPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1809 | `_nvidia_cap` | function | `GPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 1802 | `_gpu_cache_ttl` | function | `GPU` | U/D: Rust `gpu_cache_ttl` selects 0s while NVML is usable and 3s after absence/init failure; cache-hit and exact-expiry tests |
+| [x] | 1809 | `_nvidia_cap` | function | `GPU` | U/D: Rust `nvidia_cap` matches Python for None, negative, ordinary, and >99 values |
 | [ ] | 1818 | `_pynvml_handle_get` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1835 | `_read_nvidia_pynvml` | function | `GPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1859 | `_read_nvidia_smi` | function | `GPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1883 | `_read_nvidia` | function | `GPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 1835 | `_read_nvidia_pynvml` | function | `GPU` | U/F: typed `NvmlFacade::read_device_zero` preserves mandatory read failure versus optional fan/decoder absence; success values clamp and init/read failures take the Python fallback paths; live adapter deferred to COLLECTOR/Phase 7 |
+| [x] | 1859 | `_read_nvidia_smi` | function | `GPU` | U/D/F E1: exact executable/query/format/5s timeout, CSV fan/decoder reorder, unsupported fields, nonzero/signal, malformed/short/invalid UTF-8, and adapter timeout/error |
+| [x] | 1883 | `_read_nvidia` | function | `GPU` | U/D/F: NVML preferred, permanent init failure, retryable read failure, fallback, all-None cache, 0s/3s cadence, and timestamp update mapped to Rust `read_nvidia` |
 | [ ] | 1894 | `_read_count_file` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1905 | `_read_server_file` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
 
@@ -1384,6 +1385,17 @@ legend as the rest of this file (U/D/F/I/L/P + E0–E5).
 | [x] | `detect_disks` | function | `SENSOR-DISK` | U/F: supported whole-disk enumeration with rotational classification; mirrors `src/sensors.py:_detect_disks` |
 | [x] | `read_disk_usage` | function | `SENSOR-DISK` | U/F: `statvfs`-backed df/psutil percent semantics plus half-even GiB rounding; mirrors `src/sensors.py:_read_disk_usage` |
 | [x] | `read_disk_io` | function | `SENSOR-DISK` | U/F: `/proc/diskstats` byte-rate diffs with first-sample/device-switch/rollback suppression; mirrors `src/sensors.py:_read_disk_io` |
+
+### `rust/src/sensors/gpu_nvidia.rs`
+
+| Done | Symbol | Kind | Lane | Evidence required |
+|---|---|---|---|---|
+| [x] | `NvidiaMetrics` / `NvmlError` / `NvmlFacade` | struct/enum/trait | `GPU` | U/F: typed NVML success shape, permanent initialization failure, retryable read failure, and optional fan/decoder absence |
+| [x] | `detect_nvidia` | function | `GPU` | U/F: explicit sys-root PCI walk requires NVIDIA vendor plus display class; missing/malformed trees are absent hardware |
+| [x] | `gpu_cache_ttl` / `nvidia_cap` | functions | `GPU` | U/D: exact 0s NVML versus 3s fallback selection and Python-compatible optional 99 clamp |
+| [x] | `read_nvidia` / `read_nvidia_smi` | functions | `GPU` | U/D/F: NVML selection/failure/cache state plus exact fallback argv, timeout, CSV order, malformed/absent/error handling |
+| [x] | `sample_gpu_history` | function | `GPU` | U/D: graphs gate, NVIDIA preference, Intel fallback, cadence, decoder zero-fill, gap exposure, and bounded history |
+| [x] | `parse_nvidia_smi` / `parse_metric` / `cap_metrics` / `metrics_from_cache` / `store_metrics` / `history_due` / `trim_to_len` | private helpers | `GPU` | U: exercised through focused parser, cache, failure, cadence, and history tests |
 
 ### `rust/src/sensors/power.rs`
 

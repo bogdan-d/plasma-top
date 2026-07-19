@@ -847,7 +847,7 @@ fn round_half_even_f64(value: f64) -> i32 {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "test-support"))]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
