@@ -67,6 +67,9 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [x] | `rust/src/render/model.rs` | new; cells/rows/blocks, thresholds, grouping, inline HTML | `RENDER-CORE` | P3 unit tests + fixed Python byte corpus + no-table invariant |
 | [x] | `rust/src/render/mono.rs` | new; five-plan table-free monospace serializer | `RENDER-CORE` | P3 unit/width sweep + fixed Python byte corpus covering every plan |
 | [x] | `rust/src/render/traces.rs` | new; bar/column/spark/braille encodings + standalone/combo rows | `TRACES` | P3 ports `src/traces.py`; 12 focused tests + fixed Python byte corpus + combo-row structure parity |
+| [x] | `rust/src/render/cells.rs` | new; formatter shared helpers for labels/ellipsis/disk text/separator normalization | `FORMATTER` | P4 helper parity via Rust formatter suite + shipped goldens |
+| [x] | `rust/src/render/registry.rs` | new; formatter-side token resolution, CSS form tokens, trace-metric mapping, and hardware gates | `FORMATTER` | P4 gate parity via Rust formatter suite + shipped goldens |
+| [x] | `rust/src/render/formatter.rs` | new; main panel/tooltip formatter, item dispatch, canonical width, and formatter-owned irregular rows | `FORMATTER` | P4 byte-identical panel H/V + tooltip goldens, canonical-width guard, and mapped Python formatter oracle |
 | [x] | `rust/src/sensors/mod.rs` | new; sensor composition map | `SENSOR-CPU` | P3 module registration for incremental sensor lanes |
 | [x] | `rust/src/sensors/cpu.rs` | new; CPU discovery, `/proc/stat` diffs, uptime/loadavg, cpufreq/turbo, and per-core histories | `SENSOR-CPU` | P3 ports CPU-owned pieces of `src/sensors.py`; 17 focused tests cover first/delta/reset/malformed/history/discovery/fallback |
 | [x] | `rust/src/sensors/memory.rs` | new; `/proc/meminfo` memory/swap readers, total-memory helper, and bounded memory history | `SENSOR-MEM` | P3 ports memory-owned pieces of `src/sensors.py`; 12 focused tests cover direct/fallback/zero/clamp/malformed/history/swap/rounding |
@@ -129,8 +132,8 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [ ] | `tests/oracle.py` | retain then port/archive | `BASE/INTEGRATION` | oracle fixture/render parity mapped to Rust |
 | [ ] | `tests/test_config.py` | retain then port/archive | `BASE/CONFIG` | existing assertion mapped to Rust |
 | [ ] | `tests/test_deadcode.py` | retain then port/archive | `BASE/INTEGRATION` | existing assertion mapped to Rust |
-| [ ] | `tests/test_formatter.py` | retain then port/archive | `BASE/FORMATTER` | existing assertion mapped to Rust |
-| [ ] | `tests/test_golden_render.py` | retain then port/archive | `BASE/FORMATTER` | existing assertion mapped to Rust |
+| [x] | `tests/test_formatter.py` | retain oracle; mapped to Rust formatter suite | `BASE/FORMATTER` | existing assertion preserved in Python and mapped to Rust formatter coverage |
+| [x] | `tests/test_golden_render.py` | retain oracle; mapped to Rust formatter goldens | `BASE/FORMATTER` | existing assertion preserved in Python and mapped to Rust panel/tooltip golden coverage |
 | [ ] | `tests/test_inventory.py` | retain then port/archive | `BASE/INTEGRATION` | inventory gate + reporter smoke |
 | [ ] | `tests/test_items.py` | retain then port/archive | `BASE/DOMAIN` | existing assertion mapped to Rust |
 | [ ] | `tests/test_lint.py` | retain then port/archive | `BASE/INTEGRATION` | existing assertion mapped to Rust |
@@ -1243,6 +1246,30 @@ legend as the rest of this file (U/D/F/I/L/P + E0–E5).
 |---|---|---|---|---|
 | [x] | `global_width_of` | function | `RENDER-CORE` | U/D: minimum width, full-surface right edge, title-rule exclusion, and layout-width overrides |
 | [x] | `render_blocks_monospace` | function | `RENDER-CORE` | U/D: fixed byte corpus covers all five plans; 80-case right-edge sweep; no `<table>` |
+
+### `rust/src/render/cells.rs`
+
+| Done | Symbol | Kind | Lane | Evidence required |
+|---|---|---|---|---|
+| [x] | `table_text` / `label_cell` / `regular_label_cell` | functions | `FORMATTER` | U/D: icons/labels/delimiter lookup and panel glyph suppression match `src/items.py` / `src/formatter.py` |
+| [x] | `net_fmt` / `middle_ellipsis` / `disk_label` / `hd_label` / `fmt_freq` / `fmt_disk_space` | functions | `FORMATTER` | U/D: helper text formatting matches `tests/test_formatter.py` boundaries and golden HTML |
+| [x] | `separator_size` / `normalize_separators` | functions | `FORMATTER` | U/D: explicit separator handling matches `src/formatter.py` and Python oracle tests |
+
+### `rust/src/render/registry.rs`
+
+| Done | Symbol | Kind | Lane | Evidence required |
+|---|---|---|---|---|
+| [x] | `ResolvedItem` | struct | `FORMATTER` | U: formatter dispatch carries validated token + resolved CSS form token |
+| [x] | `resolve_item` / `form_token` / `trace_metric` | functions | `FORMATTER` | U/D: token→render-form resolution and historied metric mapping match formatter-owned `src/registry.py` behavior |
+| [x] | `item_gate` | function | `FORMATTER` | U/D: hardware gates match `src/metrics.py` / `PanelFormatter._available` behavior |
+
+### `rust/src/render/formatter.rs`
+
+| Done | Symbol | Kind | Lane | Evidence required |
+|---|---|---|---|---|
+| [x] | `PanelFormatter` | struct | `FORMATTER` | U/D: borrowed config/hardware formatter shell for main panel/tooltip parity |
+| [x] | `PanelFormatter::new` / `with_now_unix` / `format_panel` / `format_tooltip` / `canonical_width` | methods | `FORMATTER` | U/D: shipped panel H/V + tooltip goldens, deterministic battery alternation, and canonical-width guard |
+| [x] | `PanelFormatter::build_entries` + item-render helper family | methods | `FORMATTER` | U/D: section collapse, titles, separators, regular/irregular rows, paired rows, batteries, dual-rate rows, and formatter-owned dispatch from `src/formatter.py` |
 
 ### `rust/src/render/traces.rs`
 
