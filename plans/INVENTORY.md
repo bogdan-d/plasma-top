@@ -68,6 +68,7 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [x] | `rust/src/sensors/mod.rs` | new; sensor composition map | `SENSOR-CPU` | P3 module registration for incremental sensor lanes |
 | [x] | `rust/src/sensors/cpu.rs` | new; CPU discovery, `/proc/stat` diffs, uptime/loadavg, cpufreq/turbo, and per-core histories | `SENSOR-CPU` | P3 ports CPU-owned pieces of `src/sensors.py`; 17 focused tests cover first/delta/reset/malformed/history/discovery/fallback |
 | [x] | `rust/src/sensors/memory.rs` | new; `/proc/meminfo` memory/swap readers, total-memory helper, and bounded memory history | `SENSOR-MEM` | P3 ports memory-owned pieces of `src/sensors.py`; 12 focused tests cover direct/fallback/zero/clamp/malformed/history/swap/rounding |
+| [x] | `rust/src/sensors/network.rs` | new; route/device detection, wifi identity/signal, sysfs byte rates, and bounded network history | `SENSOR-NET` | P3 ports network-owned pieces of `src/sensors.py`; 11 focused tests cover `ip` fallback, wired/wireless paths, TTL caching, interface-switch/counter-reset rate resets, and graph-history trimming |
 | [x] | `rust/src/runtime/mod.rs` | new; runtime path resolution (`runtime_dir`/`state_dir`/accessors) + `ensure_dirs` | `RUNTIME` | P2 ports `src/runtime.py`; lazy per-call path resolution for testability |
 | [x] | `rust/src/runtime/atomic.rs` | new; `write_atomic` primitive (PID-unique tmp + rename-over) | `RUNTIME` | P2 ports `src/daemon.py:_write_atomic` shape; atomicity + tmp-cleanup tests |
 | [x] | `rust/src/runtime/page.rs` | new; page counter (`read_page`/`set_page`/`npages`/`step_page`/`PageDirection`) with flock | `RUNTIME` | P2 ports `src/pagestate.py`; 32-thread concurrency test proves no lost updates |
@@ -483,12 +484,12 @@ Every top-level function/class and class method under `src/`, plus the root entr
 | [ ] | 730 | `_resolve_nvme_namespace` | function | `SENSOR-DISK` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 744 | `_hwmon_device_label` | function | `SENSOR-DISK` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 770 | `_find_fans` | function | `SENSOR-DISK` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 785 | `_token_after` | function | `SENSOR-NET` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 795 | `_detect_net_device` | function | `SENSOR-NET` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 785 | `_token_after` | function | `SENSOR-NET` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 795 | `_detect_net_device` | function | `SENSOR-NET` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 811 | `_is_wireless` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 815 | `_dbm_to_pct` | function | `SENSOR-NET` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 821 | `_read_net_info` | function | `SENSOR-NET` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 855 | `_read_net_info_cached` | function | `SENSOR-NET` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 815 | `_dbm_to_pct` | function | `SENSOR-NET` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 821 | `_read_net_info` | function | `SENSOR-NET` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 855 | `_read_net_info_cached` | function | `SENSOR-NET` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 864 | `_resolve_mount_device` | function | `SENSOR-DISK` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 875 | `_whole_disk_of` | function | `SENSOR-DISK` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 892 | `_detect_disk_io_device` | function | `SENSOR-DISK` | U/D/F/L: fixture formula, call trace, failures, live where available |
@@ -501,7 +502,7 @@ Every top-level function/class and class method under `src/`, plus the root entr
 | [ ] | 1022 | `_find_peripherals` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1061 | `_detect_cpu_turbo_supported` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1069 | `_detect_has_backlight` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1081 | `_detect_has_wifi` | function | `SENSOR-NET` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 1081 | `_detect_has_wifi` | function | `SENSOR-NET` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1091 | `_detect_nvidia` | function | `GPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1102 | `_detect_intel_gpu` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1126 | `_read_cpu_usage` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
@@ -517,10 +518,10 @@ Every top-level function/class and class method under `src/`, plus the root entr
 | [ ] | 1360 | `read_top_process_page` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1383 | `_read_mem_usage` | function | `SENSOR-MEM` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1408 | `_sample_gpu_history` | function | `GPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1438 | `_sample_net_history` | function | `SENSOR-NET` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 1438 | `_sample_net_history` | function | `SENSOR-NET` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1461 | `_read_swap_usage` | function | `SENSOR-MEM` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1468 | `_counter_rate` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1485 | `_read_net_speed` | function | `SENSOR-NET` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 1485 | `_read_net_speed` | function | `SENSOR-NET` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1496 | `_resolve_mounts` | function | `SENSOR-DISK` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1518 | `_read_disk_usage` | function | `SENSOR-DISK` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1528 | `_read_disk_io` | function | `SENSOR-DISK` | U/D/F/L: fixture formula, call trace, failures, live where available |
@@ -1222,6 +1223,21 @@ legend as the rest of this file (U/D/F/I/L/P + E0–E5).
 | [x] | `read_mem_total_bytes` | function | `SENSOR-MEM` | U: deterministic `MemTotal` reader; Rust counterpart to `src/sensors.py:_mem_total_bytes` |
 | [x] | `read_memory_usage` | function | `SENSOR-MEM` | U: direct `MemAvailable` path + procps-style fallback + zero/clamp handling + history cadence; mirrors `src/sensors.py:_read_mem_usage` |
 | [x] | `read_swap_usage` | function | `SENSOR-MEM` | U: swap-total-zero absent behavior + one-decimal-percent truncation; mirrors `src/sensors.py:_read_swap_usage` |
+
+### `rust/src/sensors/network.rs`
+
+| Done | Symbol | Kind | Lane | Evidence required |
+|---|---|---|---|---|
+| [x] | `NetInfo` | struct | `SENSOR-NET` | U: route device + IP + optional wifi SSID/signal result shape |
+| [x] | `NetworkState` | struct | `SENSOR-NET` | U: cached route info, per-interface rate diff state, and graph-history buffers |
+| [x] | `NetworkState::net_up_history` / `net_down_history` | methods | `SENSOR-NET` | U: read-only history exposure for future formatter/chart lanes |
+| [x] | `detect_net_device` | function | `SENSOR-NET` | U: exact `ip route get` → `ip route show default` fallback and `dev` token parsing; mirrors `src/sensors.py:_detect_net_device` |
+| [x] | `detect_has_wifi` | function | `SENSOR-NET` | U: sysfs wireless-interface presence detection; mirrors `src/sensors.py:_detect_has_wifi` |
+| [x] | `dbm_to_pct` | function | `SENSOR-NET` | U: linear clamped dBm→percent conversion; mirrors `src/sensors.py:_dbm_to_pct` |
+| [x] | `read_net_info` | function | `SENSOR-NET` | U: shared route/IP + wireless-only `iw` parsing and call trace; mirrors `src/sensors.py:_read_net_info` |
+| [x] | `read_net_info_cached` | function | `SENSOR-NET` | U: 10-second TTL cache over `read_net_info`; mirrors `src/sensors.py:_read_net_info_cached` |
+| [x] | `read_net_speed` | function | `SENSOR-NET` | U: sysfs tx/rx diff against monotonic time, with first-sample/device-switch/counter-reset suppression; mirrors `src/sensors.py:_read_net_speed` |
+| [x] | `sample_net_history` | function | `SENSOR-NET` | U: graph-page-gated, cadence-driven bounded up/down history with zero-fill for missing side; mirrors `src/sensors.py:_sample_net_history` |
 
 ### `rust/src/runtime/mod.rs`
 
