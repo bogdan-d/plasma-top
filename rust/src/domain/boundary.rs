@@ -171,7 +171,8 @@ impl std::error::Error for BoundaryError {}
 
 /// Command-runner boundary implemented by production adapters and test fakes.
 pub trait CommandRunner {
-    /// Runs `program` with `args` and returns the captured output.
+    /// Runs `program` with `args` under the requested `timeout` and returns
+    /// the captured output.
     ///
     /// # Errors
     ///
@@ -180,6 +181,7 @@ pub trait CommandRunner {
         &mut self,
         program: &std::path::Path,
         args: &[OsString],
+        timeout: Duration,
     ) -> Result<CommandOutput, BoundaryError>;
 }
 

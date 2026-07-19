@@ -25,6 +25,7 @@ pub mod cli;
 pub mod config;
 pub mod domain;
 pub mod error;
+pub mod page_commands;
 pub mod render;
 pub mod runtime;
 pub mod sensors;

@@ -12,6 +12,9 @@ use std::path::{Path, PathBuf};
 
 use crate::domain::boundary::{BoundaryError, CommandOutput, CommandRunner};
 
+type CommandKey = (PathBuf, Vec<OsString>);
+type QueuedCommandResult = Result<CommandOutput, BoundaryError>;
+
 /// In-memory `CommandRunner` fake keyed by `(program, args)`.
 ///
 /// Each enqueued reply is popped FIFO when the matching argv is invoked, so
@@ -42,16 +45,31 @@ use crate::domain::boundary::{BoundaryError, CommandOutput, CommandRunner};
 /// );
 ///
 /// let out = runner
-///     .run(Path::new("/usr/bin/ip"), &[OsString::from("-j"), OsString::from("route")])
+///     .run(
+///         Path::new("/usr/bin/ip"),
+///         &[OsString::from("-j"), OsString::from("route")],
+///         std::time::Duration::from_secs(3),
+///     )
 ///     .expect("enqueued reply must be returned");
 /// assert_eq!(out.stdout, b"[]");
 /// ```
 #[derive(Debug, Default)]
 pub struct FakeCommandRunner {
     /// Argv-keyed FIFO of pending replies.
-    outputs: HashMap<(PathBuf, Vec<OsString>), VecDeque<CommandOutput>>,
+    outputs: HashMap<CommandKey, VecDeque<QueuedCommandResult>>,
     /// Ordered signatures of every invocation seen by this fake.
-    call_trace: Vec<(PathBuf, Vec<OsString>)>,
+    call_trace: Vec<CommandCall>,
+}
+
+/// One exact command invocation recorded by [`FakeCommandRunner`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommandCall {
+    /// Resolved executable path.
+    pub program: PathBuf,
+    /// Exact child arguments.
+    pub args: Vec<OsString>,
+    /// Requested execution timeout.
+    pub timeout: std::time::Duration,
 }
 
 impl FakeCommandRunner {
@@ -82,7 +100,22 @@ impl FakeCommandRunner {
             program.into(),
             args.into_iter().map(|a| a.into()).collect::<Vec<_>>(),
         );
-        self.outputs.entry(key).or_default().push_back(output);
+        self.outputs.entry(key).or_default().push_back(Ok(output));
+        self
+    }
+
+    /// Enqueues an adapter failure for the given argv.
+    pub fn enqueue_error(
+        &mut self,
+        program: impl Into<PathBuf>,
+        args: impl IntoIterator<Item = impl Into<OsString>>,
+        error: BoundaryError,
+    ) -> &mut Self {
+        let key = (
+            program.into(),
+            args.into_iter().map(Into::into).collect::<Vec<_>>(),
+        );
+        self.outputs.entry(key).or_default().push_back(Err(error));
         self
     }
 
@@ -92,27 +125,35 @@ impl FakeCommandRunner {
     /// `assert_eq!`-style checks against the first recorded call; for full
     /// ordering assertions use [`call_trace`](Self::call_trace) instead.
     #[must_use]
-    pub fn next_call(&self) -> Option<&(PathBuf, Vec<OsString>)> {
+    pub fn next_call(&self) -> Option<&CommandCall> {
         self.call_trace.first()
     }
 
     /// Returns the full ordered trace of argv signatures seen by this fake.
     ///
-    /// Each entry is `(program, args)` in invocation order. Differential tests
-    /// compare this against the Python capability/argv oracle to assert the
-    /// Rust adapter issues exactly the expected commands.
+    /// Each entry records program, args, and timeout in invocation order.
+    /// Differential tests compare these against the Python boundary oracle.
     #[must_use]
-    pub fn call_trace(&self) -> &[(PathBuf, Vec<OsString>)] {
+    pub fn call_trace(&self) -> &[CommandCall] {
         &self.call_trace
     }
 }
 
 impl CommandRunner for FakeCommandRunner {
-    fn run(&mut self, program: &Path, args: &[OsString]) -> Result<CommandOutput, BoundaryError> {
+    fn run(
+        &mut self,
+        program: &Path,
+        args: &[OsString],
+        timeout: std::time::Duration,
+    ) -> Result<CommandOutput, BoundaryError> {
         let key = (program.to_path_buf(), args.to_vec());
-        self.call_trace.push(key.clone());
+        self.call_trace.push(CommandCall {
+            program: key.0.clone(),
+            args: key.1.clone(),
+            timeout,
+        });
         match self.outputs.get_mut(&key).and_then(VecDeque::pop_front) {
-            Some(output) => Ok(output),
+            Some(output) => output,
             None => Err(BoundaryError::CommandNotQueued {
                 program: key.0,
                 args: key.1,
@@ -125,6 +166,7 @@ impl CommandRunner for FakeCommandRunner {
 mod tests {
     use super::*;
     use crate::domain::boundary::CommandStatus;
+    use std::time::Duration;
 
     fn ok_output(program: &str, payload: &[u8]) -> CommandOutput {
         CommandOutput {
@@ -150,7 +192,7 @@ mod tests {
         let output = ok_output("/bin/true", b"hello");
         runner.enqueue("/bin/true", Option::<&str>::None, output.clone());
 
-        let got = match runner.run(Path::new("/bin/true"), &[]) {
+        let got = match runner.run(Path::new("/bin/true"), &[], Duration::ZERO) {
             Ok(out) => out,
             Err(error) => panic!("enqueued reply must be returned: {error}"),
         };
@@ -167,6 +209,7 @@ mod tests {
         let first = match runner.run(
             Path::new("/bin/ping"),
             &[OsString::from("-c"), OsString::from("1")],
+            Duration::from_secs(1),
         ) {
             Ok(out) => out,
             Err(error) => panic!("first reply: {error}"),
@@ -174,6 +217,7 @@ mod tests {
         let second = match runner.run(
             Path::new("/bin/ping"),
             &[OsString::from("-c"), OsString::from("1")],
+            Duration::from_secs(1),
         ) {
             Ok(out) => out,
             Err(error) => panic!("second reply: {error}"),
@@ -193,14 +237,16 @@ mod tests {
         );
 
         // Matched call.
-        let _ = runner.run(Path::new("/bin/true"), &[]);
+        let _ = runner.run(Path::new("/bin/true"), &[], Duration::from_secs(1));
         // Unmatched call (no enqueue) — still recorded in the trace.
-        let _ = runner.run(Path::new("/bin/false"), &[]);
+        let _ = runner.run(Path::new("/bin/false"), &[], Duration::from_secs(2));
 
         let trace = runner.call_trace();
         assert_eq!(trace.len(), 2, "every invocation is recorded");
-        assert_eq!(trace[0].0, PathBuf::from("/bin/true"));
-        assert_eq!(trace[1].0, PathBuf::from("/bin/false"));
+        assert_eq!(trace[0].program, PathBuf::from("/bin/true"));
+        assert_eq!(trace[0].timeout, Duration::from_secs(1));
+        assert_eq!(trace[1].program, PathBuf::from("/bin/false"));
+        assert_eq!(trace[1].timeout, Duration::from_secs(2));
     }
 
     #[test]
@@ -214,18 +260,22 @@ mod tests {
 
         assert!(runner.next_call().is_none(), "trace empty before any call");
 
-        let _ = runner.run(Path::new("/bin/true"), &[]);
+        let _ = runner.run(Path::new("/bin/true"), &[], Duration::ZERO);
         let Some(head) = runner.next_call() else {
             panic!("trace non-empty after one call");
         };
-        assert_eq!(head.0, PathBuf::from("/bin/true"));
+        assert_eq!(head.program, PathBuf::from("/bin/true"));
     }
 
     #[test]
     fn run_returns_command_not_queued_when_queue_empty() {
         let mut runner = FakeCommandRunner::new();
 
-        let err = match runner.run(Path::new("/bin/missing"), &[OsString::from("--flag")]) {
+        let err = match runner.run(
+            Path::new("/bin/missing"),
+            &[OsString::from("--flag")],
+            Duration::ZERO,
+        ) {
             Ok(out) => panic!("expected error, got {out:?}"),
             Err(error) => error,
         };
@@ -248,14 +298,34 @@ mod tests {
             ok_output("/bin/once", b""),
         );
 
-        let first = runner.run(Path::new("/bin/once"), &[]);
+        let first = runner.run(Path::new("/bin/once"), &[], Duration::ZERO);
         assert!(first.is_ok());
 
-        let second = runner.run(Path::new("/bin/once"), &[]);
+        let second = runner.run(Path::new("/bin/once"), &[], Duration::ZERO);
         assert!(matches!(
             second,
             Err(BoundaryError::CommandNotQueued { .. })
         ));
+    }
+
+    #[test]
+    fn enqueue_error_returns_requested_adapter_failure() {
+        let mut runner = FakeCommandRunner::new();
+        let error = BoundaryError::CommandFailed {
+            program: PathBuf::from("/bin/slow"),
+            args: vec![OsString::from("--wait")],
+            detail: String::from("timed out"),
+        };
+        runner.enqueue_error("/bin/slow", ["--wait"], error.clone());
+
+        let result = runner.run(
+            Path::new("/bin/slow"),
+            &[OsString::from("--wait")],
+            Duration::from_secs(5),
+        );
+
+        assert_eq!(result, Err(error));
+        assert_eq!(runner.call_trace()[0].timeout, Duration::from_secs(5));
     }
 
     #[test]
@@ -265,11 +335,11 @@ mod tests {
             .enqueue("/bin/a", Option::<&str>::None, ok_output("/bin/a", b"a"))
             .enqueue("/bin/b", Option::<&str>::None, ok_output("/bin/b", b"b"));
 
-        let a = match runner.run(Path::new("/bin/a"), &[]) {
+        let a = match runner.run(Path::new("/bin/a"), &[], Duration::ZERO) {
             Ok(out) => out,
             Err(error) => panic!("a: {error}"),
         };
-        let b = match runner.run(Path::new("/bin/b"), &[]) {
+        let b = match runner.run(Path::new("/bin/b"), &[], Duration::ZERO) {
             Ok(out) => out,
             Err(error) => panic!("b: {error}"),
         };
@@ -283,11 +353,19 @@ mod tests {
         runner.enqueue("/bin/ip", ["route"], ok_output("/bin/ip", b"route"));
         runner.enqueue("/bin/ip", ["addr"], ok_output("/bin/ip", b"addr"));
 
-        let route = match runner.run(Path::new("/bin/ip"), &[OsString::from("route")]) {
+        let route = match runner.run(
+            Path::new("/bin/ip"),
+            &[OsString::from("route")],
+            Duration::ZERO,
+        ) {
             Ok(out) => out,
             Err(error) => panic!("route: {error}"),
         };
-        let addr = match runner.run(Path::new("/bin/ip"), &[OsString::from("addr")]) {
+        let addr = match runner.run(
+            Path::new("/bin/ip"),
+            &[OsString::from("addr")],
+            Duration::ZERO,
+        ) {
             Ok(out) => out,
             Err(error) => panic!("addr: {error}"),
         };

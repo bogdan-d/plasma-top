@@ -5,6 +5,7 @@ pub mod chart;
 pub mod formatter;
 pub mod model;
 pub mod mono;
+pub mod pages;
 pub mod registry;
 pub mod traces;
 
@@ -20,6 +21,7 @@ pub use model::{
     render_two_pair_row, value_cell, visible_width,
 };
 pub use mono::{global_width_of, render_blocks_monospace};
+pub use pages::PageFormatter;
 pub use traces::{
     TraceMetric, bar_braille_row, bar_html, bar_row, bar_spark_row, braille_html, braille_row,
     column_html, column_row, spark_html, spark_row,

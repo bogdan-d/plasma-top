@@ -18,6 +18,8 @@ use crate::domain::boundary::{ClockSnapshot, CommandOutput, CommandStatus};
 
 const IP_PROGRAM: &str = "ip";
 const IW_PROGRAM: &str = "iw";
+#[cfg(all(test, feature = "test-support"))]
+const COMMAND_TIMEOUT: Duration = Duration::from_secs(3);
 const NET_INFO_TTL: Duration = Duration::from_secs(10);
 const NANOS_PER_SECOND: u128 = 1_000_000_000;
 
@@ -422,11 +424,13 @@ mod tests {
             ),
         );
 
-        let device = detect_net_device(&mut |program, args| runner.run(program, args));
+        let device =
+            detect_net_device(&mut |program, args| runner.run(program, args, COMMAND_TIMEOUT));
 
         assert_eq!(device.as_deref(), Some("wlan0"));
         assert_eq!(runner.call_trace().len(), 1);
-        assert_eq!(runner.call_trace()[0].0, PathBuf::from(IP_PROGRAM));
+        assert_eq!(runner.call_trace()[0].program, PathBuf::from(IP_PROGRAM));
+        assert_eq!(runner.call_trace()[0].timeout, COMMAND_TIMEOUT);
     }
 
     #[test]
@@ -447,7 +451,8 @@ mod tests {
             ),
         );
 
-        let device = detect_net_device(&mut |program, args| runner.run(program, args));
+        let device =
+            detect_net_device(&mut |program, args| runner.run(program, args, COMMAND_TIMEOUT));
 
         assert_eq!(device.as_deref(), Some("eth0"));
         assert_eq!(runner.call_trace().len(), 2);
@@ -499,7 +504,7 @@ mod tests {
         );
 
         let info = read_net_info(&tmp.path().join("sys"), &mut |program, args| {
-            runner.run(program, args)
+            runner.run(program, args, COMMAND_TIMEOUT)
         });
 
         assert_eq!(
@@ -531,7 +536,7 @@ mod tests {
         );
 
         let info = read_net_info(&tmp.path().join("sys"), &mut |program, args| {
-            runner.run(program, args)
+            runner.run(program, args, COMMAND_TIMEOUT)
         });
 
         assert_eq!(info.device.as_deref(), Some("eth0"));
@@ -582,21 +587,21 @@ mod tests {
             &tmp.path().join("sys"),
             &mut state,
             clock.now,
-            &mut |program, args| runner.run(program, args),
+            &mut |program, args| runner.run(program, args, COMMAND_TIMEOUT),
         );
         clock.advance(Duration::from_secs(5));
         let second = read_net_info_cached(
             &tmp.path().join("sys"),
             &mut state,
             clock.now,
-            &mut |program, args| runner.run(program, args),
+            &mut |program, args| runner.run(program, args, COMMAND_TIMEOUT),
         );
         clock.advance(Duration::from_secs(5));
         let third = read_net_info_cached(
             &tmp.path().join("sys"),
             &mut state,
             clock.now,
-            &mut |program, args| runner.run(program, args),
+            &mut |program, args| runner.run(program, args, COMMAND_TIMEOUT),
         );
 
         assert_eq!(first.ssid.as_deref(), Some("Alpha"));

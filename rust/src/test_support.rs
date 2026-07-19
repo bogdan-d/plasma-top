@@ -28,7 +28,7 @@ pub use crate::domain::boundary::{
     DbusOutput,
 };
 pub use fake_clock::FakeClock;
-pub use fake_command_runner::FakeCommandRunner;
+pub use fake_command_runner::{CommandCall, FakeCommandRunner};
 pub use fake_dbus::{DbusCall, FakeDbus};
 pub use fixture_loader::{FixtureError, FixtureLoader, OracleFixtureRaw};
 pub use fixture_root::FixtureRoot;

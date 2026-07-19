@@ -71,6 +71,8 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [x] | `rust/src/render/registry.rs` | new; formatter-side token resolution, CSS form tokens, trace-metric mapping, and hardware gates | `FORMATTER` | P4 gate parity via Rust formatter suite + shipped goldens |
 | [x] | `rust/src/render/formatter.rs` | new; main panel/tooltip formatter, item dispatch, canonical width, and formatter-owned irregular rows | `FORMATTER` | P4 byte-identical panel H/V + tooltip goldens, canonical-width guard, and mapped Python formatter oracle |
 | [x] | `rust/src/render/chart.rs` | new; deterministic tooltip graph PNG rasterizer (grid/labels/fill/line/overlay) and PNG encode/decode test corpus | `CHART` | P4 decoded-pixel parity against `src/chart.py` for empty/overlay/single/constant corpora + PNG chunk/CRC round-trip |
+| [x] | `rust/src/page_commands.rs` | new; tooltip page registry, command execution/cache, connections formatting, title/pager/default click | `PAGES` | P4 exact Python corpora + fake command traces cover argv, 5-second timeout, PTY fallback, cache, output/error cases, service/process resolution, and page shell |
+| [x] | `rust/src/render/pages.rs` | new; CPU-core, process, and graphs deep-dive page renderer | `PAGES` | P4 exact CPU/process HTML corpora + graphs image/legend/vendor/network structure tests; table-free tooltip shell |
 | [x] | `rust/src/sensors/mod.rs` | new; sensor composition map | `SENSOR-CPU` | P3 module registration for incremental sensor lanes |
 | [x] | `rust/src/sensors/cpu.rs` | new; CPU discovery, `/proc/stat` diffs, uptime/loadavg, cpufreq/turbo, and per-core histories | `SENSOR-CPU` | P3 ports CPU-owned pieces of `src/sensors.py`; 17 focused tests cover first/delta/reset/malformed/history/discovery/fallback |
 | [x] | `rust/src/sensors/memory.rs` | new; `/proc/meminfo` memory/swap readers, total-memory helper, and bounded memory history | `SENSOR-MEM` | P3 ports memory-owned pieces of `src/sensors.py`; 12 focused tests cover direct/fallback/zero/clamp/malformed/history/swap/rounding |
@@ -114,7 +116,7 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [ ] | `src/metrics.py` | port then remove | `DOMAIN` | symbol + differential parity |
 | [ ] | `src/mono_render.py` | port then remove | `RENDER-CORE` | symbol + differential parity |
 | [ ] | `src/notifier.py` | port then remove | `NOTIFY` | symbol + differential parity |
-| [ ] | `src/pages.py` | port then remove | `PAGES` | symbol + differential parity |
+| [x] | `src/pages.py` | port then remove | `PAGES` | all current page symbols mapped to `rust/src/page_commands.rs` + `rust/src/render/pages.rs`; exact helper/page HTML corpora and command fault traces |
 | [ ] | `src/pagestate.py` | port then remove | `RUNTIME` | symbol + differential parity |
 | [ ] | `src/registry.py` | port then remove | `DOMAIN/FORMATTER` | symbol + differential parity |
 | [ ] | `src/render_model.py` | port then remove | `RENDER-CORE` | symbol + differential parity |
@@ -272,13 +274,13 @@ Every top-level function/class and class method under `src/`, plus the root entr
 | [ ] | 165 | `PanelFormatter` | class | `FORMATTER` | U/D: defaults, construction, invariants, round-trip |
 | [ ] | 166 | `PanelFormatter.__init__` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
 | [ ] | 178 | `PanelFormatter.format_panel` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 219 | `PanelFormatter._wrap_tooltip` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 227 | `PanelFormatter.format_page` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 232 | `PanelFormatter.format_cpu_cores` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 271 | `PanelFormatter.format_top_process` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 328 | `PanelFormatter._graph_val` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 336 | `PanelFormatter._gpu_graph` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 349 | `PanelFormatter.format_graphs` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 219 | `PanelFormatter._wrap_tooltip` | method | `FORMATTER/PAGES` | U/D E0: exact shared tooltip shell assertions in Rust formatter/page suites |
+| [x] | 227 | `PanelFormatter.format_page` | method | `FORMATTER/PAGES` | U/D E0: exact arbitrary body/header/footer shell corpus |
+| [x] | 232 | `PanelFormatter.format_cpu_cores` | method | `FORMATTER/PAGES` | U/D E0: exact Python populated/no-data HTML; braille width, classes, pager width |
+| [x] | 271 | `PanelFormatter.format_top_process` | method | `FORMATTER/PAGES` | U/D E0: exact Python populated/no-data HTML; elastic width, escaping, threshold classes, 15-row cap |
+| [x] | 328 | `PanelFormatter._graph_val` | method | `FORMATTER/PAGES` | U/D: missing/banded/active value HTML and threshold boundaries |
+| [x] | 336 | `PanelFormatter._gpu_graph` | method | `FORMATTER/PAGES` | U/D: NVIDIA preference, Intel fallback, and absent-GPU graph composition |
+| [x] | 349 | `PanelFormatter.format_graphs` | method | `FORMATTER/PAGES` | U/D/E2: CPU/memory/GPU/network image count/dimensions/legend/pager shell atop CHART pixel parity |
 | [ ] | 423 | `PanelFormatter.canonical_width` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
 | [ ] | 448 | `PanelFormatter._canonical_sig` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
 | [ ] | 458 | `PanelFormatter.format_tooltip` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
@@ -386,20 +388,20 @@ Every top-level function/class and class method under `src/`, plus the root entr
 
 | Done | Line | Symbol | Kind | Lane | Evidence required |
 |---|---:|---|---|---|---|
-| [ ] | 38 | `Page` | class | `PAGES` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 82 | `build_pages` | function | `PAGES` | U/D: direct + Python differential; boundaries |
-| [ ] | 94 | `_run_command` | function | `PAGES` | U/D: direct + Python differential; boundaries |
-| [ ] | 141 | `text_to_mono_html` | function | `PAGES` | U/D: direct + Python differential; boundaries |
-| [ ] | 149 | `_text_width` | function | `PAGES` | U/D: direct + Python differential; boundaries |
-| [ ] | 156 | `_esc` | function | `PAGES` | U/D: direct + Python differential; boundaries |
-| [ ] | 160 | `_ellipsize` | function | `PAGES` | U/D: direct + Python differential; boundaries |
-| [ ] | 183 | `_proc_name` | function | `PAGES` | U/D: direct + Python differential; boundaries |
-| [ ] | 204 | `_service_for_port` | function | `PAGES` | U/D: direct + Python differential; boundaries |
-| [ ] | 219 | `_format_connections` | function | `PAGES` | U/D: direct + Python differential; boundaries |
-| [ ] | 270 | `page_inner` | function | `PAGES` | U/D: direct + Python differential; boundaries |
-| [ ] | 282 | `title_html` | function | `PAGES` | U/D: direct + Python differential; boundaries |
-| [ ] | 291 | `pager_html` | function | `PAGES` | U/D: direct + Python differential; boundaries |
-| [ ] | 311 | `default_click` | function | `PAGES` | U/D: direct + Python differential; boundaries |
+| [x] | 38 | `Page` | class | `PAGES` | U/D: Rust page/source/command enums + exhaustive registry metadata test preserve ids, labels, argv, TTL, PTY, renderer, and click |
+| [x] | 82 | `build_pages` | function | `PAGES` | U/D: page 0, configured order/duplicates, and unknown-id skip semantics |
+| [x] | 94 | `_run_command` | function | `PAGES` | U/D/F: exact argv + 5-second timeout trace; missing, adapter failure, non-zero/stderr, empty, truncation, ANSI/PTY, cache hit/expiry |
+| [x] | 141 | `text_to_mono_html` | function | `PAGES` | U/D E0: fixed Python byte corpus for escaping, spaces, blank lines |
+| [x] | 149 | `_text_width` | function | `PAGES` | U/D: multiline/SGR-visible width corpus |
+| [x] | 156 | `_esc` | function | `PAGES` | U/D E0: covered through exact connections HTML and process/page escaping |
+| [x] | 160 | `_ellipsize` | function | `PAGES` | U/D: Python boundary behavior including widths 0/1 and process-column clipping |
+| [x] | 183 | `_proc_name` | function | `PAGES` | U/F: fixture proc root covers interpreter script resolution and missing cmdline fallback |
+| [x] | 204 | `_service_for_port` | function | `PAGES` | U/F: curated daemon mapping, fixture `/etc/services` parse, and unknown fallback |
+| [x] | 219 | `_format_connections` | function | `PAGES` | U/D E0: exact Python HTML+width corpus covers confirmed/inferred, loopback/exposed, alignment, and no-socket fallback |
+| [x] | 270 | `page_inner` | function | `PAGES` | U/D E0: exact fastfetch body+pager corpus and connections colorizer shell |
+| [x] | 282 | `title_html` | function | `PAGES` | U/D E0: exact Python title bytes |
+| [x] | 291 | `pager_html` | function | `PAGES` | U/D E0: exact Python no-pager/active-dot/centering bytes |
+| [x] | 311 | `default_click` | function | `PAGES` | U/D: exact `plasma-systemmonitor` argv; detached launch remains DAEMON-CLI |
 
 ### `src/pagestate.py`
 
@@ -1207,7 +1209,7 @@ legend as the rest of this file (U/D/F/I/L/P + E0–E5).
 | [x] | `CommandStatus` / `CommandOutput` | enum/struct | `SCAFFOLD`/`INTEGRATION` | U: shared command payload contract used by production boundaries and fixture fakes |
 | [x] | `BusKind` / `DbusOutput` | enum/struct | `SCAFFOLD`/`INTEGRATION` | U: shared D-Bus payload contract used by production boundaries and fixture fakes |
 | [x] | `BoundaryError` | enum | `INTEGRATION` | U: promoted shared boundary error contract for command/D-Bus production traits and fixture failures |
-| [x] | `CommandRunner` / `DbusFacade` | traits | `INTEGRATION` | U: promoted production boundary traits now implemented by `FakeCommandRunner` and `FakeDbus` |
+| [x] | `CommandRunner` / `DbusFacade` | traits | `INTEGRATION` | U: promoted production boundary traits implemented by fakes; command contract records exact program/argv/timeout (`3s` network, `5s` pages) |
 | [x] | `ClockSnapshot` | struct | `SCAFFOLD`/`FIXTURES` | U: default at zero/UNIX_EPOCH |
 | [x] | `FilesystemRoots` | struct | `SCAFFOLD`/`FIXTURES` | U: default + `state_root()` derivation |
 
@@ -1281,6 +1283,26 @@ legend as the rest of this file (U/D/F/I/L/P + E0–E5).
 | [x] | `encode_png` | function | `CHART` | U/D: Rust PNG round-trip test validates scanline filter bytes, chunk order, CRCs, and decoded RGBA reconstruction for the `_encode_png` parity slice |
 | [x] | `area_chart_png` | function | `CHART` | U/D: fixed Python decoded-pixel CRC corpus covers empty/overlay/single/constant charts, clipped labels, fill, line AA, overlay, and repeated-call determinism |
 
+### `rust/src/page_commands.rs`
+
+| Done | Symbol | Kind | Lane | Evidence required |
+|---|---|---|---|---|
+| [x] | `Page` / `PageSource` / `PageCommandSpec` / `PageRenderKind` / `PageColorizer` | structs/enums | `PAGES` | U/D: exhaustive registry metadata mirrors every current Python page |
+| [x] | `CommandLookup` / `PageCommandCache` / `PageCommandContext` / `PageEnvironment` | structs | `PAGES` | U/F: injected executable/proc/services/clock/cache boundaries; no host commands in tests |
+| [x] | `build_pages` | function | `PAGES` | U/D: full page first, configured order and duplicates retained, unknown ids skipped |
+| [x] | `run_command` | function | `PAGES` | U/D/F: exact argv/timeout, PTY/fallback, ANSI cleanup, stdout/stderr, no output, cache hit/expiry, missing/error matrix |
+| [x] | `text_to_mono_html` / `text_width` / formatting helper family | functions | `PAGES` | U/D E0: fixed Python HTML/width corpus including spacing, SGR, ellipsis, proc cmdline, services, exposed sockets |
+| [x] | `format_connections` / `page_inner` / `title_html` / `pager_html` | functions | `PAGES` | U/D E0: exact Python connection/fastfetch/title/pager bytes and canonical-width behavior |
+| [x] | `default_click` / `top_process_page_rows` | functions | `PAGES` | U/D: stable `plasma-systemmonitor` argv and 15-row process-page bound |
+
+### `rust/src/render/pages.rs`
+
+| Done | Symbol | Kind | Lane | Evidence required |
+|---|---|---|---|---|
+| [x] | `PageFormatter` | struct | `PAGES` | U/D: borrowed config/hardware deep-dive formatter performs no I/O |
+| [x] | `PageFormatter::new` / `format_page` / `format_cpu_cores` / `format_top_process` | methods | `PAGES` | U/D E0: exact Python shell, populated/no-data CPU/process HTML, escaping, classes, width, pager, 15-row cap |
+| [x] | `PageFormatter::format_graphs` + graph helper family | methods/functions | `PAGES` | U/D/E2: image dimensions/count, legends, threshold classes, NVIDIA preference/Intel fallback/network gate atop CHART pixel corpus |
+
 ### `rust/src/render/traces.rs`
 
 | Done | Symbol | Kind | Lane | Evidence required |
@@ -1296,7 +1318,7 @@ legend as the rest of this file (U/D/F/I/L/P + E0–E5).
 |---|---|---|---|---|
 | [x] | `FixtureRoot` | struct | `FIXTURES` | U: default + `join` + `proc`/`sys`/`run` subtrees + `from_env` (`CARGO_MANIFEST_DIR`-resolved) |
 | [x] | `FakeClock` | struct | `FIXTURES` | U: `at` + `advance` + `tick` + `set_advance_step`; saturating overflow on monotonic + wall |
-| [x] | `FakeCommandRunner` + re-exported `CommandRunner` trait | struct + trait | `FIXTURES`/`INTEGRATION` | U: argv-keyed FIFO `enqueue` + `run` + ordered `call_trace` + `next_call` peek; implements promoted `domain::boundary::CommandRunner` |
+| [x] | `FakeCommandRunner` / `CommandCall` + re-exported `CommandRunner` trait | structs + trait | `FIXTURES`/`INTEGRATION` | U: argv-keyed FIFO output/error queues + exact program/argv/timeout call trace + `next_call`; implements production `CommandRunner` |
 | [x] | `FakeDbus` + re-exported `DbusFacade` trait | struct + trait | `FIXTURES`/`INTEGRATION` | U: signature-keyed `(bus,service,path,iface,member)` FIFO + `call_trace`; implements promoted `domain::boundary::DbusFacade` |
 | [x] | `FixtureLoader` + `OracleFixtureRaw` | struct + struct | `FIXTURES` | U: `load_text`/`load_bytes`/`load_oracle_fixture` (raw `toml::Value` view); typed deserialization deferred to Wave 3/4 |
 | [x] | `FixtureError` / re-exported `BoundaryError` | enums | `FIXTURES`/`INTEGRATION` | U: loader errors stay test-local; fake boundary failures now use the promoted production `BoundaryError` contract |
