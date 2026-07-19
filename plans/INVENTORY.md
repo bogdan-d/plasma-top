@@ -67,6 +67,7 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [x] | `rust/src/render/traces.rs` | new; bar/column/spark/braille encodings + standalone/combo rows | `TRACES` | P3 ports `src/traces.py`; 12 focused tests + fixed Python byte corpus + combo-row structure parity |
 | [x] | `rust/src/sensors/mod.rs` | new; sensor composition map | `SENSOR-CPU` | P3 module registration for incremental sensor lanes |
 | [x] | `rust/src/sensors/cpu.rs` | new; CPU discovery, `/proc/stat` diffs, uptime/loadavg, cpufreq/turbo, and per-core histories | `SENSOR-CPU` | P3 ports CPU-owned pieces of `src/sensors.py`; 17 focused tests cover first/delta/reset/malformed/history/discovery/fallback |
+| [x] | `rust/src/sensors/memory.rs` | new; `/proc/meminfo` memory/swap readers, total-memory helper, and bounded memory history | `SENSOR-MEM` | P3 ports memory-owned pieces of `src/sensors.py`; 12 focused tests cover direct/fallback/zero/clamp/malformed/history/swap/rounding |
 | [x] | `rust/src/runtime/mod.rs` | new; runtime path resolution (`runtime_dir`/`state_dir`/accessors) + `ensure_dirs` | `RUNTIME` | P2 ports `src/runtime.py`; lazy per-call path resolution for testability |
 | [x] | `rust/src/runtime/atomic.rs` | new; `write_atomic` primitive (PID-unique tmp + rename-over) | `RUNTIME` | P2 ports `src/daemon.py:_write_atomic` shape; atomicity + tmp-cleanup tests |
 | [x] | `rust/src/runtime/page.rs` | new; page counter (`read_page`/`set_page`/`npages`/`step_page`/`PageDirection`) with flock | `RUNTIME` | P2 ports `src/pagestate.py`; 32-thread concurrency test proves no lost updates |
@@ -507,17 +508,17 @@ Every top-level function/class and class method under `src/`, plus the root entr
 | [x] | 1168 | `_read_cpu_cores` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1213 | `_read_uptime` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1221 | `_read_load_avg` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1234 | `_mem_total_bytes` | function | `SENSOR-MEM` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 1234 | `_mem_total_bytes` | function | `SENSOR-MEM` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1242 | `_read_proc_stat_times` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1286 | `_cmdline_name` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1310 | `_read_top_process_cached` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1324 | `_diff_top_process` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1349 | `_read_top_process` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1360 | `read_top_process_page` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1383 | `_read_mem_usage` | function | `SENSOR-MEM` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 1383 | `_read_mem_usage` | function | `SENSOR-MEM` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1408 | `_sample_gpu_history` | function | `GPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1438 | `_sample_net_history` | function | `SENSOR-NET` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1461 | `_read_swap_usage` | function | `SENSOR-MEM` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 1461 | `_read_swap_usage` | function | `SENSOR-MEM` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1468 | `_counter_rate` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1485 | `_read_net_speed` | function | `SENSOR-NET` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1496 | `_resolve_mounts` | function | `SENSOR-DISK` | U/D/F/L: fixture formula, call trace, failures, live where available |
@@ -1211,6 +1212,16 @@ legend as the rest of this file (U/D/F/I/L/P + E0–E5).
 | [x] | `FixtureLoader` + `OracleFixtureRaw` | struct + struct | `FIXTURES` | U: `load_text`/`load_bytes`/`load_oracle_fixture` (raw `toml::Value` view); typed deserialization deferred to Wave 3/4 |
 | [x] | `FixtureError` / `RuntimeError` | enums | `FIXTURES` | U: `Io`/`TomlParse`/`MissingTable`/`NotATable` (loader); `CommandNotQueued`/`DbusCallNotQueued` (fakes) |
 | [x] | `DbusCall` type alias | alias | `FIXTURES` | U: `(BusKind, String, String, String, String)` for trace slices |
+
+### `rust/src/sensors/memory.rs`
+
+| Done | Symbol | Kind | Lane | Evidence required |
+|---|---|---|---|---|
+| [x] | `MemoryState` | struct | `SENSOR-MEM` | U: shared memory-history buffer + sample timestamp state |
+| [x] | `MemoryUsage` | struct | `SENSOR-MEM` | U: percent + used/total GiB result shape |
+| [x] | `read_mem_total_bytes` | function | `SENSOR-MEM` | U: deterministic `MemTotal` reader; Rust counterpart to `src/sensors.py:_mem_total_bytes` |
+| [x] | `read_memory_usage` | function | `SENSOR-MEM` | U: direct `MemAvailable` path + procps-style fallback + zero/clamp handling + history cadence; mirrors `src/sensors.py:_read_mem_usage` |
+| [x] | `read_swap_usage` | function | `SENSOR-MEM` | U: swap-total-zero absent behavior + one-decimal-percent truncation; mirrors `src/sensors.py:_read_swap_usage` |
 
 ### `rust/src/runtime/mod.rs`
 

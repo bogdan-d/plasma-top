@@ -5,3 +5,4 @@
 //! take explicit proc/sys roots and clock snapshots.
 
 pub mod cpu;
+pub mod memory;
