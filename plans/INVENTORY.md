@@ -80,6 +80,7 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [x] | `rust/src/sensors/hwmon.rs` | new; shared hwmon directory/spec/int helpers for disk-owned sensor paths | `SENSOR-DISK` | P3 ports the disk lane's generic hwmon helpers; 3 focused tests cover substring matching, manual spec resolution, and parse failures |
 | [x] | `rust/src/sensors/disk.rs` | new; mount resolution, statvfs usage, block-device identity/topology, hwmon disk/fan caches, and `/proc/diskstats` byte rates | `SENSOR-DISK` | P3 ports disk-owned pieces of `src/sensors.py`; 17 focused tests cover mount filters, NVMe/SCSI labels, partition stacks, TTL caching, rate resets, and df-style usage math |
 | [x] | `rust/src/sensors/power.rs` | new; UPower enumeration/properties, UDisks2 SMART discovery/health, sysfs+UPower system-battery reads with fallback, peripheral-battery reads, and Bolt HID++ queries behind a lane-local facade | `POWER` | P4 ports power-owned pieces of `src/sensors.py`; 38 focused tests cover exact D-Bus arguments/timeouts, bus/service/object/property absence, malformed variants, all three cache TTLs, sysfs→UPower fallback, charge-limit collapse, zero-peripheral suppression, and HID failure/no-level parity |
+| [x] | `rust/src/sensors/hid.rs` | new; Bolt hidraw discovery, timeout-bound report I/O, and HID++ 2.0 ROOT/device-name/unified-battery protocol | `HID` | P4 ports `src/bolt_battery.py`; 16 focused tests cover exact packet bytes, discovery, absent/open/write/read failures, timeout, short/mismatch filtering, ten-read bound, feature absence, ASCII replacement, and battery conversion; direct hidraw + safe `nix::poll`, no unsafe/native HID dependency |
 | [x] | `rust/src/runtime/mod.rs` | new; runtime path resolution (`runtime_dir`/`state_dir`/accessors) + `ensure_dirs` | `RUNTIME` | P2 ports `src/runtime.py`; lazy per-call path resolution for testability |
 | [x] | `rust/src/runtime/atomic.rs` | new; `write_atomic` primitive (PID-unique tmp + rename-over) | `RUNTIME` | P2 ports `src/daemon.py:_write_atomic` shape; atomicity + tmp-cleanup tests |
 | [x] | `rust/src/runtime/page.rs` | new; page counter (`read_page`/`set_page`/`npages`/`step_page`/`PageDirection`) with flock | `RUNTIME` | P2 ports `src/pagestate.py`; 32-thread concurrency test proves no lost updates |
@@ -107,7 +108,7 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [ ] | `screenshots/process.png` | preserve reference | `QML-VERIFY` | visual comparison; regenerate only approved |
 | [ ] | `service/pirostats.service` | modify for native binary | `PACKAGING` | package/install/upgrade/uninstall |
 | [ ] | `src/__init__.py` | port then remove | `CUTOVER` | symbol + differential parity |
-| [ ] | `src/bolt_battery.py` | port then remove | `HID` | symbol + differential parity |
+| [x] | `src/bolt_battery.py` | port then remove | `HID` | all seven symbols mapped to `rust/src/sensors/hid.rs`; fixed Rust packet assertions match Python-oracle packet bytes; discovery/error/name/battery branches covered by 16 focused tests |
 | [x] | `src/chart.py` | port then remove | `CHART` | symbol + differential parity via Rust chart pixel corpus |
 | [ ] | `src/config.py` | port then remove | `CONFIG` | symbol + differential parity |
 | [ ] | `src/daemon.py` | port then remove | `DAEMON-CLI` | symbol + differential parity |
@@ -165,13 +166,13 @@ Every top-level function/class and class method under `src/`, plus the root entr
 
 | Done | Line | Symbol | Kind | Lane | Evidence required |
 |---|---:|---|---|---|---|
-| [ ] | 14 | `_load_hidapi` | function | `HID` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 39 | `_bolt_hidraw` | function | `HID` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 59 | `_xfer` | function | `HID` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 75 | `_get_feature_idx` | function | `HID` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 83 | `_get_battery` | function | `HID` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 93 | `_get_name` | function | `HID` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 109 | `query` | function | `HID` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 14 | `_load_hidapi` | function | `HID` | U/F: intentionally replaced by direct hidraw `OpenOptions`; absent/open failures become typed `BoundaryError::HidFailed`, eliminating import-time FFI/native-library loading |
+| [x] | 39 | `_bolt_hidraw` | function | `HID` | U/F: `find_bolt_hidraw`; sorted fixture sysfs walk covers Bolt PID/interface match plus malformed/wrong-interface absence |
+| [x] | 59 | `_xfer` | function | `HID` | U/D/F: `transfer`; exact write bytes, 1s timeout trace, short/mismatch filtering, read timeout/error, write failure, and ten-read bound |
+| [x] | 75 | `_get_feature_idx` | function | `HID` | U/D: `feature_index`; exact Python-oracle ROOT request bytes and absent-feature zero semantics |
+| [x] | 83 | `_get_battery` | function | `HID` | U/D/F: `battery_level`; exact unified-battery request, byte-to-level conversion, absent feature, and response timeout |
+| [x] | 93 | `_get_name` | function | `HID` | U/D/F: `device_name`; exact name request, NUL termination, ASCII replacement, trim, absent feature, and no-response empty-name semantics |
+| [x] | 109 | `query` | function | `HID` | U/D/F: `BoltHidFacade`/`query_device`; optional name-before-battery order, no-level outcome, invalid index, absent receiver, and open failure with path context; live hardware deferred to Phase 7 |
 
 ### `src/chart.py`
 
@@ -544,7 +545,7 @@ Every top-level function/class and class method under `src/`, plus the root entr
 | [x] | 1604 | `_sysfs_bat_read` | function | `POWER` | U/F: Rust `power::sysfs_bat_read` reads `capacity`/`status`/`power_now`, maps status via `_SYSFS_BAT_STATUS_MAP`, returns None on sysfs absence (triggers the UPower fallback in `read_battery_sys`). Pulled forward from COLLECTOR. |
 | [x] | 1616 | `_read_battery_sys` | function | `POWER` | U/D/F: Rust `power::read_battery_sys` tries sysfs first (`capacity`/`status`/`power_now`/`charge_control_end_threshold`) with banker's-rounding watts, falls back to UPower `GetAll` on sysfs absence, and uses sysfs `power_now` when UPower reports a zero rate while charging/discharging |
 | [x] | 1652 | `_read_battery_periph` | function | `POWER` | U/D/F: Rust `power::read_battery_periph` decodes `Percentage`/`Model` via UPower `GetAll`, caches the model name once, and suppresses zero/missing charge so the row disappears from the tooltip |
-| [x] | 1677 | `_read_battery_bolt` | function | `POWER` | U/D/F: Rust `power::read_battery_bolt` consumes a lane-local `BoltBatteryFacade` trait (HID lane will land the production impl), caches name+level with the 1h TTL, advances the timestamp even on `level=None` to suppress the wake-up cost, and skips timestamp advance on HID failure (immediate retry) |
+| [x] | 1677 | `_read_battery_bolt` | function | `POWER` | U/D/F: Rust `power::read_battery_bolt` consumes the lane-local `BoltBatteryFacade` trait implemented in production by `hid::BoltHidFacade`, caches name+level with the 1h TTL, advances the timestamp even on `level=None` to suppress the wake-up cost, and skips timestamp advance on HID failure (immediate retry) |
 | [x] | 1710 | `_read_intel_gpu_engine_times` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1760 | `_read_intel_gpu_metrics` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1789 | `_read_intel_gpu_metrics_cached` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
@@ -1210,7 +1211,7 @@ legend as the rest of this file (U/D/F/I/L/P + E0–E5).
 | [x] | `CommandStatus` / `CommandOutput` | enum/struct | `SCAFFOLD`/`INTEGRATION` | U: shared command payload contract used by production boundaries and fixture fakes |
 | [x] | `BusKind` / `DbusOutput` | enum/struct | `SCAFFOLD`/`INTEGRATION` | U: shared D-Bus payload contract used by production boundaries and fixture fakes |
 | [x] | `DbusArgument` / `DbusRequest` | enum/struct | `INTEGRATION/POWER` | U/F: exact typed method arguments and per-call timeout are recorded by `FakeDbus`; POWER asserts `Properties.Get/GetAll` and 15-second `SmartUpdate` requests |
-| [x] | `BoundaryError` | enum | `INTEGRATION` | U: promoted shared boundary error contract for command/D-Bus production traits and fixture failures |
+| [x] | `BoundaryError` | enum | `INTEGRATION/HID` | U: promoted shared boundary error contract for command/D-Bus production traits and fixture failures; HID adds typed absent/open/write context through `HidFailed` |
 | [x] | `CommandRunner` / `DbusFacade` | traits | `INTEGRATION` | U: promoted production boundary traits implemented by fakes; command contract records exact program/argv/timeout (`3s` network, `5s` pages) |
 | [x] | `ClockSnapshot` | struct | `SCAFFOLD`/`FIXTURES` | U: default at zero/UNIX_EPOCH |
 | [x] | `FilesystemRoots` | struct | `SCAFFOLD`/`FIXTURES` | U: default + `state_root()` derivation |
@@ -1388,7 +1389,7 @@ legend as the rest of this file (U/D/F/I/L/P + E0–E5).
 
 | Done | Symbol | Kind | Lane | Evidence required |
 |---|---|---|---|---|
-| [x] | `BoltBattery` / `BoltBatteryFacade` | struct/trait | `POWER` | U: lane-local HID++ facade; production impl deferred to HID lane; `Ok(None)` = device responded but no battery, `Err` = HID failure (drives timestamp/no-retry split) |
+| [x] | `BoltBattery` / `BoltBatteryFacade` | struct/trait | `POWER/HID` | U: POWER-owned HID++ facade implemented by `hid::BoltHidFacade`; `Ok(None)` = no battery level (including timeout/unsupported response), `Err` = discovery/open/write failure (drives timestamp/no-retry split) |
 | [x] | `upower_enumerate` | function | `POWER` | U/D/F: `EnumerateDevices` system-bus call decoding flat `[path, ...]` body; empty list on any failure |
 | [x] | `upower_device_props` | function | `POWER` | U/D/F: models Python's `proxy.get_cached_property` round-trip as one `GetAll` call with interleaved `[k, v, ...]` body; decodes Percentage/State/EnergyRate/Model/Type |
 | [x] | `find_battery_sys` | function | `POWER` | U/F: filters and sorts UPower paths containing `/battery_BAT` |
@@ -1399,6 +1400,15 @@ legend as the rest of this file (U/D/F/I/L/P + E0–E5).
 | [x] | `read_battery_periph` | function | `POWER` | U/D/F: UPower `GetAll` Percentage/Model decode; caches model once; suppresses zero/missing charge so the row disappears from the tooltip; 30s TTL |
 | [x] | `read_battery_bolt` | function | `POWER` | U/D/F: `BoltBatteryFacade` consumer; caches name+level with 1h TTL; advances timestamp on `Ok(None)` (suppresses wake-up cost); skips timestamp advance on HID failure (immediate retry) |
 | [x] | `parse_managed_objects` / `parse_property_map` / `parse_object_paths` / `parse_bool` / `round_half_even_ratio` / `round_half_even_f64` | helpers | `POWER` | U: body decoders + numeric parity helpers; documented D-Bus body encoding (empty-string-separated object chunks, interleaved key/value pairs, flat path lists) |
+
+### `rust/src/sensors/hid.rs`
+
+| Done | Symbol | Kind | Lane | Evidence required |
+|---|---|---|---|---|
+| [x] | `HidError` | enum | `HID` | U/F: absent/index/open/write variants preserve source/path context and map to `BoundaryError::HidFailed` |
+| [x] | `BoltHidFacade` | struct | `HID` | U/F: production `BoltBatteryFacade` implementation with host defaults and fixture-root constructor; absent/open/index outcomes asserted without host I/O |
+| [x] | `find_bolt_hidraw` | function | `HID` | U/F: sorted sysfs discovery checks product `c548`, interface `.2`, malformed hierarchy, and fixture dev-root mapping |
+| [x] | `transfer` / `feature_index` / `battery_level` / `device_name` / `query_device` | private functions | `HID` | U/D/F: 16-test binary protocol corpus pins report bytes/order, timeout/read bound, short/mismatch behavior, feature absence, name decoding, battery conversion, and combined query shape |
 
 ### `rust/src/runtime/mod.rs`
 
