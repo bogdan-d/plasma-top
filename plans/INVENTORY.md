@@ -154,6 +154,7 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [ ] | `tools/demo_shot.py` | preserve/update invocation | `BASE/QML-VERIFY` | tool smoke + target parity |
 | [ ] | `tools/inventory_ast_reporter.py` | preserve/update invocation | `BASE/INTEGRATION` | tool smoke + exact inventory gate |
 | [ ] | `tools/manual_tooltip_preview.py` | preserve/update invocation | `BASE/QML-VERIFY` | tool smoke + target parity |
+| [x] | `tools/qml_verify.sh` | add isolated Rust-daemon/applet launcher | `QML-VERIFY` | bash syntax + `plasmawindowed` smoke; disposable XDG/runtime roots; no system paths |
 | [ ] | `tools/qt_shot.py` | preserve/update invocation | `BASE/QML-VERIFY` | tool smoke + target parity |
 | [ ] | `uninstall.sh` | modify for native binary | `PACKAGING` | package/install/upgrade/uninstall |
 
@@ -1110,6 +1111,13 @@ Existing tests remain oracle evidence until mapped to a passing Rust test or int
 | [ ] | 774 | `onLinkActivated` — `onLinkActivated: Qt.openUrlExternally(link)` | QML-VERIFY T6 event/interaction path |
 
 ## Shell/package callable inventory
+
+
+### `tools/qml_verify.sh`
+
+- [x] line 6 `usage` — help/default/manual-mode contract checked.
+- [x] line 39 `cleanup` — smoke proves daemon/applet termination and disposable-root removal.
+- [x] line 108 `wait_for_file` — isolated daemon publication startup gate checked.
 
 
 ### `install.sh`

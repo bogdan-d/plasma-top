@@ -167,8 +167,8 @@ Mostly serial integration after Phase 4.
 
 ### Steps
 
-- **P6.1** Point a development systemd unit/QML test instance at Rust binary in
-  isolated runtime; do not replace `/usr/bin/pirostats` yet.
+- **P6.1** Run a QML test instance and Rust daemon under disposable XDG/runtime
+  roots; systemd is optional and `/usr/bin/pirostats` must not be replaced.
 - **P6.2** Run `tools/qt_shot.py` and live Plasma screenshot matrix for panel H/V,
   tooltip pages, pinning, desktop dark/light, overlay, and geometry changes.
 - **P6.3** Verify watcher behavior, lazy tooltip reads, wheel concurrency, command

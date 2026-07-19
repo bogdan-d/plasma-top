@@ -87,6 +87,10 @@ theme/style/geometry reload, page change, signal cleanup, and adapter failures.
 
 ### T6 — Qt/Plasma contract
 
+- `tools/qml_verify.sh --smoke` loads the unchanged applet through
+  `plasmawindowed` with the Rust daemon under disposable XDG/runtime roots.
+- `tools/qml_verify.sh` runs the same setup interactively for hover, pinning,
+  wheel, geometry, and live-update checks; it never installs under `/usr`.
 - `tools/qt_shot.py` for panel H/V and every tooltip page.
 - dark/light/overlay CSS.
 - hover, pin/unpin, desktop background/no-background/outline.
@@ -254,4 +258,3 @@ bash -n install.sh uninstall.sh packaging/aur/PKGBUILD packaging/aur/pirostats.i
 ```
 
 Python commands disappear only in Phase 8 after inventory closure.
-
