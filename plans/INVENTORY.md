@@ -59,6 +59,7 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [x] | `rust/src/domain/form.rs` | new; `Form`/`Shape`/`Surface`/`SurfaceSet` contracts | `SCAFFOLD` | P1.3 mirrors `src/forms.py`; invariant tests |
 | [x] | `rust/src/domain/metric.rs` | new; `Metric`/`MetricSpec`/`Capability` contracts | `SCAFFOLD` | P1.3 mirrors `src/metrics.py` + capability map |
 | [x] | `rust/src/domain/item.rs` | new; validated `metric[:form]` `ItemToken` | `SCAFFOLD` | P1.3 token rules mirror `src/registry.py` |
+| [x] | `rust/src/domain/registry.rs` | new; token/capability derivation layer (`parse`/`unknown_item_names`/`misplaced_items`/`needed_capabilities`/`SEPARATOR_ITEMS`/`list_items`) | `DOMAIN` | P2 mirrors token+capability half of `src/registry.py`; 51-row `list-items` corpus + 51×2 misplaced matrix |
 | [x] | `rust/src/domain/boundary.rs` | new; boundary stubs (command/D-Bus/clock/FS/hardware/readings/state) | `SCAFFOLD` | P1.3 placeholders refined by downstream lanes |
 | [x] | `rust/src/test_support.rs` | new; test-support skeleton behind `test-support` feature | `SCAFFOLD` (skeleton) → `FIXTURES` (impl) | P1.2 module compiles under `--all-features`; marker types documented |
 | [ ] | `screenshots/desktop-black-text.png` | preserve reference | `QML-VERIFY` | visual comparison; regenerate only approved |
@@ -1151,6 +1152,19 @@ legend as the rest of this file (U/D/F/I/L/P + E0–E5).
 | [x] | `ItemToken::new`/`metric`/`rendering`/`form`/`effective_surfaces` | methods | `SCAFFOLD`/`DOMAIN` | U: pairing + intersection |
 | [x] | `ItemRendering` | enum | `SCAFFOLD`/`DOMAIN` | U: Generic vs Intrinsic |
 | [x] | `ItemParseError` | enum | `SCAFFOLD` | U: each error variant reachable |
+
+### `rust/src/domain/registry.rs`
+
+| Done | Symbol | Kind | Lane | Evidence required |
+|---|---|---|---|---|
+| [x] | `parse` | function | `DOMAIN` | U: round-trip + separator/invalid rejection; mirrors `src/registry.py:parse` |
+| [x] | `unknown_item_names` | function | `DOMAIN` | U: bad metric + bad form flagged; spares separators; mirrors `src/registry.py:unknown_item_names` |
+| [x] | `misplaced_items` | function | `DOMAIN` | U: panel-only/tooltip-only matrix; 51×2 exhaustive; mirrors `src/registry.py:misplaced_items` |
+| [x] | `needed_capabilities` | function | `DOMAIN` | U: union of metric + notification + graphs-page caps; mirrors `src/registry.py:needed_capabilities` |
+| [x] | `notification_capability_map` / `NOTIFY_CAPABILITY_MAP` | function/const | `DOMAIN` | U: 10-key map matches `_NOTIFY_CAPS` |
+| [x] | `graphs_page_capabilities` / `GRAPHS_PAGE_CAPABILITIES` | function/const | `DOMAIN` | U: 4-cap special case when `graphs` in pages order |
+| [x] | `SEPARATOR_ITEMS` | const | `DOMAIN` | U: keys match `src/render_model.py:SEPARATOR_ITEMS` |
+| [x] | `list_items` / `placement_for` | functions | `DOMAIN` | U: 51-row byte-for-byte parity with `pirostats list-items` |
 
 ### `rust/src/domain/boundary.rs`
 
