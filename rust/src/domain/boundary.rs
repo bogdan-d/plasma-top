@@ -132,6 +132,14 @@ pub enum BoundaryError {
         /// Human-readable failure detail.
         detail: String,
     },
+    /// A production HID adapter could not discover, open, or communicate with
+    /// a device.
+    HidFailed {
+        /// Device path, when discovery reached a concrete hidraw node.
+        path: Option<PathBuf>,
+        /// Human-readable failure detail.
+        detail: String,
+    },
 }
 
 impl Display for BoundaryError {
@@ -190,6 +198,17 @@ impl Display for BoundaryError {
                     formatter,
                     "D-Bus {bus_label} call `{service}` `{path}` `{interface}` `{member}` failed: {detail}",
                 )
+            }
+            Self::HidFailed { path, detail } => {
+                if let Some(path) = path {
+                    write!(
+                        formatter,
+                        "HID device `{}` failed: {detail}",
+                        path.display()
+                    )
+                } else {
+                    write!(formatter, "HID device failed: {detail}")
+                }
             }
         }
     }

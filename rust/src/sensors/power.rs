@@ -714,9 +714,9 @@ pub struct BoltBattery {
 /// fake. Mirrors Python's `_bolt_query(dev_idx, want_name)` contract.
 pub trait BoltBatteryFacade {
     /// Queries the Bolt receiver at `dev_idx`, optionally fetching the device
-    /// name. Returns `Ok(None)` when the device responded but reported no
-    /// battery, and `Err` when the HID path itself failed (device absent,
-    /// timeout, malformed reply).
+    /// name. Returns `Ok(None)` when HID++ yields no battery level, including
+    /// unsupported-feature, timeout, short-response, and mismatched-response
+    /// cases. Returns `Err` when discovery, open, or report write fails.
     ///
     /// # Errors
     ///

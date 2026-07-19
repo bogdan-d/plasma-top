@@ -7,6 +7,7 @@
 pub mod cpu;
 pub mod disk;
 pub mod gpu_intel;
+pub mod hid;
 pub mod hwmon;
 pub mod memory;
 pub mod network;

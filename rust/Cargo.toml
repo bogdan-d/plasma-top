@@ -22,13 +22,13 @@ default = []
 test-support = []
 
 [dependencies]
-# Safe wrappers for the flock(2) serialization in `runtime::page` and the
-# getuid(2) lookup in `runtime::runtime_dir`. Chosen over `libc` + scoped
-# `unsafe` so the crate-level `#![deny(unsafe_code)]` stays in effect
-# everywhere; `nix` wraps the syscall boundaries internally.
+# Safe wrappers for flock(2), getuid(2), and the HID report poll(2) timeout.
+# Chosen over `libc` + scoped `unsafe` so the crate-level
+# `#![deny(unsafe_code)]` stays in effect everywhere; `nix` wraps the syscall
+# boundaries internally.
 # License: MIT. GPL-2.0-or-later compatible. No native build script; pure-Rust
 # bindings over libc. See `rust/DEPENDENCIES.md` for the full review row.
-nix = { version = "0.29", default-features = false, features = ["fs", "process", "user"] }
+nix = { version = "0.29", default-features = false, features = ["fs", "poll", "process", "user"] }
 # TOML parser used by `test_support::fixture_loader` (oracle fixtures) and, in
 # the same wave, by `config` (production config.toml/machines.toml parsing).
 # Hard dep because production config loading depends on it; the `test-support`
