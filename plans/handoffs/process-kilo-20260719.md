@@ -6,8 +6,8 @@
   sampling/cmdline naming and Intel iGPU DRM-fdinfo attribution — behind
   deterministic proc/sys roots and clock snapshots so the lane composes with
   the existing fixture pattern.
-- Integration base SHA: `436ac7e` (current `rust-migration-base-bootstrap` tip
-  after the PAGES integration).
+- Integration base SHA: `436ac7e` (previous `rust-migration-base-bootstrap` tip
+  after the PAGES integration). PROCESS lands in commit `16f0773`.
 - Branch/worktree: `rust-migration-base-bootstrap` @
   `/var/mnt/xdata/code/_self/plasma-stats`.
 - Owned paths: `rust/src/sensors/{process,gpu_intel}.rs`,
