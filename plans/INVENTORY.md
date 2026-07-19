@@ -61,6 +61,12 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [x] | `rust/src/domain/item.rs` | new; validated `metric[:form]` `ItemToken` | `SCAFFOLD` | P1.3 token rules mirror `src/registry.py` |
 | [x] | `rust/src/domain/registry.rs` | new; token/capability derivation layer (`parse`/`unknown_item_names`/`misplaced_items`/`needed_capabilities`/`SEPARATOR_ITEMS`/`list_items`) | `DOMAIN` | P2 mirrors token+capability half of `src/registry.py`; 51-row `list-items` corpus + 51×2 misplaced matrix |
 | [x] | `rust/src/domain/boundary.rs` | new; boundary stubs (command/D-Bus/clock/FS/hardware/readings/state) | `SCAFFOLD` | P1.3 placeholders refined by downstream lanes |
+| [x] | `rust/src/runtime/mod.rs` | new; runtime path resolution (`runtime_dir`/`state_dir`/accessors) + `ensure_dirs` | `RUNTIME` | P2 ports `src/runtime.py`; lazy per-call path resolution for testability |
+| [x] | `rust/src/runtime/atomic.rs` | new; `write_atomic` primitive (PID-unique tmp + rename-over) | `RUNTIME` | P2 ports `src/daemon.py:_write_atomic` shape; atomicity + tmp-cleanup tests |
+| [x] | `rust/src/runtime/page.rs` | new; page counter (`read_page`/`set_page`/`npages`/`step_page`/`PageDirection`) with flock | `RUNTIME` | P2 ports `src/pagestate.py`; 32-thread concurrency test proves no lost updates |
+| [x] | `rust/tests/runtime_paths.rs` | new; integration tests for path resolution + `XDG_RUNTIME_DIR` fallback | `RUNTIME` | env mutation serialized via `ENV_GUARD: Mutex<()>` |
+| [x] | `rust/tests/runtime_atomic.rs` | new; integration tests for atomic writes | `RUNTIME` | success/failure/cleanup matrix |
+| [x] | `rust/tests/runtime_page.rs` | new; integration tests for page counter + concurrency | `RUNTIME` | 32-thread stress + permission-failure path |
 | [x] | `rust/src/test_support.rs` | new; test-support skeleton behind `test-support` feature | `SCAFFOLD` (skeleton) → `FIXTURES` (impl) | P1.2 module compiles under `--all-features`; marker types documented |
 | [ ] | `screenshots/desktop-black-text.png` | preserve reference | `QML-VERIFY` | visual comparison; regenerate only approved |
 | [ ] | `screenshots/desktop-white-text.png` | preserve reference | `QML-VERIFY` | visual comparison; regenerate only approved |
@@ -1185,6 +1191,29 @@ legend as the rest of this file (U/D/F/I/L/P + E0–E5).
 | [x] | `FakeCommandRunner` | struct | `FIXTURES` | skeleton; `FIXTURES` adds argv-keyed replies + call trace |
 | [x] | `FakeDbus` | struct | `FIXTURES` | skeleton; `FIXTURES` adds service/method fixtures |
 | [x] | `FixtureLoader` | struct | `FIXTURES` | U: skeleton carries root; `FIXTURES` adds deserializers |
+
+### `rust/src/runtime/mod.rs`
+
+| Done | Symbol | Kind | Lane | Evidence required |
+|---|---|---|---|---|
+| [x] | `runtime_dir` / `state_dir` | functions | `RUNTIME` | U: `$XDG_RUNTIME_DIR/pirostats` with `/tmp/pirostats-{uid}` fallback; empty-XDG-as-unset; mirrors `src/runtime.py:_runtime_dir` |
+| [x] | `panel_file` / `tooltip_file` / `geom_file` / `page_file` / `npages_file` / `lock_file` | functions | `RUNTIME` | U: lazy per-call resolution; mirrors `src/runtime.py` module constants |
+| [x] | `ensure_dirs` | function | `RUNTIME` | I: idempotent `create_dir_all`; returns `io::Result<()>` (Python silent) |
+
+### `rust/src/runtime/atomic.rs`
+
+| Done | Symbol | Kind | Lane | Evidence required |
+|---|---|---|---|---|
+| [x] | `write_atomic` | function | `RUNTIME` | I: PID-unique tmp + rename-over; tmp cleanup on failure; target preserved on write error; success leaves no tmp |
+
+### `rust/src/runtime/page.rs`
+
+| Done | Symbol | Kind | Lane | Evidence required |
+|---|---|---|---|---|
+| [x] | `PageDirection` | enum | `RUNTIME` | U: local `{ Next, Prev }`; `cli::PageDirection` bridge deferred to Wave 5 |
+| [x] | `read_page` / `npages` | functions | `RUNTIME` | U: missing-file + garbage defaults (0 / 1); mirrors `src/pagestate.py` |
+| [x] | `set_page` | function | `RUNTIME` | I: atomic write via `write_atomic`; PID-unique tmp matches Python's `page.{pid}.tmp` scheme |
+| [x] | `step_page` | function | `RUNTIME` | I: flock serialization (`nix::fcntl::Flock::LockExclusive`); early-out when `npages ≤ 1`; `rem_euclid` wrap for negative deltas; **32-thread concurrency test proves no lost updates**; readonly-dir permission failure propagates `Err` |
 
 ## Call-edge accounting gate
 

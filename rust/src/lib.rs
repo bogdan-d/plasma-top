@@ -24,6 +24,7 @@
 pub mod cli;
 pub mod domain;
 pub mod error;
+pub mod runtime;
 
 #[cfg(feature = "test-support")]
 pub mod test_support;

@@ -14,6 +14,12 @@ integration owner verifies it before accepting the lane.
 |---|---|---|---|---|---|---|
 | _(none)_ | — | — | Phase 1 scaffold is std-only by design | none | none | SCAFFOLD lane |
 
+## Phase 2
+
+| Crate | Version | License | Purpose | Native/build | Transitive | Reviewed by |
+|---|---|---|---|---|---|---|
+| `nix` | 0.29 | MIT | Safe wrappers for `flock(2)` (page-counter serialization in `runtime::page`) and `getuid(2)` (runtime dir fallback in `runtime::mod`). Chosen over `libc` + scoped `unsafe` so the crate-level `#![deny(unsafe_code)]` stays in effect everywhere; `nix` wraps the syscall boundaries internally. Features kept: `fs` (`Flock`), `user` (`getuid`), `process` (unused now, kept for Wave 5 daemon `getpid`-style needs — trim opportunity if Wave 5 does not need it). | none (pure-Rust over `libc`); `cfg_aliases` is a build-time helper with no codegen | runtime: `bitflags`, `cfg-if`, `libc`; build: `cfg_aliases` | RUNTIME lane |
+
 The crate declares `license = "GPL-2.0-or-later"` to match the project's
 existing `LICENSE` / `NOTICE` / packaging metadata. Adding any dependency with
 an incompatible license (e.g. GPLv3-only, AGPL, proprietary) is a blocker.
