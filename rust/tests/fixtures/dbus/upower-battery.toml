@@ -1,0 +1,51 @@
+# Sample decoded UPower reply for the system battery (BAT0).
+#
+# This file documents the human-readable shape a production UPower facade
+# would hand back to the POWER lane after calling
+#   org.freedesktop.UPower.Device.GetAll
+# on /org/freedesktop/UPower/devices/battery_BAT0. Tests construct the typed
+# DbusOutput directly; this file exists so reviewers can compare the fixture
+# shape against the live system output captured by the BASE lane.
+#
+# Fields mirror the Python sensors.UPowerResult / BatterySys shapes.
+
+[native_path]
+path = "/sys/devices/LNXSYSTM:00/LNXSYBUS:00/PNP0A08:00/device:16/PNP0C09:00/ACPI0001:00/ACPI0002:00/PNP0C0A:00/power_supply/BAT0"
+
+[vendor]
+value = "Notebook"
+
+[model]
+value = "Battery"
+
+[power_supply]
+value = true
+
+[state]
+value = "discharging"
+
+[energy]
+value = 45.0
+unit = "Wh"
+
+[energy_full]
+value = 50.0
+unit = "Wh"
+
+[energy_full_design]
+value = 60.0
+unit = "Wh"
+
+[energy_rate]
+value = 15.0
+unit = "W"
+
+[voltage]
+value = 12.0
+unit = "V"
+
+[percentage]
+value = 90
+
+[capacity]
+value = 83.3333

@@ -1,143 +1,165 @@
-//! Test support skeleton shared by integration tests and downstream lanes.
+//! Test support: deterministic fakes and fixture loaders shared by
+//! integration tests and downstream lanes.
 //!
-//! This module is gated behind the `test-support` cargo feature and is excluded
-//! from production builds. The SCAFFOLD lane owns only this skeleton: it fixes
-//! the module surface that downstream lanes extend so parallel work does not
-//! collide on ad-hoc helpers.
+//! This module is gated behind the `test-support` cargo feature and excluded
+//! from production builds. It provides the in-memory boundaries every later
+//! sensor/adapter lane depends on:
 //!
-//! Lane ownership for the concrete implementations:
+//! - [`FixtureRoot`] for virtual filesystem roots (proc/sys/run subtrees).
+//! - [`FakeClock`] for deterministic clock advancement (rate/history/hysteresis).
+//! - [`FakeCommandRunner`] / [`CommandRunner`] for argv-keyed command fakes.
+//! - [`FakeDbus`] / [`DbusFacade`] for decoded D-Bus reply fakes.
+//! - [`FixtureLoader`] / [`OracleFixtureRaw`] for reading the shared Python/
+//!   Rust fixture tree (TOML oracle + raw text proc/sys files).
 //!
-//! | Submodule / type       | Owning lane  | Fills in                                   |
-//! |------------------------|--------------|--------------------------------------------|
-//! | [`FixtureRoot`]        | `FIXTURES`   | fixture filesystem root + deserializers    |
-//! | [`FakeClock`]          | `FIXTURES`   | deterministic clock for histories/rates    |
-//! | [`FakeCommandRunner`]  | `FIXTURES`   | argv-keyed command replies + call trace    |
-//! | [`FakeDbus`]           | `FIXTURES`   | UPower/UDisks2/notify decoded fixtures     |
-//! | [`FixtureLoader`]      | `FIXTURES`   | reads `rust/tests/fixtures/**` into types  |
-//!
-//! Until `FIXTURES` lands, these types compile as empty markers so the crate
-//! continues to pass `--all-features` checks without committing to field shapes
-//! that would have to be refactored later.
+//! All fakes are in-memory: no test ever touches `/proc`, `/sys`, the system
+//! or session D-Bus, or spawns a child process. The [`RuntimeError`] type is
+//! the local error contract for the fake boundaries; production adapter
+//! errors live in [`crate::error`] (frozen by SCAFFOLD) and are kept separate
+//! until the COLLECTOR/POWER/NOTIFY lanes promote variants via the
+//! integration owner.
 
+use std::ffi::OsString;
+use std::fmt::{self, Display, Formatter};
 use std::path::PathBuf;
 
-use crate::domain::boundary::{ClockSnapshot, CommandOutput, DbusOutput};
+pub mod fake_clock;
+pub mod fake_command_runner;
+pub mod fake_dbus;
+pub mod fixture_loader;
+pub mod fixture_root;
 
-/// Resolved root of a fixture tree (typically under `rust/tests/fixtures/`).
+pub use crate::domain::boundary::{
+    BusKind, ClockSnapshot, CommandOutput, CommandStatus, DbusOutput,
+};
+pub use fake_clock::FakeClock;
+pub use fake_command_runner::{CommandRunner, FakeCommandRunner};
+pub use fake_dbus::{DbusCall, DbusFacade, FakeDbus};
+pub use fixture_loader::{FixtureError, FixtureLoader, OracleFixtureRaw};
+pub use fixture_root::FixtureRoot;
+
+/// Error returned by the test-support fake boundaries when a fake is asked to
+/// dispatch a call for which no fixture reply was enqueued.
 ///
-/// `FIXTURES` populates this with deserialization helpers and per-boundary
-/// subtree resolution (`proc/`, `sys/`, `run/`, …).
+/// Lives in `test_support` rather than [`crate::error`] because `error::Error`
+/// is a frozen shared contract owned by the SCAFFOLD lane and this type is
+/// test-only. The COLLECTOR lane (Wave 5) will propose promoting these
+/// variants (or replacing them with adapter-specific ones) into `error::Error`
+/// via the integration owner — see the handoff proposal.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FixtureRoot {
-    /// Filesystem path that the test harness treats as the boundary root.
-    pub root: PathBuf,
+pub enum RuntimeError {
+    /// A fake command runner was asked to execute a command for which no
+    /// reply was enqueued (or the per-argv queue was exhausted).
+    CommandNotQueued {
+        /// Program path the fake was asked to run.
+        program: PathBuf,
+        /// Argv values the fake was asked to run with.
+        args: Vec<OsString>,
+    },
+    /// A fake D-Bus facade was asked to dispatch a call for which no reply
+    /// was enqueued (or the per-signature queue was exhausted).
+    DbusCallNotQueued {
+        /// Which bus the fake was asked to call on.
+        bus: BusKind,
+        /// Remote service name.
+        service: String,
+        /// Object path.
+        path: String,
+        /// Interface name.
+        interface: String,
+        /// Method or signal member name.
+        member: String,
+    },
 }
 
-impl FixtureRoot {
-    /// Creates a fixture root pointing at `root`.
-    #[must_use]
-    pub fn new(root: PathBuf) -> Self {
-        Self { root }
-    }
-
-    /// Returns a child path under the fixture root without touching the host.
-    #[must_use]
-    pub fn join(&self, relative: impl AsRef<std::path::Path>) -> PathBuf {
-        self.root.join(relative)
-    }
-}
-
-impl Default for FixtureRoot {
-    fn default() -> Self {
-        Self {
-            root: PathBuf::from("rust/tests/fixtures"),
+impl Display for RuntimeError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::CommandNotQueued { program, args } => {
+                write!(
+                    formatter,
+                    "no fixture reply queued for command `{}` with {} arg(s)",
+                    program.display(),
+                    args.len(),
+                )
+            }
+            Self::DbusCallNotQueued {
+                bus,
+                service,
+                path,
+                interface,
+                member,
+            } => {
+                let bus_label = match bus {
+                    BusKind::Session => "session",
+                    BusKind::System => "system",
+                };
+                write!(
+                    formatter,
+                    "no fixture reply queued for D-Bus {bus_label} call \
+                     `{service}` `{path}` `{interface}` `{member}`",
+                )
+            }
         }
     }
 }
 
-/// Controllable clock used by rate/history/state-machine tests.
-///
-/// `FIXTURES` extends this with advance/peek helpers and wires it into the
-/// shared sensor/daemon boundaries.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct FakeClock {
-    /// Last snapshot handed to the code under test.
-    pub now: ClockSnapshot,
-}
-
-impl FakeClock {
-    /// Creates a clock pinned at `now`.
-    #[must_use]
-    pub const fn at(now: ClockSnapshot) -> Self {
-        Self { now }
-    }
-}
-
-/// Placeholder command-runner used by adapter tests.
-///
-/// `FIXTURES` replaces this with argv-keyed replies and an ordered call trace
-/// so differential tests can assert exact request shapes and result handling.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct FakeCommandRunner {
-    /// Recorded outputs in the order they will be returned.
-    pub outputs: Vec<CommandOutput>,
-}
-
-/// Placeholder D-Bus facade used by power/notify tests.
-///
-/// `FIXTURES` replaces this with decoded reply fixtures keyed by service +
-/// method + object path so the bus never needs to be live during tests.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct FakeDbus {
-    /// Recorded outputs in the order they will be returned.
-    pub outputs: Vec<DbusOutput>,
-}
-
-/// Loader for fixture manifests shared between Python oracle and Rust.
-///
-/// `FIXTURES` fills in deserialization into the frozen domain types and the
-/// parity runner glue. The skeleton only fixes the path the loader reads from.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct FixtureLoader {
-    /// Root directory for fixture files.
-    pub root: FixtureRoot,
-}
-
-impl FixtureLoader {
-    /// Creates a loader rooted at `root`.
-    #[must_use]
-    pub fn new(root: FixtureRoot) -> Self {
-        Self { root }
-    }
-}
+impl std::error::Error for RuntimeError {}
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn fixture_root_default_points_at_shared_fixtures() {
-        let root = FixtureRoot::default();
+    fn runtime_error_command_not_queued_displays_program_and_arg_count() {
+        let err = RuntimeError::CommandNotQueued {
+            program: PathBuf::from("/bin/false"),
+            args: vec![OsString::from("--flag"), OsString::from("value")],
+        };
 
-        assert_eq!(root.root, PathBuf::from("rust/tests/fixtures"));
-        assert_eq!(
-            root.join("proc/stat"),
-            PathBuf::from("rust/tests/fixtures/proc/stat"),
+        let msg = format!("{err}");
+        assert!(msg.contains("/bin/false"), "message includes program path");
+        assert!(msg.contains("2 arg"), "message includes arg count");
+    }
+
+    #[test]
+    fn runtime_error_dbus_not_queued_displays_full_signature() {
+        let err = RuntimeError::DbusCallNotQueued {
+            bus: BusKind::System,
+            service: "org.freedesktop.UPower".to_owned(),
+            path: "/org/freedesktop/UPower".to_owned(),
+            interface: "org.freedesktop.UPower".to_owned(),
+            member: "EnumerateDevices".to_owned(),
+        };
+
+        let msg = format!("{err}");
+        assert!(msg.contains("system"), "message includes bus label");
+        assert!(msg.contains("org.freedesktop.UPower"));
+        assert!(msg.contains("/org/freedesktop/UPower"));
+        assert!(msg.contains("EnumerateDevices"));
+    }
+
+    #[test]
+    fn re_exports_are_visible_at_module_root() {
+        // Compile-time check that every documented re-export is reachable
+        // from the crate root as `pirostats::test_support::*`. The actual
+        // behavior is exercised by the submodule test suites; this just
+        // guards against accidental visibility regressions.
+        fn _check(
+            _clock: FakeClock,
+            _runner: FakeCommandRunner,
+            _dbus: FakeDbus,
+            _loader: FixtureLoader,
+            _root: FixtureRoot,
+        ) {
+        }
+
+        _check(
+            FakeClock::default(),
+            FakeCommandRunner::new(),
+            FakeDbus::new(),
+            FixtureLoader::default(),
+            FixtureRoot::default(),
         );
-    }
-
-    #[test]
-    fn fake_clock_defaults_to_zeroed_snapshot() {
-        let clock = FakeClock::default();
-
-        assert_eq!(clock.now.monotonic, std::time::Duration::ZERO);
-    }
-
-    #[test]
-    fn fixture_loader_carries_root() {
-        let root = FixtureRoot::new(PathBuf::from("/tmp/example"));
-        let loader = FixtureLoader::new(root);
-
-        assert_eq!(loader.root.root, PathBuf::from("/tmp/example"));
     }
 }

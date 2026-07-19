@@ -67,7 +67,14 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [x] | `rust/tests/runtime_paths.rs` | new; integration tests for path resolution + `XDG_RUNTIME_DIR` fallback | `RUNTIME` | env mutation serialized via `ENV_GUARD: Mutex<()>` |
 | [x] | `rust/tests/runtime_atomic.rs` | new; integration tests for atomic writes | `RUNTIME` | success/failure/cleanup matrix |
 | [x] | `rust/tests/runtime_page.rs` | new; integration tests for page counter + concurrency | `RUNTIME` | 32-thread stress + permission-failure path |
-| [x] | `rust/src/test_support.rs` | new; test-support skeleton behind `test-support` feature | `SCAFFOLD` (skeleton) → `FIXTURES` (impl) | P1.2 module compiles under `--all-features`; marker types documented |
+| [x] | `rust/src/test_support.rs` | rewritten as module root for new-style `test_support/` directory | `FIXTURES` | P2 re-exports concrete fakes; `lib.rs` `pub mod test_support;` line unchanged |
+| [x] | `rust/src/test_support/fixture_root.rs` | new; virtual FS root (`proc`/`sys`/`run` subtrees, `from_env`, `join`) | `FIXTURES` | P2 no host boundaries touched |
+| [x] | `rust/src/test_support/fake_clock.rs` | new; deterministic clock (`at`/`advance`/`tick`/`set_advance_step`) | `FIXTURES` | P2 saturating overflow invariants |
+| [x] | `rust/src/test_support/fake_command_runner.rs` | new; argv-keyed FIFO replies + `CommandRunner` trait + call trace | `FIXTURES` | P2 distinct-argv isolation + exhausted-queue error |
+| [x] | `rust/src/test_support/fake_dbus.rs` | new; signature-keyed D-Bus replies + `DbusFacade` trait + call trace | `FIXTURES` | P2 FIFO order + empty-queue error |
+| [x] | `rust/src/test_support/fixture_loader.rs` | new; `load_text`/`load_bytes`/`load_oracle_fixture` + `OracleFixtureRaw` untyped view | `FIXTURES` | P2 typed deserialization deferred to Wave 3/4 |
+| [x] | `rust/tests/fixtures/**` | new; 8 sample fixtures (proc/sys text, oracle TOML, cmd JSON, dbus TOML) | `FIXTURES` | P2 mirrors BASE schema; consumed by loader tests |
+| [x] | `rust/tests/parity_runner.sh` | new; Python/Rust parity diff stub | `FIXTURES` | P2 exits 77 (skip) until Wave 4 FORMATTER lands `render` |
 | [ ] | `screenshots/desktop-black-text.png` | preserve reference | `QML-VERIFY` | visual comparison; regenerate only approved |
 | [ ] | `screenshots/desktop-white-text.png` | preserve reference | `QML-VERIFY` | visual comparison; regenerate only approved |
 | [ ] | `screenshots/graphs.png` | preserve reference | `QML-VERIFY` | visual comparison; regenerate only approved |
@@ -1182,15 +1189,17 @@ legend as the rest of this file (U/D/F/I/L/P + E0–E5).
 | [x] | `FilesystemRoots` | struct | `SCAFFOLD`/`FIXTURES` | U: default + `state_root()` derivation |
 | [x] | `HardwareSnapshot` / `ReadingsSnapshot` / `DaemonStateSnapshot` | structs | `SCAFFOLD`/`FIXTURES` | U: defaults match Python `DaemonState`/`HardwareInfo` shape placeholders |
 
-### `rust/src/test_support.rs`
+### `rust/src/test_support.rs` (module root) + `rust/src/test_support/*` (submodules)
 
 | Done | Symbol | Kind | Lane | Evidence required |
 |---|---|---|---|---|
-| [x] | `FixtureRoot` | struct | `FIXTURES` | U: skeleton default + `join` |
-| [x] | `FakeClock` | struct | `FIXTURES` | U: skeleton default |
-| [x] | `FakeCommandRunner` | struct | `FIXTURES` | skeleton; `FIXTURES` adds argv-keyed replies + call trace |
-| [x] | `FakeDbus` | struct | `FIXTURES` | skeleton; `FIXTURES` adds service/method fixtures |
-| [x] | `FixtureLoader` | struct | `FIXTURES` | U: skeleton carries root; `FIXTURES` adds deserializers |
+| [x] | `FixtureRoot` | struct | `FIXTURES` | U: default + `join` + `proc`/`sys`/`run` subtrees + `from_env` (`CARGO_MANIFEST_DIR`-resolved) |
+| [x] | `FakeClock` | struct | `FIXTURES` | U: `at` + `advance` + `tick` + `set_advance_step`; saturating overflow on monotonic + wall |
+| [x] | `FakeCommandRunner` + `CommandRunner` trait | struct + trait | `FIXTURES` | U: argv-keyed FIFO `enqueue` + `run` + ordered `call_trace` + `next_call` peek + empty/exhausted-queue error |
+| [x] | `FakeDbus` + `DbusFacade` trait | struct + trait | `FIXTURES` | U: signature-keyed `(bus,service,path,iface,member)` FIFO + `call_trace` + empty-queue error |
+| [x] | `FixtureLoader` + `OracleFixtureRaw` | struct + struct | `FIXTURES` | U: `load_text`/`load_bytes`/`load_oracle_fixture` (raw `toml::Value` view); typed deserialization deferred to Wave 3/4 |
+| [x] | `FixtureError` / `RuntimeError` | enums | `FIXTURES` | U: `Io`/`TomlParse`/`MissingTable`/`NotATable` (loader); `CommandNotQueued`/`DbusCallNotQueued` (fakes) |
+| [x] | `DbusCall` type alias | alias | `FIXTURES` | U: `(BusKind, String, String, String, String)` for trace slices |
 
 ### `rust/src/runtime/mod.rs`
 
