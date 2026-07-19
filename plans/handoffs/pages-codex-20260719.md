@@ -16,7 +16,7 @@
 ## Result
 
 - Status: `handoff`.
-- Commits: integration commit created after verification.
+- Commits: `000fcc8` (`Port Rust tooltip pages`).
 - Changed files: page modules above; integration-owned module exports,
   `domain/boundary.rs`, command fake/re-export, network timeout assertions,
   `plans/{STATUS,INVENTORY}.md`.

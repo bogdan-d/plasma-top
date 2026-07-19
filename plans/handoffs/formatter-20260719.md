@@ -3,7 +3,7 @@
 ## Contract
 
 - Objective: port the main item-registry rendering path (`src/items.py`, formatter-owned `src/registry.py`, and main panel/tooltip portions of `src/formatter.py`) to Rust with byte-identical panel H/V and tooltip goldens, hardware gates, section collapse, and canonical-width coverage.
-- Integration base SHA: `fa2e093`
+- Integration base SHA: `609fe85`
 - Branch/worktree: `rust-migration-base-bootstrap`
 - Owned paths:
   - `rust/src/render/{cells,registry,formatter}.rs`
@@ -18,7 +18,7 @@
 ## Result
 
 - Status: `handoff`
-- Commits: working tree prepared for a single formatter-lane commit after integration-owner verification updates
+- Commits: `3bce846` (`Port Rust formatter render pipeline`)
 - Changed files:
   - `rust/src/render/mod.rs`
   - `rust/src/render/cells.rs`

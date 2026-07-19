@@ -93,11 +93,11 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [x] | `rust/src/test_support.rs` | rewritten as module root for new-style `test_support/` directory | `FIXTURES` | P2 re-exports concrete fakes; `lib.rs` `pub mod test_support;` line unchanged |
 | [x] | `rust/src/test_support/fixture_root.rs` | new; virtual FS root (`proc`/`sys`/`run` subtrees, `from_env`, `join`) | `FIXTURES` | P2 no host boundaries touched |
 | [x] | `rust/src/test_support/fake_clock.rs` | new; deterministic clock (`at`/`advance`/`tick`/`set_advance_step`) | `FIXTURES` | P2 saturating overflow invariants |
-| [x] | `rust/src/test_support/fake_command_runner.rs` | new; argv-keyed FIFO replies + `CommandRunner` trait + call trace | `FIXTURES` | P2 distinct-argv isolation + exhausted-queue error |
-| [x] | `rust/src/test_support/fake_dbus.rs` | new; signature-keyed D-Bus replies + `DbusFacade` trait + call trace | `FIXTURES` | P2 FIFO order + empty-queue error |
+| [x] | `rust/src/test_support/fake_command_runner.rs` | new; argv-keyed FIFO replies/errors + timeout-aware production `CommandRunner` implementation + call trace | `FIXTURES/INTEGRATION` | distinct-argv isolation, exhausted queue, queued adapter failure, and exact 3s/5s timeout traces |
+| [x] | `rust/src/test_support/fake_dbus.rs` | new; signature-keyed D-Bus replies + production `DbusFacade` implementation + call trace | `FIXTURES/INTEGRATION` | FIFO order + empty-queue error |
 | [x] | `rust/src/test_support/fixture_loader.rs` | new; `load_text`/`load_bytes`/`load_oracle_fixture` + `OracleFixtureRaw` untyped view | `FIXTURES` | P2 typed deserialization deferred to Wave 3/4 |
 | [x] | `rust/tests/fixtures/**` | new; 8 sample fixtures (proc/sys text, oracle TOML, cmd JSON, dbus TOML) | `FIXTURES` | P2 mirrors BASE schema; consumed by loader tests |
-| [x] | `rust/tests/parity_runner.sh` | new; Python/Rust parity diff stub | `FIXTURES` | P2 exits 77 (skip) until Wave 4 FORMATTER lands `render` |
+| [x] | `rust/tests/parity_runner.sh` | new; Python/Rust parity diff stub | `FIXTURES` | exits 77 until DAEMON-CLI exposes the Rust `render` command; formatter internals are now integrated |
 | [ ] | `screenshots/desktop-black-text.png` | preserve reference | `QML-VERIFY` | visual comparison; regenerate only approved |
 | [ ] | `screenshots/desktop-white-text.png` | preserve reference | `QML-VERIFY` | visual comparison; regenerate only approved |
 | [ ] | `screenshots/graphs.png` | preserve reference | `QML-VERIFY` | visual comparison; regenerate only approved |
@@ -110,15 +110,15 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [x] | `src/chart.py` | port then remove | `CHART` | symbol + differential parity via Rust chart pixel corpus |
 | [ ] | `src/config.py` | port then remove | `CONFIG` | symbol + differential parity |
 | [ ] | `src/daemon.py` | port then remove | `DAEMON-CLI` | symbol + differential parity |
-| [ ] | `src/formatter.py` | port then remove | `FORMATTER` | symbol + differential parity |
+| [x] | `src/formatter.py` | port then remove | `FORMATTER/PAGES` | main panel/tooltip and deep-dive formatter symbols mapped to Rust formatter/page suites |
 | [ ] | `src/forms.py` | port then remove | `DOMAIN` | symbol + differential parity |
-| [ ] | `src/items.py` | port then remove | `FORMATTER` | symbol + differential parity |
+| [x] | `src/items.py` | port then remove | `FORMATTER` | reusable cell/row builders mapped to Rust formatter/cells tests and byte goldens |
 | [ ] | `src/metrics.py` | port then remove | `DOMAIN` | symbol + differential parity |
 | [ ] | `src/mono_render.py` | port then remove | `RENDER-CORE` | symbol + differential parity |
 | [ ] | `src/notifier.py` | port then remove | `NOTIFY` | symbol + differential parity |
 | [x] | `src/pages.py` | port then remove | `PAGES` | all current page symbols mapped to `rust/src/page_commands.rs` + `rust/src/render/pages.rs`; exact helper/page HTML corpora and command fault traces |
 | [ ] | `src/pagestate.py` | port then remove | `RUNTIME` | symbol + differential parity |
-| [ ] | `src/registry.py` | port then remove | `DOMAIN/FORMATTER` | symbol + differential parity |
+| [x] | `src/registry.py` | port then remove | `DOMAIN/FORMATTER` | token/capability and render-dispatch halves mapped to verified Rust domain/formatter suites |
 | [ ] | `src/render_model.py` | port then remove | `RENDER-CORE` | symbol + differential parity |
 | [ ] | `src/runtime.py` | port then remove | `RUNTIME` | symbol + differential parity |
 | [ ] | `src/sensors.py` | port then remove | `SENSOR-*/COLLECTOR` | symbol + differential parity |
@@ -129,9 +129,9 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [ ] | `style/style-light.css` | preserve | `CONFIG/QML-VERIFY` | byte/key/selector parity |
 | [ ] | `style/style-overlay.css` | preserve | `CONFIG/QML-VERIFY` | byte/key/selector parity |
 | [ ] | `tests/conftest.py` | retain then port/archive | `BASE/INTEGRATION` | existing assertion mapped to Rust |
-| [ ] | `tests/golden/panel_h.html` | preserve oracle | `FORMATTER` | byte snapshot |
-| [ ] | `tests/golden/panel_v.html` | preserve oracle | `FORMATTER` | byte snapshot |
-| [ ] | `tests/golden/tooltip.html` | preserve oracle | `FORMATTER` | byte snapshot |
+| [x] | `tests/golden/panel_h.html` | preserve oracle | `FORMATTER` | byte-identical Rust horizontal-panel snapshot |
+| [x] | `tests/golden/panel_v.html` | preserve oracle | `FORMATTER` | byte-identical Rust vertical-panel snapshot |
+| [x] | `tests/golden/tooltip.html` | preserve oracle | `FORMATTER` | byte-identical Rust main-tooltip snapshot |
 | [ ] | `tests/oracle.py` | retain then port/archive | `BASE/INTEGRATION` | oracle fixture/render parity mapped to Rust |
 | [ ] | `tests/test_config.py` | retain then port/archive | `BASE/CONFIG` | existing assertion mapped to Rust |
 | [ ] | `tests/test_deadcode.py` | retain then port/archive | `BASE/INTEGRATION` | existing assertion mapped to Rust |
@@ -267,13 +267,13 @@ Every top-level function/class and class method under `src/`, plus the root entr
 
 | Done | Line | Symbol | Kind | Lane | Evidence required |
 |---|---:|---|---|---|---|
-| [ ] | 66 | `_net_fmt` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 75 | `_maxed_readings` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 123 | `_separator_size` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 140 | `_normalize_separators` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 165 | `PanelFormatter` | class | `FORMATTER` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 166 | `PanelFormatter.__init__` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 178 | `PanelFormatter.format_panel` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 66 | `_net_fmt` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 75 | `_maxed_readings` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 123 | `_separator_size` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 140 | `_normalize_separators` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 165 | `PanelFormatter` | class | `FORMATTER` | U/D: defaults, construction, invariants, round-trip |
+| [x] | 166 | `PanelFormatter.__init__` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 178 | `PanelFormatter.format_panel` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
 | [x] | 219 | `PanelFormatter._wrap_tooltip` | method | `FORMATTER/PAGES` | U/D E0: exact shared tooltip shell assertions in Rust formatter/page suites |
 | [x] | 227 | `PanelFormatter.format_page` | method | `FORMATTER/PAGES` | U/D E0: exact arbitrary body/header/footer shell corpus |
 | [x] | 232 | `PanelFormatter.format_cpu_cores` | method | `FORMATTER/PAGES` | U/D E0: exact Python populated/no-data HTML; braille width, classes, pager width |
@@ -281,40 +281,40 @@ Every top-level function/class and class method under `src/`, plus the root entr
 | [x] | 328 | `PanelFormatter._graph_val` | method | `FORMATTER/PAGES` | U/D: missing/banded/active value HTML and threshold boundaries |
 | [x] | 336 | `PanelFormatter._gpu_graph` | method | `FORMATTER/PAGES` | U/D: NVIDIA preference, Intel fallback, and absent-GPU graph composition |
 | [x] | 349 | `PanelFormatter.format_graphs` | method | `FORMATTER/PAGES` | U/D/E2: CPU/memory/GPU/network image count/dimensions/legend/pager shell atop CHART pixel parity |
-| [ ] | 423 | `PanelFormatter.canonical_width` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 448 | `PanelFormatter._canonical_sig` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 458 | `PanelFormatter.format_tooltip` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 478 | `PanelFormatter._build_entries` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 534 | `PanelFormatter._available` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 546 | `PanelFormatter._render_item` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 556 | `PanelFormatter._label_cell` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 573 | `PanelFormatter._battery_sys_is_full` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 577 | `PanelFormatter._battery_sys_icon` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 606 | `PanelFormatter._middle_ellipsis` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 620 | `PanelFormatter._disk_label` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 632 | `PanelFormatter._disk_smart_icon` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 638 | `PanelFormatter._disk_smart_class` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 647 | `PanelFormatter._fmt_disk_space` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 668 | `PanelFormatter._hd_label` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 678 | `PanelFormatter._pair_grid` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 728 | `PanelFormatter._disk_smart_pair` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 748 | `PanelFormatter._hd_temp_pair` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 765 | `PanelFormatter._fan_speed_pair` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 778 | `PanelFormatter._string_row` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 790 | `PanelFormatter._wifi_signal` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 802 | `PanelFormatter._net_device_ip` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 813 | `PanelFormatter._wifi_ssid_signal` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 831 | `PanelFormatter._fmt_freq` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 841 | `PanelFormatter._uptime` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 851 | `PanelFormatter._load_avg` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 871 | `PanelFormatter._top_process` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 889 | `PanelFormatter._dual_rate_rows` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 912 | `PanelFormatter._net_speed` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 916 | `PanelFormatter._disk_io` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 920 | `PanelFormatter._battery_sys` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 968 | `PanelFormatter._battery_periph` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 986 | `PanelFormatter._system_updates` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 993 | `PanelFormatter._server_check` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 423 | `PanelFormatter.canonical_width` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 448 | `PanelFormatter._canonical_sig` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 458 | `PanelFormatter.format_tooltip` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 478 | `PanelFormatter._build_entries` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 534 | `PanelFormatter._available` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 546 | `PanelFormatter._render_item` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 556 | `PanelFormatter._label_cell` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 573 | `PanelFormatter._battery_sys_is_full` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 577 | `PanelFormatter._battery_sys_icon` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 606 | `PanelFormatter._middle_ellipsis` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 620 | `PanelFormatter._disk_label` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 632 | `PanelFormatter._disk_smart_icon` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 638 | `PanelFormatter._disk_smart_class` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 647 | `PanelFormatter._fmt_disk_space` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 668 | `PanelFormatter._hd_label` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 678 | `PanelFormatter._pair_grid` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 728 | `PanelFormatter._disk_smart_pair` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 748 | `PanelFormatter._hd_temp_pair` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 765 | `PanelFormatter._fan_speed_pair` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 778 | `PanelFormatter._string_row` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 790 | `PanelFormatter._wifi_signal` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 802 | `PanelFormatter._net_device_ip` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 813 | `PanelFormatter._wifi_ssid_signal` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 831 | `PanelFormatter._fmt_freq` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 841 | `PanelFormatter._uptime` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 851 | `PanelFormatter._load_avg` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 871 | `PanelFormatter._top_process` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 889 | `PanelFormatter._dual_rate_rows` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 912 | `PanelFormatter._net_speed` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 916 | `PanelFormatter._disk_io` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 920 | `PanelFormatter._battery_sys` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 968 | `PanelFormatter._battery_periph` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 986 | `PanelFormatter._system_updates` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 993 | `PanelFormatter._server_check` | method | `FORMATTER` | U/D: direct + Python differential; boundaries |
 
 ### `src/forms.py`
 
@@ -329,23 +329,23 @@ Every top-level function/class and class method under `src/`, plus the root entr
 
 | Done | Line | Symbol | Kind | Lane | Evidence required |
 |---|---:|---|---|---|---|
-| [ ] | 40 | `row` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 48 | `per` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 63 | `label` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 80 | `value` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 111 | `spark` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 123 | `braille` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 137 | `freq_value` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 146 | `turbo_value` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 156 | `turbo_icon` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 177 | `disk_label` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 183 | `disk_value` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 195 | `disk_space` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 222 | `mem_space` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 239 | `fan_value` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 256 | `gpu_fan_value` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 272 | `hd_temp_value` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 291 | `_thr` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 40 | `row` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 48 | `per` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 63 | `label` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 80 | `value` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 111 | `spark` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 123 | `braille` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 137 | `freq_value` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 146 | `turbo_value` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 156 | `turbo_icon` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 177 | `disk_label` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 183 | `disk_value` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 195 | `disk_space` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 222 | `mem_space` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 239 | `fan_value` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 256 | `gpu_fan_value` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 272 | `hd_temp_value` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 291 | `_thr` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
 
 ### `src/metrics.py`
 
@@ -417,10 +417,10 @@ Every top-level function/class and class method under `src/`, plus the root entr
 | Done | Line | Symbol | Kind | Lane | Evidence required |
 |---|---:|---|---|---|---|
 | [ ] | 37 | `_form_token` | function | `DOMAIN` | U/D: direct + Python differential; boundaries |
-| [ ] | 56 | `_historied` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 148 | `render` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 56 | `_historied` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 148 | `render` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
 | [ ] | 164 | `parse` | function | `DOMAIN` | U/D: direct + Python differential; boundaries |
-| [ ] | 181 | `render_item` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
+| [x] | 181 | `render_item` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
 | [ ] | 189 | `item_gate` | function | `DOMAIN` | U/D: direct + Python differential; boundaries |
 | [ ] | 206 | `needed_capabilities` | function | `DOMAIN` | U/D: direct + Python differential; boundaries |
 | [ ] | 227 | `unknown_item_names` | function | `DOMAIN` | U/D: direct + Python differential; boundaries |
@@ -467,16 +467,16 @@ Every top-level function/class and class method under `src/`, plus the root entr
 | [ ] | 78 | `_upower_enumerate` | function | `POWER` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 93 | `_upower_device_props` | function | `POWER` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 116 | `timed_section` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 131 | `BatterySys` | class | `SCAFFOLD` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 140 | `BatteryPeriph` | class | `SCAFFOLD` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 146 | `DiskUsage` | class | `SCAFFOLD` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 153 | `HardwareInfo` | class | `SCAFFOLD` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 192 | `_BatterySysCache` | class | `SCAFFOLD` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 200 | `_BatteryPeriphCache` | class | `SCAFFOLD` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 206 | `_NetInfoCache` | class | `SCAFFOLD` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 215 | `_RateState` | class | `SCAFFOLD` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 224 | `DaemonState` | class | `SCAFFOLD` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 294 | `Readings` | class | `SCAFFOLD` | U/D: defaults, construction, invariants, round-trip |
+| [x] | 131 | `BatterySys` | class | `INTEGRATION` | U: mapped to typed `BatterySystemReading`; default/state token invariants tested |
+| [x] | 140 | `BatteryPeriph` | class | `INTEGRATION` | U: mapped to typed `BatteryPeripheralReading`; empty aggregate invariants tested |
+| [x] | 146 | `DiskUsage` | class | `INTEGRATION` | U: mapped to typed `DiskUsageReading`; formatter and disk formula tests consume it |
+| [x] | 153 | `HardwareInfo` | class | `INTEGRATION` | U: mapped to typed `HardwareSnapshot`; safe empty-machine default tested |
+| [x] | 192 | `_BatterySysCache` | class | `INTEGRATION` | U: mapped to `BatterySystemCache`; unset default tested |
+| [x] | 200 | `_BatteryPeriphCache` | class | `INTEGRATION` | U: mapped to `BatteryPeripheralCache`; unset default tested |
+| [x] | 206 | `_NetInfoCache` | class | `INTEGRATION` | U: mapped to typed network cache state consumed by SENSOR-NET |
+| [x] | 215 | `_RateState` | class | `INTEGRATION` | U: mapped to `RateState`; empty previous-sample state tested through rate readers |
+| [x] | 224 | `DaemonState` | class | `INTEGRATION` | U: mapped to typed `DaemonStateSnapshot`; empty cross-poll state tested |
+| [x] | 294 | `Readings` | class | `INTEGRATION` | U: mapped to typed `ReadingsSnapshot`; empty zero-time default and formatter consumption tested |
 | [ ] | 359 | `discover_hardware` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 383 | `rescan_peripherals` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 402 | `needs_periph_rescan` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
@@ -678,85 +678,85 @@ Existing tests remain oracle evidence until mapped to a passing Rust test or int
 
 | Done | Line | Symbol | Kind | Lane | Evidence required |
 |---|---:|---|---|---|---|
-| [ ] | 9 | `_bare_hw` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 24 | `test_val_cell_no_class_is_plain_val` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 31 | `test_val_cell_with_class_appends_it` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 38 | `test_fmt_perc_panel_caps_at_100_without_percent_sign` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 42 | `test_fmt_perc_tooltip_always_has_percent_sign` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 46 | `test_fmt_perc_below_100_has_percent_sign_either_way` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 53 | `test_net_fmt_zero` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 57 | `test_net_fmt_kilobits` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 61 | `test_net_fmt_megabits` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 67 | `test_disk_label_root_mount` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 71 | `test_disk_label_strips_mnt_prefix` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 75 | `test_disk_label_basename_for_run_media` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 79 | `test_middle_ellipsis_short_string_unchanged` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 83 | `test_middle_ellipsis_keeps_head_and_tail` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 87 | `test_middle_ellipsis_never_exceeds_budget` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 92 | `test_middle_ellipsis_bounds_ssid_to_max` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 97 | `test_net_device_ip_truncates_long_interface` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 105 | `test_string_row_caps_net_device_leaves_ip_raw` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 111 | `_canonical_guard_cfg` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 119 | `test_canonical_width_exceeds_short_content` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 130 | `_guard_full_hw` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 144 | `_guard_readings` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 176 | `_tooltip_tokens` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 191 | `test_canonical_width_covers_every_tooltip_item_guard` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 214 | `test_hd_label_strips_trailing_index` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 218 | `test_hd_label_no_trailing_index` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 222 | `test_hd_label_nvme_namespace_block_device` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 232 | `_fmt` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 236 | `test_std_never_attaches_bar_or_history_for_cpu_usage` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 243 | `test_bar_html_for_empty_when_value_missing` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 249 | `test_bar_html_for_empty_when_width_zero` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 255 | `test_spark_html_for_empty_when_history_missing` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 260 | `test_bar_spark_row_empty_when_only_bar_available` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 269 | `test_bar_spark_row_renders_when_both_available` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 277 | `test_bar_row_and_spark_row_agree_with_bar_spark_row` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 289 | `_titles` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 298 | `test_available_hw_bound_items_off_on_bare_machine` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 307 | `test_available_unbound_items_always_on` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 315 | `test_available_present_hw_turns_item_on` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 326 | `test_available_battery_periph_via_bolt_config` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 336 | `_surface_cfg` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 349 | `test_empty_section_drops_title_and_separator` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 361 | `test_first_section_has_no_leading_separator` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 369 | `test_panel_has_no_title_rows_and_no_separators` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 380 | `test_hd_temp_row_empty_without_temp` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 389 | `test_top_process_no_padding_to_fixed_count` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 398 | `_hw_disks` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 403 | `test_disk_smart_packs_two_drives_per_row` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 411 | `test_disk_smart_odd_count_uses_blank_filler` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 421 | `test_disk_smart_single_disk_is_full_width_row` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 428 | `test_disk_smart_single_result_among_many_is_full_width` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 436 | `test_disk_smart_empty_when_no_results` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 443 | `_hw_hd_temps` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 447 | `test_hd_temp_pair_packs_two_drives_per_row` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 455 | `test_hd_temp_pair_odd_count_uses_blank_filler` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 464 | `test_hd_temp_pair_single_disk_is_full_width_row` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 471 | `test_hd_temp_pair_skips_disks_without_temp` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 479 | `test_hd_temp_pair_empty_when_no_temps` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 486 | `_hw_fans` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 490 | `test_fan_speed_pair_two_fans_one_row` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 499 | `test_fan_speed_pair_odd_count_uses_blank_filler` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 508 | `test_fan_speed_pair_single_fan_is_full_width_row` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 515 | `test_fan_speed_pair_skips_fans_without_reading` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 523 | `test_fan_speed_pair_empty_when_no_readings` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 528 | `test_disk_smart_empty_when_smart_disabled` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 540 | `_row` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 543 | `test_normalize_keeps_separator_between_two_rows` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 548 | `test_normalize_drops_leading_and_trailing_separators` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 553 | `test_normalize_collapses_consecutive_keeping_largest` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 558 | `test_normalize_section_edge_separator_becomes_inter_section_gap` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 9 | `_bare_hw` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 24 | `test_val_cell_no_class_is_plain_val` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 31 | `test_val_cell_with_class_appends_it` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 38 | `test_fmt_perc_panel_caps_at_100_without_percent_sign` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 42 | `test_fmt_perc_tooltip_always_has_percent_sign` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 46 | `test_fmt_perc_below_100_has_percent_sign_either_way` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 53 | `test_net_fmt_zero` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 57 | `test_net_fmt_kilobits` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 61 | `test_net_fmt_megabits` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 67 | `test_disk_label_root_mount` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 71 | `test_disk_label_strips_mnt_prefix` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 75 | `test_disk_label_basename_for_run_media` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 79 | `test_middle_ellipsis_short_string_unchanged` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 83 | `test_middle_ellipsis_keeps_head_and_tail` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 87 | `test_middle_ellipsis_never_exceeds_budget` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 92 | `test_middle_ellipsis_bounds_ssid_to_max` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 97 | `test_net_device_ip_truncates_long_interface` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 105 | `test_string_row_caps_net_device_leaves_ip_raw` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 111 | `_canonical_guard_cfg` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 119 | `test_canonical_width_exceeds_short_content` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 130 | `_guard_full_hw` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 144 | `_guard_readings` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 176 | `_tooltip_tokens` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 191 | `test_canonical_width_covers_every_tooltip_item_guard` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 214 | `test_hd_label_strips_trailing_index` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 218 | `test_hd_label_no_trailing_index` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 222 | `test_hd_label_nvme_namespace_block_device` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 232 | `_fmt` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 236 | `test_std_never_attaches_bar_or_history_for_cpu_usage` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 243 | `test_bar_html_for_empty_when_value_missing` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 249 | `test_bar_html_for_empty_when_width_zero` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 255 | `test_spark_html_for_empty_when_history_missing` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 260 | `test_bar_spark_row_empty_when_only_bar_available` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 269 | `test_bar_spark_row_renders_when_both_available` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 277 | `test_bar_row_and_spark_row_agree_with_bar_spark_row` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 289 | `_titles` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 298 | `test_available_hw_bound_items_off_on_bare_machine` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 307 | `test_available_unbound_items_always_on` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 315 | `test_available_present_hw_turns_item_on` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 326 | `test_available_battery_periph_via_bolt_config` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 336 | `_surface_cfg` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 349 | `test_empty_section_drops_title_and_separator` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 361 | `test_first_section_has_no_leading_separator` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 369 | `test_panel_has_no_title_rows_and_no_separators` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 380 | `test_hd_temp_row_empty_without_temp` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 389 | `test_top_process_no_padding_to_fixed_count` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 398 | `_hw_disks` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 403 | `test_disk_smart_packs_two_drives_per_row` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 411 | `test_disk_smart_odd_count_uses_blank_filler` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 421 | `test_disk_smart_single_disk_is_full_width_row` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 428 | `test_disk_smart_single_result_among_many_is_full_width` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 436 | `test_disk_smart_empty_when_no_results` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 443 | `_hw_hd_temps` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 447 | `test_hd_temp_pair_packs_two_drives_per_row` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 455 | `test_hd_temp_pair_odd_count_uses_blank_filler` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 464 | `test_hd_temp_pair_single_disk_is_full_width_row` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 471 | `test_hd_temp_pair_skips_disks_without_temp` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 479 | `test_hd_temp_pair_empty_when_no_temps` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 486 | `_hw_fans` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 490 | `test_fan_speed_pair_two_fans_one_row` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 499 | `test_fan_speed_pair_odd_count_uses_blank_filler` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 508 | `test_fan_speed_pair_single_fan_is_full_width_row` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 515 | `test_fan_speed_pair_skips_fans_without_reading` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 523 | `test_fan_speed_pair_empty_when_no_readings` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 528 | `test_disk_smart_empty_when_smart_disabled` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 540 | `_row` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 543 | `test_normalize_keeps_separator_between_two_rows` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 548 | `test_normalize_drops_leading_and_trailing_separators` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 553 | `test_normalize_collapses_consecutive_keeping_largest` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 558 | `test_normalize_section_edge_separator_becomes_inter_section_gap` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
 
 ### `tests/test_golden_render.py`
 
 | Done | Line | Symbol | Kind | Lane | Evidence required |
 |---|---:|---|---|---|---|
-| [ ] | 27 | `_full_hw` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 41 | `_full_readings` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 65 | `_render` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
-| [ ] | 84 | `test_golden_render` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 27 | `_full_hw` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 41 | `_full_readings` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 65 | `_render` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
+| [x] | 84 | `test_golden_render` | function | `BASE/FORMATTER` | P: preserve assertion; map to Rust test |
 
 ### `tests/test_inventory.py`
 
