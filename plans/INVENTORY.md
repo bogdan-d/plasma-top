@@ -514,18 +514,18 @@ Every top-level function/class and class method under `src/`, plus the root entr
 | [ ] | 1069 | `_detect_has_backlight` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1081 | `_detect_has_wifi` | function | `SENSOR-NET` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1091 | `_detect_nvidia` | function | `GPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1102 | `_detect_intel_gpu` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 1102 | `_detect_intel_gpu` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1126 | `_read_cpu_usage` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1168 | `_read_cpu_cores` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1213 | `_read_uptime` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1221 | `_read_load_avg` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1234 | `_mem_total_bytes` | function | `SENSOR-MEM` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1242 | `_read_proc_stat_times` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1286 | `_cmdline_name` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1310 | `_read_top_process_cached` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1324 | `_diff_top_process` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1349 | `_read_top_process` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1360 | `read_top_process_page` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 1242 | `_read_proc_stat_times` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 1286 | `_cmdline_name` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 1310 | `_read_top_process_cached` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 1324 | `_diff_top_process` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 1349 | `_read_top_process` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 1360 | `read_top_process_page` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1383 | `_read_mem_usage` | function | `SENSOR-MEM` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1408 | `_sample_gpu_history` | function | `GPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1438 | `_sample_net_history` | function | `SENSOR-NET` | U/D/F/L: fixture formula, call trace, failures, live where available |
@@ -544,9 +544,9 @@ Every top-level function/class and class method under `src/`, plus the root entr
 | [ ] | 1616 | `_read_battery_sys` | function | `POWER` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1652 | `_read_battery_periph` | function | `POWER` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1677 | `_read_battery_bolt` | function | `POWER` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1710 | `_read_intel_gpu_engine_times` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1760 | `_read_intel_gpu_metrics` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1789 | `_read_intel_gpu_metrics_cached` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 1710 | `_read_intel_gpu_engine_times` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 1760 | `_read_intel_gpu_metrics` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 1789 | `_read_intel_gpu_metrics_cached` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1802 | `_gpu_cache_ttl` | function | `GPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1809 | `_nvidia_cap` | function | `GPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1818 | `_pynvml_handle_get` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
