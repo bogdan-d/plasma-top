@@ -175,13 +175,42 @@ EOF
 		lang/en.toml
 	echo
 	echo '## tool paths'
-	for tool_name in git bash python3 plasmashell kpackagetool6 fastfetch ip iw ss nvidia-smi; do
+	for tool_name in git bash python3 plasmashell kpackagetool6 fastfetch ip iw ss lspci nvidia-smi; do
 		if command -v "$tool_name" >/dev/null 2>&1; then
 			printf '%s=%s\n' "$tool_name" "$(command -v "$tool_name")"
 		else
 			printf '%s=missing\n' "$tool_name"
 		fi
 	done
+	echo
+	echo '## DRM GPU inventory'
+	local drm_path driver_path
+	for drm_path in /sys/class/drm/card[0-9]; do
+		[[ -e "$drm_path" ]] || continue
+		driver_path="$(readlink -f "$drm_path/device/driver" 2>/dev/null || true)"
+		printf '%s vendor=%s device=%s driver=%s\n' \
+			"$(basename "$drm_path")" \
+			"$(cat "$drm_path/device/vendor" 2>/dev/null || printf missing)" \
+			"$(cat "$drm_path/device/device" 2>/dev/null || printf missing)" \
+			"${driver_path##*/}"
+	done
+	if command -v lspci >/dev/null 2>&1; then
+		echo
+		echo '## PCI display inventory'
+		lspci -nnk 2>&1 | grep -A3 -Ei 'VGA|Display|3D' || true
+	fi
+	echo
+	echo '## power supply inventory'
+	local power_path
+	for power_path in /sys/class/power_supply/*; do
+		[[ -e "$power_path" ]] || continue
+		printf '%s type=%s\n' \
+			"$(basename "$power_path")" \
+			"$(cat "$power_path/type" 2>/dev/null || printf missing)"
+	done
+	echo
+	echo '## generic hidraw node count'
+	find /sys/class/hidraw -mindepth 1 -maxdepth 1 -printf . 2>/dev/null | wc -c
 	echo
 	echo '## python environment'
 	"$python_bin" - <<'PY'
