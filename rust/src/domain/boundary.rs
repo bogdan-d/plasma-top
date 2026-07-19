@@ -38,6 +38,62 @@ pub enum BusKind {
     System,
 }
 
+/// Desktop-notification urgency.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NotificationUrgency {
+    /// Critical urgency used by every current PiroStats alert.
+    Critical,
+}
+
+/// Desktop-notification expiry policy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NotificationTimeout {
+    /// Keep the notification until the desktop or user dismisses it.
+    Never,
+}
+
+/// Complete desktop-notification payload passed to the production adapter.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NotificationPayload {
+    /// Notification title.
+    pub title: String,
+    /// Notification body.
+    pub body: String,
+    /// Freedesktop icon name.
+    pub icon: String,
+    /// Desktop urgency hint.
+    pub urgency: NotificationUrgency,
+    /// Desktop expiry policy.
+    pub timeout: NotificationTimeout,
+}
+
+/// Failure returned by a desktop-notification adapter.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NotificationError {
+    /// Human-readable adapter failure detail.
+    pub detail: String,
+}
+
+impl Display for NotificationError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        write!(formatter, "desktop notification failed: {}", self.detail)
+    }
+}
+
+impl std::error::Error for NotificationError {}
+
+/// Desktop-notification boundary shared by production and deterministic fakes.
+pub trait NotificationFacade {
+    /// Attempts to display one exact notification payload.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`NotificationError`] when the desktop service is unavailable or
+    /// rejects the notification. Notification state-machine callers must retain
+    /// their state transition and report the failure instead of panicking.
+    fn send(&mut self, payload: &NotificationPayload) -> Result<(), NotificationError>;
+}
+
 /// Typed argument needed by the currently ported D-Bus methods.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum DbusArgument {

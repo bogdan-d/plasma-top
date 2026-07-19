@@ -60,9 +60,9 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [x] | `rust/src/domain/metric.rs` | new; `Metric`/`MetricSpec`/`Capability` contracts | `SCAFFOLD` | P1.3 mirrors `src/metrics.py` + capability map |
 | [x] | `rust/src/domain/item.rs` | new; validated `metric[:form]` `ItemToken` | `SCAFFOLD` | P1.3 token rules mirror `src/registry.py` |
 | [x] | `rust/src/domain/registry.rs` | new; token/capability derivation layer (`parse`/`unknown_item_names`/`misplaced_items`/`needed_capabilities`/`SEPARATOR_ITEMS`/`list_items`) | `DOMAIN` | P2 mirrors token+capability half of `src/registry.py`; 51-row `list-items` corpus + 51×2 misplaced matrix |
-| [x] | `rust/src/domain/boundary.rs` | new; production boundary contracts (`CommandRunner`/`DbusFacade`/`BoundaryError`) plus command/D-Bus payloads, clock, and filesystem roots | `INTEGRATION` | P4 contract slice: promoted traits out of feature-gated `test_support`; fixture fakes implement the production traits |
+| [x] | `rust/src/domain/boundary.rs` | new; production command/D-Bus/notification boundary contracts plus typed payloads, errors, clock, and filesystem roots | `INTEGRATION/NOTIFY` | P4 contract slices: production traits are shared with deterministic fakes; notification payload preserves title/body/icon/urgency/timeout and exposes typed delivery failure |
 | [x] | `rust/src/domain/readings.rs` | new; typed aggregate hardware/readings contracts (`HardwareSnapshot`, `ReadingsSnapshot`, batteries, load, process rows, SMART identity) | `INTEGRATION` | P4 contract slice: replaces placeholder capability sets with formatter/collector-ready typed models |
-| [x] | `rust/src/domain/state.rs` | new; typed aggregate mutable daemon/cache state (`DaemonStateSnapshot`, caches, timed values, rate state, GPU cache) | `INTEGRATION/GPU` | P4 contract slice plus NVIDIA permanent-init-failure cache selection; typed cross-poll state tests and GPU cache fixtures |
+| [x] | `rust/src/domain/state.rs` | new; typed aggregate mutable daemon/cache state (`DaemonStateSnapshot`, caches, timed values, rate/GPU/notification state) | `INTEGRATION/GPU/NOTIFY` | typed cross-poll state owns notification latches, including retained per-device state, alongside collector caches |
 | [x] | `rust/src/render/mod.rs` | new; render composition and public API | `RENDER-CORE` | P3 module registration + documented re-exports |
 | [x] | `rust/src/render/model.rs` | new; cells/rows/blocks, thresholds, grouping, inline HTML | `RENDER-CORE` | P3 unit tests + fixed Python byte corpus + no-table invariant |
 | [x] | `rust/src/render/mono.rs` | new; five-plan table-free monospace serializer | `RENDER-CORE` | P3 unit/width sweep + fixed Python byte corpus covering every plan |
@@ -72,6 +72,7 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [x] | `rust/src/render/formatter.rs` | new; main panel/tooltip formatter, item dispatch, canonical width, and formatter-owned irregular rows | `FORMATTER` | P4 byte-identical panel H/V + tooltip goldens, canonical-width guard, and mapped Python formatter oracle |
 | [x] | `rust/src/render/chart.rs` | new; deterministic tooltip graph PNG rasterizer (grid/labels/fill/line/overlay) and PNG encode/decode test corpus | `CHART` | P4 decoded-pixel parity against `src/chart.py` for empty/overlay/single/constant corpora + PNG chunk/CRC round-trip |
 | [x] | `rust/src/page_commands.rs` | new; tooltip page registry, command execution/cache, connections formatting, title/pager/default click | `PAGES` | P4 exact Python corpora + fake command traces cover argv, 5-second timeout, PTY fallback, cache, output/error cases, service/process resolution, and page shell |
+| [x] | `rust/src/notify.rs` | new; notification edge/hold/hysteresis state machine and non-fatal facade degradation reporting | `NOTIFY` | P4 exact ordered payload corpus covers all ten notification types, boundaries, monotonic hold, recovery/retrigger, exclusions, retained device state, disabled/absent inputs, and service failure |
 | [x] | `rust/src/render/pages.rs` | new; CPU-core, process, and graphs deep-dive page renderer | `PAGES` | P4 exact CPU/process HTML corpora + graphs image/legend/vendor/network structure tests; table-free tooltip shell |
 | [x] | `rust/src/sensors/mod.rs` | new; sensor composition map | `SENSOR-CPU` | P3 module registration for incremental sensor lanes |
 | [x] | `rust/src/sensors/cpu.rs` | new; CPU discovery, `/proc/stat` diffs, uptime/loadavg, cpufreq/turbo, and per-core histories | `SENSOR-CPU` | P3 ports CPU-owned pieces of `src/sensors.py`; 17 focused tests cover first/delta/reset/malformed/history/discovery/fallback |
@@ -98,6 +99,7 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [x] | `rust/src/test_support/fake_clock.rs` | new; deterministic clock (`at`/`advance`/`tick`/`set_advance_step`) | `FIXTURES` | P2 saturating overflow invariants |
 | [x] | `rust/src/test_support/fake_command_runner.rs` | new; argv-keyed FIFO replies/errors + timeout-aware production `CommandRunner` implementation + call trace | `FIXTURES/INTEGRATION` | distinct-argv isolation, exhausted queue, queued adapter failure, and exact 3s/5s timeout traces |
 | [x] | `rust/src/test_support/fake_dbus.rs` | new; signature-keyed D-Bus replies + production `DbusFacade` implementation + exact request trace | `FIXTURES/INTEGRATION` | FIFO order, arguments/timeouts, and empty-queue error |
+| [x] | `rust/src/test_support/fake_notification.rs` | new; deterministic notification facade with ordered payload recording and queued results | `FIXTURES/NOTIFY` | records exact payload order, including failed calls; no desktop service access in tests |
 | [x] | `rust/src/test_support/fixture_loader.rs` | new; `load_text`/`load_bytes`/`load_oracle_fixture` + `OracleFixtureRaw` untyped view | `FIXTURES` | P2 typed deserialization deferred to Wave 3/4 |
 | [x] | `rust/tests/fixtures/**` | new; 8 sample fixtures (proc/sys text, oracle TOML, cmd JSON, dbus TOML) | `FIXTURES` | P2 mirrors BASE schema; consumed by loader tests |
 | [x] | `rust/tests/parity_runner.sh` | new; Python/Rust parity diff stub | `FIXTURES` | exits 77 until DAEMON-CLI exposes the Rust `render` command; formatter internals are now integrated |
@@ -118,7 +120,7 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [x] | `src/items.py` | port then remove | `FORMATTER` | reusable cell/row builders mapped to Rust formatter/cells tests and byte goldens |
 | [ ] | `src/metrics.py` | port then remove | `DOMAIN` | symbol + differential parity |
 | [ ] | `src/mono_render.py` | port then remove | `RENDER-CORE` | symbol + differential parity |
-| [ ] | `src/notifier.py` | port then remove | `NOTIFY` | symbol + differential parity |
+| [x] | `src/notifier.py` | port then remove | `NOTIFY` | all five symbols mapped to Rust notification boundary/state machine with exact payload and transition tests |
 | [x] | `src/pages.py` | port then remove | `PAGES` | all current page symbols mapped to `rust/src/page_commands.rs` + `rust/src/render/pages.rs`; exact helper/page HTML corpora and command fault traces |
 | [ ] | `src/pagestate.py` | port then remove | `RUNTIME` | symbol + differential parity |
 | [x] | `src/registry.py` | port then remove | `DOMAIN/FORMATTER` | token/capability and render-dispatch halves mapped to verified Rust domain/formatter suites |
@@ -144,7 +146,7 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [ ] | `tests/test_items.py` | retain then port/archive | `BASE/DOMAIN` | existing assertion mapped to Rust |
 | [ ] | `tests/test_lint.py` | retain then port/archive | `BASE/INTEGRATION` | existing assertion mapped to Rust |
 | [ ] | `tests/test_mono_render.py` | retain then port/archive | `BASE/RENDER-CORE` | existing assertion mapped to Rust |
-| [ ] | `tests/test_notifier.py` | retain then port/archive | `BASE/NOTIFY` | existing assertion mapped to Rust |
+| [x] | `tests/test_notifier.py` | retain oracle; mapped to Rust notification suite | `BASE/NOTIFY` | all existing hold/hysteresis assertions preserved and expanded across every alert/failure path |
 | [ ] | `tests/test_oracle.py` | retain then port/archive | `BASE/INTEGRATION` | oracle fixture/render parity mapped to Rust |
 | [ ] | `tests/test_render_model.py` | retain then port/archive | `BASE/RENDER-CORE` | existing assertion mapped to Rust |
 | [x] | `tests/test_sensors.py` | retain then port/archive | `BASE/SENSOR-DISK` | existing mount-resolution assertions mapped to Rust disk tests; Python baseline still runs 4/4 |
@@ -381,11 +383,11 @@ Every top-level function/class and class method under `src/`, plus the root entr
 
 | Done | Line | Symbol | Kind | Lane | Evidence required |
 |---|---:|---|---|---|---|
-| [ ] | 26 | `_send` | function | `NOTIFY` | U/D: direct + Python differential; boundaries |
-| [ ] | 41 | `Latch` | class | `NOTIFY` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 49 | `NotifState` | class | `NOTIFY` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 64 | `_sustained` | function | `NOTIFY` | U/D: direct + Python differential; boundaries |
-| [ ] | 95 | `check_and_notify` | function | `NOTIFY` | U/D: direct + Python differential; boundaries |
+| [x] | 26 | `_send` | function | `NOTIFY` | U/F E1: typed `NotificationFacade` + fake records exact title/body/icon/critical/never payloads; queued service failure is reported and later alerts continue |
+| [x] | 41 | `Latch` | class | `NOTIFY` | U: mapped to `NotificationLatch`; default, hold, active, clear, and retrigger transitions covered |
+| [x] | 49 | `NotifState` | class | `NOTIFY` | U: mapped to daemon-owned `NotificationState`; scalar and per-device latches plus Python retention-on-removal covered |
+| [x] | 64 | `_sustained` | function | `NOTIFY` | U/D: monotonic elapsed hold, zero hold, continuous-trip reset, hysteresis/no-hysteresis, one edge per episode |
+| [x] | 95 | `check_and_notify` | function | `NOTIFY` | U/D/F E1: all ten types, exact ordered payloads, thresholds, exclusions, disable/absence, device ownership, recovery/retrigger, and non-fatal facade failure |
 
 ### `src/pages.py`
 
@@ -821,25 +823,25 @@ Existing tests remain oracle evidence until mapped to a passing Rust test or int
 
 | Done | Line | Symbol | Kind | Lane | Evidence required |
 |---|---:|---|---|---|---|
-| [ ] | 15 | `_Clock` | class | `BASE/NOTIFY` | P: preserve assertion; map to Rust test |
-| [ ] | 17 | `_Clock.__init__` | method | `BASE/NOTIFY` | P: preserve assertion; map to Rust test |
-| [ ] | 20 | `_Clock.__call__` | method | `BASE/NOTIFY` | P: preserve assertion; map to Rust test |
-| [ ] | 23 | `_Clock.advance` | method | `BASE/NOTIFY` | P: preserve assertion; map to Rust test |
-| [ ] | 27 | `_Hw` | class | `BASE/NOTIFY` | P: preserve assertion; map to Rust test |
-| [ ] | 33 | `sent` | function | `BASE/NOTIFY` | P: preserve assertion; map to Rust test |
-| [ ] | 42 | `clock` | function | `BASE/NOTIFY` | P: preserve assertion; map to Rust test |
-| [ ] | 48 | `_cfg` | function | `BASE/NOTIFY` | P: preserve assertion; map to Rust test |
-| [ ] | 58 | `_poll` | function | `BASE/NOTIFY` | P: preserve assertion; map to Rust test |
-| [ ] | 66 | `test_cpu_temp_spike_never_notifies` | function | `BASE/NOTIFY` | P: preserve assertion; map to Rust test |
-| [ ] | 75 | `test_cpu_temp_notifies_once_when_sustained` | function | `BASE/NOTIFY` | P: preserve assertion; map to Rust test |
-| [ ] | 84 | `test_cpu_temp_hysteresis_blocks_rattle` | function | `BASE/NOTIFY` | P: preserve assertion; map to Rust test |
-| [ ] | 96 | `test_cpu_temp_rearms_after_cooling` | function | `BASE/NOTIFY` | P: preserve assertion; map to Rust test |
-| [ ] | 108 | `test_cpu_temp_hold_restarts_on_a_dip` | function | `BASE/NOTIFY` | P: preserve assertion; map to Rust test |
-| [ ] | 118 | `test_cpu_temp_sustain_zero_fires_immediately` | function | `BASE/NOTIFY` | P: preserve assertion; map to Rust test |
-| [ ] | 127 | `test_cpu_temp_notification_off_stays_silent` | function | `BASE/NOTIFY` | P: preserve assertion; map to Rust test |
-| [ ] | 136 | `test_sustained_hold_measures_time_not_polls` | function | `BASE/NOTIFY` | P: preserve assertion; map to Rust test |
-| [ ] | 145 | `test_sustained_fires_once_per_episode` | function | `BASE/NOTIFY` | P: preserve assertion; map to Rust test |
-| [ ] | 156 | `test_sustained_without_hysteresis_clears_at_the_trip_point` | function | `BASE/NOTIFY` | P: preserve assertion; map to Rust test |
+| [x] | 15 | `_Clock` | class | `BASE/NOTIFY` | P/U: mapped to shared `FakeClock` monotonic fixture |
+| [x] | 17 | `_Clock.__init__` | method | `BASE/NOTIFY` | P/U: deterministic zero/start state covered by `FakeClock` tests |
+| [x] | 20 | `_Clock.__call__` | method | `BASE/NOTIFY` | P/U: one monotonic snapshot is passed to each notification pass |
+| [x] | 23 | `_Clock.advance` | method | `BASE/NOTIFY` | P/U: explicit duration advancement drives hold boundaries without sleeping |
+| [x] | 27 | `_Hw` | class | `BASE/NOTIFY` | P/U: typed `HardwareSnapshot::cpu_count` drives load normalization |
+| [x] | 33 | `sent` | function | `BASE/NOTIFY` | P/U: shared `FakeNotificationFacade` records full ordered payloads, not bodies only |
+| [x] | 42 | `clock` | function | `BASE/NOTIFY` | P/U: shared fake clock fixture |
+| [x] | 48 | `_cfg` | function | `BASE/NOTIFY` | P/U: isolated enable-flag helper in Rust suite |
+| [x] | 58 | `_poll` | function | `BASE/NOTIFY` | P/U: Rust `poll_cpu` drives exact pass/state/facade contract |
+| [x] | 66 | `test_cpu_temp_spike_never_notifies` | function | `BASE/NOTIFY` | P/U: same boost-spike sequence remains silent |
+| [x] | 75 | `test_cpu_temp_notifies_once_when_sustained` | function | `BASE/NOTIFY` | P/U: same 60 × 1.5s sustained corpus emits once |
+| [x] | 84 | `test_cpu_temp_hysteresis_blocks_rattle` | function | `BASE/NOTIFY` | P/U: threshold-band sequence emits no duplicate |
+| [x] | 96 | `test_cpu_temp_rearms_after_cooling` | function | `BASE/NOTIFY` | P/U: below-clear recovery followed by retrigger emits twice |
+| [x] | 108 | `test_cpu_temp_hold_restarts_on_a_dip` | function | `BASE/NOTIFY` | P/U: one sub-trip sample resets continuous hold |
+| [x] | 118 | `test_cpu_temp_sustain_zero_fires_immediately` | function | `BASE/NOTIFY` | P/U: zero-hold exact payload corpus fires on first threshold sample |
+| [x] | 127 | `test_cpu_temp_notification_off_stays_silent` | function | `BASE/NOTIFY` | P/U: disabled/absent pass remains silent and state-stable |
+| [x] | 136 | `test_sustained_hold_measures_time_not_polls` | function | `BASE/NOTIFY` | P/U: two samples bracketing 61 elapsed seconds trip independent of poll count |
+| [x] | 145 | `test_sustained_fires_once_per_episode` | function | `BASE/NOTIFY` | P/U: active latch suppresses repeated sends |
+| [x] | 156 | `test_sustained_without_hysteresis_clears_at_the_trip_point` | function | `BASE/NOTIFY` | P/U: load-style clear==trip re-arms below threshold |
 
 ### `tests/test_oracle.py`
 
@@ -1214,6 +1216,8 @@ legend as the rest of this file (U/D/F/I/L/P + E0–E5).
 | [x] | `DbusArgument` / `DbusRequest` | enum/struct | `INTEGRATION/POWER` | U/F: exact typed method arguments and per-call timeout are recorded by `FakeDbus`; POWER asserts `Properties.Get/GetAll` and 15-second `SmartUpdate` requests |
 | [x] | `BoundaryError` | enum | `INTEGRATION/HID` | U: promoted shared boundary error contract for command/D-Bus production traits and fixture failures; HID adds typed absent/open/write context through `HidFailed` |
 | [x] | `CommandRunner` / `DbusFacade` | traits | `INTEGRATION` | U: promoted production boundary traits implemented by fakes; command contract records exact program/argv/timeout (`3s` network, `5s` pages) |
+| [x] | `NotificationPayload` / `NotificationUrgency` / `NotificationTimeout` | struct/enums | `INTEGRATION/NOTIFY` | U/F E1: typed production payload preserves exact title/body/icon plus critical urgency and never-expire policy |
+| [x] | `NotificationError` / `NotificationFacade` | struct/trait | `INTEGRATION/NOTIFY` | U/F: explicit service failure contract shared by production and fake; notification pass records degradation and continues |
 | [x] | `ClockSnapshot` | struct | `SCAFFOLD`/`FIXTURES` | U: default at zero/UNIX_EPOCH |
 | [x] | `FilesystemRoots` | struct | `SCAFFOLD`/`FIXTURES` | U: default + `state_root()` derivation |
 
@@ -1235,7 +1239,16 @@ legend as the rest of this file (U/D/F/I/L/P + E0–E5).
 | [x] | `TimedValue` | struct | `INTEGRATION` | U: empty default captures the shared TTL-cache shape |
 | [x] | `BatterySystemCache` / `BatteryPeripheralCache` / `NetworkInfoCache` | structs | `INTEGRATION` | U: typed cached cross-poll state replaces stringly placeholder state |
 | [x] | `CounterRateState` / `GpuCache` | structs | `INTEGRATION` | U: typed diff/cache state shared by future collectors |
-| [x] | `DaemonStateSnapshot` | struct | `INTEGRATION` | U: default/invariant tests cover typed cross-poll state plus retained page/poll bookkeeping |
+| [x] | `NotificationLatch` / `NotificationState` | structs | `NOTIFY` | U/D: sustained and edge state, per-device ownership, default invariants, and retention after device removal match Python |
+| [x] | `DaemonStateSnapshot` | struct | `INTEGRATION/NOTIFY` | U: default/invariant tests cover typed cross-poll state, daemon-owned notification latches, and retained page/poll bookkeeping |
+
+### `rust/src/notify.rs`
+
+| Done | Symbol | Kind | Lane | Evidence required |
+|---|---|---|---|---|
+| [x] | `NotificationFailure` / `NotificationReport` | structs | `NOTIFY` | U/F: ordered attempted/failure accounting exposes adapter degradation without rolling back state |
+| [x] | `sustained` | function | `NOTIFY` | U/D: monotonic hold, zero hold, hysteresis, recovery, dip reset, and one-send-per-episode parity |
+| [x] | `check_and_notify` | function | `NOTIFY` | U/D/F E1: all ten alert types, exact payload order/metadata/text, boundaries, exclusions, state retention, disable/absence, and facade failure |
 
 ### `rust/src/render/model.rs`
 
@@ -1322,6 +1335,7 @@ legend as the rest of this file (U/D/F/I/L/P + E0–E5).
 |---|---|---|---|---|
 | [x] | `FixtureRoot` | struct | `FIXTURES` | U: default + `join` + `proc`/`sys`/`run` subtrees + `from_env` (`CARGO_MANIFEST_DIR`-resolved) |
 | [x] | `FakeClock` | struct | `FIXTURES` | U: `at` + `advance` + `tick` + `set_advance_step`; saturating overflow on monotonic + wall |
+| [x] | `FakeNotificationFacade` | struct | `FIXTURES/NOTIFY` | U/F E1: ordered full-payload recording and queued results; records failed attempts; no real desktop calls |
 | [x] | `FakeCommandRunner` / `CommandCall` + re-exported `CommandRunner` trait | structs + trait | `FIXTURES`/`INTEGRATION` | U: argv-keyed FIFO output/error queues + exact program/argv/timeout call trace + `next_call`; implements production `CommandRunner` |
 | [x] | `FakeDbus` + re-exported `DbusFacade` trait | struct + trait | `FIXTURES`/`INTEGRATION` | U: signature-keyed reply FIFO + exact `DbusRequest` trace including typed arguments and timeout; implements promoted `domain::boundary::DbusFacade` |
 | [x] | `FixtureLoader` + `OracleFixtureRaw` | struct + struct | `FIXTURES` | U: `load_text`/`load_bytes`/`load_oracle_fixture` (raw `toml::Value` view); typed deserialization deferred to Wave 3/4 |

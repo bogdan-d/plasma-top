@@ -20,16 +20,19 @@
 pub mod fake_clock;
 pub mod fake_command_runner;
 pub mod fake_dbus;
+pub mod fake_notification;
 pub mod fixture_loader;
 pub mod fixture_root;
 
 pub use crate::domain::boundary::{
     BoundaryError, BusKind, ClockSnapshot, CommandOutput, CommandRunner, CommandStatus,
-    DbusArgument, DbusFacade, DbusOutput, DbusRequest,
+    DbusArgument, DbusFacade, DbusOutput, DbusRequest, NotificationError, NotificationFacade,
+    NotificationPayload, NotificationTimeout, NotificationUrgency,
 };
 pub use fake_clock::FakeClock;
 pub use fake_command_runner::{CommandCall, FakeCommandRunner};
 pub use fake_dbus::{DbusCall, FakeDbus};
+pub use fake_notification::FakeNotificationFacade;
 pub use fixture_loader::{FixtureError, FixtureLoader, OracleFixtureRaw};
 pub use fixture_root::FixtureRoot;
 
@@ -79,6 +82,7 @@ mod tests {
             _clock: FakeClock,
             _runner: FakeCommandRunner,
             _dbus: FakeDbus,
+            _notifications: FakeNotificationFacade,
             _loader: FixtureLoader,
             _root: FixtureRoot,
         ) {
@@ -88,6 +92,7 @@ mod tests {
             FakeClock::default(),
             FakeCommandRunner::new(),
             FakeDbus::new(),
+            FakeNotificationFacade::new(),
             FixtureLoader::default(),
             FixtureRoot::default(),
         );

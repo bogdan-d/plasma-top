@@ -10,7 +10,8 @@ pub mod state;
 
 pub use boundary::{
     BoundaryError, BusKind, ClockSnapshot, CommandOutput, CommandRunner, CommandStatus,
-    DbusArgument, DbusFacade, DbusOutput, DbusRequest, FilesystemRoots,
+    DbusArgument, DbusFacade, DbusOutput, DbusRequest, FilesystemRoots, NotificationError,
+    NotificationFacade, NotificationPayload, NotificationTimeout, NotificationUrgency,
 };
 pub use form::{Form, Shape, Surface, SurfaceSet};
 pub use item::{ItemParseError, ItemRendering, ItemToken};
@@ -27,5 +28,5 @@ pub use registry::{
 };
 pub use state::{
     BatteryPeripheralCache, BatterySystemCache, CounterRateState, DaemonStateSnapshot, GpuCache,
-    NetworkInfoCache, TimedValue,
+    NetworkInfoCache, NotificationLatch, NotificationState, TimedValue,
 };
