@@ -60,7 +60,9 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [x] | `rust/src/domain/metric.rs` | new; `Metric`/`MetricSpec`/`Capability` contracts | `SCAFFOLD` | P1.3 mirrors `src/metrics.py` + capability map |
 | [x] | `rust/src/domain/item.rs` | new; validated `metric[:form]` `ItemToken` | `SCAFFOLD` | P1.3 token rules mirror `src/registry.py` |
 | [x] | `rust/src/domain/registry.rs` | new; token/capability derivation layer (`parse`/`unknown_item_names`/`misplaced_items`/`needed_capabilities`/`SEPARATOR_ITEMS`/`list_items`) | `DOMAIN` | P2 mirrors token+capability half of `src/registry.py`; 51-row `list-items` corpus + 51×2 misplaced matrix |
-| [x] | `rust/src/domain/boundary.rs` | new; boundary stubs (command/D-Bus/clock/FS/hardware/readings/state) | `SCAFFOLD` | P1.3 placeholders refined by downstream lanes |
+| [x] | `rust/src/domain/boundary.rs` | new; production boundary contracts (`CommandRunner`/`DbusFacade`/`BoundaryError`) plus command/D-Bus payloads, clock, and filesystem roots | `INTEGRATION` | P4 contract slice: promoted traits out of feature-gated `test_support`; fixture fakes implement the production traits |
+| [x] | `rust/src/domain/readings.rs` | new; typed aggregate hardware/readings contracts (`HardwareSnapshot`, `ReadingsSnapshot`, batteries, load, process rows, SMART identity) | `INTEGRATION` | P4 contract slice: replaces placeholder capability sets with formatter/collector-ready typed models |
+| [x] | `rust/src/domain/state.rs` | new; typed aggregate mutable daemon/cache state (`DaemonStateSnapshot`, caches, timed values, rate state, GPU cache) | `INTEGRATION` | P4 contract slice: replaces placeholder state with typed cross-poll mutation contract |
 | [x] | `rust/src/render/mod.rs` | new; render composition and public API | `RENDER-CORE` | P3 module registration + documented re-exports |
 | [x] | `rust/src/render/model.rs` | new; cells/rows/blocks, thresholds, grouping, inline HTML | `RENDER-CORE` | P3 unit tests + fixed Python byte corpus + no-table invariant |
 | [x] | `rust/src/render/mono.rs` | new; five-plan table-free monospace serializer | `RENDER-CORE` | P3 unit/width sweep + fixed Python byte corpus covering every plan |
@@ -1198,11 +1200,32 @@ legend as the rest of this file (U/D/F/I/L/P + E0–E5).
 
 | Done | Symbol | Kind | Lane | Evidence required |
 |---|---|---|---|---|
-| [x] | `CommandStatus` / `CommandOutput` | enum/struct | `SCAFFOLD`/`FIXTURES` | U: scaffold smoke; downstream refines adapter shape |
-| [x] | `BusKind` / `DbusOutput` | enum/struct | `SCAFFOLD`/`FIXTURES` | U: scaffold smoke; `POWER`/`NOTIFY` decode |
+| [x] | `CommandStatus` / `CommandOutput` | enum/struct | `SCAFFOLD`/`INTEGRATION` | U: shared command payload contract used by production boundaries and fixture fakes |
+| [x] | `BusKind` / `DbusOutput` | enum/struct | `SCAFFOLD`/`INTEGRATION` | U: shared D-Bus payload contract used by production boundaries and fixture fakes |
+| [x] | `BoundaryError` | enum | `INTEGRATION` | U: promoted shared boundary error contract for command/D-Bus production traits and fixture failures |
+| [x] | `CommandRunner` / `DbusFacade` | traits | `INTEGRATION` | U: promoted production boundary traits now implemented by `FakeCommandRunner` and `FakeDbus` |
 | [x] | `ClockSnapshot` | struct | `SCAFFOLD`/`FIXTURES` | U: default at zero/UNIX_EPOCH |
 | [x] | `FilesystemRoots` | struct | `SCAFFOLD`/`FIXTURES` | U: default + `state_root()` derivation |
-| [x] | `HardwareSnapshot` / `ReadingsSnapshot` / `DaemonStateSnapshot` | structs | `SCAFFOLD`/`FIXTURES` | U: defaults match Python `DaemonState`/`HardwareInfo` shape placeholders |
+
+### `rust/src/domain/readings.rs`
+
+| Done | Symbol | Kind | Lane | Evidence required |
+|---|---|---|---|---|
+| [x] | `BatteryState` | enum | `INTEGRATION` | U: stable token mapping for `"charging"`, `"discharging"`, and `"fully-charged"` |
+| [x] | `BatterySystemReading` / `BatteryPeripheralReading` | structs | `INTEGRATION` | U: typed battery aggregates replace preformatted placeholder contracts |
+| [x] | `DiskUsageReading` / `LoadAverage` | structs | `INTEGRATION` | U: typed disk-usage and load-average aggregates for formatter/collector lanes |
+| [x] | `TopProcessSummary` / `TopProcessDetails` | structs | `INTEGRATION` | U: typed process rows replace tuple-only placeholder contracts |
+| [x] | `DiskSmartInterface` / `SmartDisk` | enum/struct | `INTEGRATION` | U: typed SMART identity contract replaces raw tuple placeholders |
+| [x] | `HardwareSnapshot` / `ReadingsSnapshot` | structs | `INTEGRATION` | U: default/invariant tests cover typed aggregate replacement for the old placeholder-only capability/metric sets |
+
+### `rust/src/domain/state.rs`
+
+| Done | Symbol | Kind | Lane | Evidence required |
+|---|---|---|---|---|
+| [x] | `TimedValue` | struct | `INTEGRATION` | U: empty default captures the shared TTL-cache shape |
+| [x] | `BatterySystemCache` / `BatteryPeripheralCache` / `NetworkInfoCache` | structs | `INTEGRATION` | U: typed cached cross-poll state replaces stringly placeholder state |
+| [x] | `CounterRateState` / `GpuCache` | structs | `INTEGRATION` | U: typed diff/cache state shared by future collectors |
+| [x] | `DaemonStateSnapshot` | struct | `INTEGRATION` | U: default/invariant tests cover typed cross-poll state plus retained page/poll bookkeeping |
 
 ### `rust/src/render/model.rs`
 
@@ -1236,10 +1259,10 @@ legend as the rest of this file (U/D/F/I/L/P + E0–E5).
 |---|---|---|---|---|
 | [x] | `FixtureRoot` | struct | `FIXTURES` | U: default + `join` + `proc`/`sys`/`run` subtrees + `from_env` (`CARGO_MANIFEST_DIR`-resolved) |
 | [x] | `FakeClock` | struct | `FIXTURES` | U: `at` + `advance` + `tick` + `set_advance_step`; saturating overflow on monotonic + wall |
-| [x] | `FakeCommandRunner` + `CommandRunner` trait | struct + trait | `FIXTURES` | U: argv-keyed FIFO `enqueue` + `run` + ordered `call_trace` + `next_call` peek + empty/exhausted-queue error |
-| [x] | `FakeDbus` + `DbusFacade` trait | struct + trait | `FIXTURES` | U: signature-keyed `(bus,service,path,iface,member)` FIFO + `call_trace` + empty-queue error |
+| [x] | `FakeCommandRunner` + re-exported `CommandRunner` trait | struct + trait | `FIXTURES`/`INTEGRATION` | U: argv-keyed FIFO `enqueue` + `run` + ordered `call_trace` + `next_call` peek; implements promoted `domain::boundary::CommandRunner` |
+| [x] | `FakeDbus` + re-exported `DbusFacade` trait | struct + trait | `FIXTURES`/`INTEGRATION` | U: signature-keyed `(bus,service,path,iface,member)` FIFO + `call_trace`; implements promoted `domain::boundary::DbusFacade` |
 | [x] | `FixtureLoader` + `OracleFixtureRaw` | struct + struct | `FIXTURES` | U: `load_text`/`load_bytes`/`load_oracle_fixture` (raw `toml::Value` view); typed deserialization deferred to Wave 3/4 |
-| [x] | `FixtureError` / `RuntimeError` | enums | `FIXTURES` | U: `Io`/`TomlParse`/`MissingTable`/`NotATable` (loader); `CommandNotQueued`/`DbusCallNotQueued` (fakes) |
+| [x] | `FixtureError` / re-exported `BoundaryError` | enums | `FIXTURES`/`INTEGRATION` | U: loader errors stay test-local; fake boundary failures now use the promoted production `BoundaryError` contract |
 | [x] | `DbusCall` type alias | alias | `FIXTURES` | U: `(BusKind, String, String, String, String)` for trace slices |
 
 ### `rust/src/sensors/cpu.rs`

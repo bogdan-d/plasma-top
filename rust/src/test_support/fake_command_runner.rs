@@ -10,32 +10,7 @@ use std::collections::{HashMap, VecDeque};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-use crate::domain::boundary::CommandOutput;
-
-use super::RuntimeError;
-
-/// Command-runner boundary implemented by the production adapter and the
-/// in-memory fake.
-///
-/// The trait is intentionally minimal: it accepts the exact program and argv
-/// and returns the captured output. The production adapter (Wave 5 COLLECTOR,
-/// `rust/src/sensors/source.rs`) adds timeout, environment, and shell-policy
-/// enforcement on top of this contract; tests use [`FakeCommandRunner`] to
-/// assert exact request shapes without spawning a process.
-///
-/// The trait is dyn-compatible ([trait-object-safety](https://doc.rust-lang.org/reference/items/traits.html#object-safety))
-/// so callers may store `Box<dyn CommandRunner>` when polymorphism is needed.
-pub trait CommandRunner {
-    /// Runs `program` with `args` and returns the captured output.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`RuntimeError::CommandNotQueued`] when a fake runner is asked
-    /// to execute a command for which no fixture reply was enqueued. The
-    /// production adapter returns adapter-specific error variants (to be
-    /// promoted into `error::Error` by the COLLECTOR lane).
-    fn run(&mut self, program: &Path, args: &[OsString]) -> Result<CommandOutput, RuntimeError>;
-}
+use crate::domain::boundary::{BoundaryError, CommandOutput, CommandRunner};
 
 /// In-memory `CommandRunner` fake keyed by `(program, args)`.
 ///
@@ -50,8 +25,8 @@ pub trait CommandRunner {
 /// use std::ffi::OsString;
 /// use std::path::Path;
 ///
-/// use pirostats::domain::boundary::{CommandOutput, CommandStatus};
-/// use pirostats::test_support::{CommandRunner, FakeCommandRunner};
+/// use pirostats::domain::boundary::{CommandOutput, CommandRunner, CommandStatus};
+/// use pirostats::test_support::FakeCommandRunner;
 ///
 /// let mut runner = FakeCommandRunner::new();
 /// runner.enqueue(
@@ -133,12 +108,12 @@ impl FakeCommandRunner {
 }
 
 impl CommandRunner for FakeCommandRunner {
-    fn run(&mut self, program: &Path, args: &[OsString]) -> Result<CommandOutput, RuntimeError> {
+    fn run(&mut self, program: &Path, args: &[OsString]) -> Result<CommandOutput, BoundaryError> {
         let key = (program.to_path_buf(), args.to_vec());
         self.call_trace.push(key.clone());
         match self.outputs.get_mut(&key).and_then(VecDeque::pop_front) {
             Some(output) => Ok(output),
-            None => Err(RuntimeError::CommandNotQueued {
+            None => Err(BoundaryError::CommandNotQueued {
                 program: key.0,
                 args: key.1,
             }),
@@ -256,7 +231,7 @@ mod tests {
         };
 
         match err {
-            RuntimeError::CommandNotQueued { program, args } => {
+            BoundaryError::CommandNotQueued { program, args } => {
                 assert_eq!(program, PathBuf::from("/bin/missing"));
                 assert_eq!(args, vec![OsString::from("--flag")]);
             }
@@ -277,7 +252,10 @@ mod tests {
         assert!(first.is_ok());
 
         let second = runner.run(Path::new("/bin/once"), &[]);
-        assert!(matches!(second, Err(RuntimeError::CommandNotQueued { .. })));
+        assert!(matches!(
+            second,
+            Err(BoundaryError::CommandNotQueued { .. })
+        ));
     }
 
     #[test]

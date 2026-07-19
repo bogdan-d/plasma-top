@@ -345,7 +345,8 @@ mod tests {
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use crate::test_support::{CommandRunner, FakeClock, FakeCommandRunner};
+    use crate::domain::boundary::CommandRunner;
+    use crate::test_support::{FakeClock, FakeCommandRunner};
 
     struct TempTree {
         root: PathBuf,

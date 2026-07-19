@@ -8,46 +8,13 @@
 
 use std::collections::{HashMap, VecDeque};
 
-use crate::domain::boundary::{BusKind, DbusOutput};
-
-use super::RuntimeError;
+use crate::domain::boundary::{BoundaryError, BusKind, DbusFacade, DbusOutput};
 
 /// `(bus, service, object_path, interface, member)` signature of a D-Bus call.
 ///
 /// Public so differential tests can hold a `&[DbusCall]` slice returned by
 /// [`FakeDbus::call_trace`] without unpacking the tuple on every assertion.
 pub type DbusCall = (BusKind, String, String, String, String);
-
-/// Generic D-Bus call facade implemented by the production adapters (Wave 4
-/// POWER/NOTIFY) and the in-memory fake used by integration tests.
-///
-/// The trait is intentionally narrow: it captures the decoded reply shape
-/// ([`DbusOutput`]) without committing to zbus/zmnt connection types. The
-/// production UPower, UDisks2, and freedesktop-notify facades are separate
-/// traits owned by the matching lanes; this one captures only the shared
-/// call shape so the fake can stand in for any of them.
-///
-/// The trait is dyn-compatible so callers may store `Box<dyn DbusFacade>`
-/// when polymorphism is needed.
-pub trait DbusFacade {
-    /// Invokes `member` on `interface` at `object_path` exposed by `service`
-    /// on `bus`, returning the decoded reply.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`RuntimeError::DbusCallNotQueued`] when a fake facade is asked
-    /// to dispatch a call for which no fixture reply was enqueued. The
-    /// production facades return adapter-specific error variants (to be
-    /// promoted into `error::Error` by the POWER/NOTIFY lanes).
-    fn call(
-        &mut self,
-        bus: BusKind,
-        service: &str,
-        path: &str,
-        iface: &str,
-        member: &str,
-    ) -> Result<DbusOutput, RuntimeError>;
-}
 
 /// In-memory `DbusFacade` fake keyed by `(bus, service, path, iface, member)`.
 ///
@@ -129,7 +96,7 @@ impl DbusFacade for FakeDbus {
         path: &str,
         iface: &str,
         member: &str,
-    ) -> Result<DbusOutput, RuntimeError> {
+    ) -> Result<DbusOutput, BoundaryError> {
         let key: DbusCall = (
             bus,
             service.to_owned(),
@@ -140,7 +107,7 @@ impl DbusFacade for FakeDbus {
         self.call_trace.push(key.clone());
         match self.outputs.get_mut(&key).and_then(VecDeque::pop_front) {
             Some(output) => Ok(output),
-            None => Err(RuntimeError::DbusCallNotQueued {
+            None => Err(BoundaryError::DbusCallNotQueued {
                 bus: key.0,
                 service: key.1,
                 path: key.2,
@@ -326,7 +293,7 @@ mod tests {
         };
 
         match err {
-            RuntimeError::DbusCallNotQueued {
+            BoundaryError::DbusCallNotQueued {
                 bus,
                 service,
                 path,

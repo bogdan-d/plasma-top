@@ -1,11 +1,9 @@
-//! External boundary stubs for later runtime lanes.
+//! External boundary contracts shared by runtime lanes.
 
-use std::collections::BTreeSet;
 use std::ffi::OsString;
+use std::fmt::{self, Display, Formatter};
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
-
-use crate::domain::metric::{Capability, Metric};
 
 /// Process execution status captured by the future command-runner boundary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,6 +53,152 @@ pub struct DbusOutput {
     pub member: String,
     /// Stringified payload fragments preserved for contract discussion.
     pub body: Vec<String>,
+}
+
+/// Shared boundary error contract used by command and D-Bus adapters.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BoundaryError {
+    /// A fake command runner was asked to execute a command for which no reply
+    /// was enqueued.
+    CommandNotQueued {
+        /// Program path the fake was asked to run.
+        program: PathBuf,
+        /// Argv values the fake was asked to run with.
+        args: Vec<OsString>,
+    },
+    /// A production command adapter failed before it could return output.
+    CommandFailed {
+        /// Program path or executable token.
+        program: PathBuf,
+        /// Exact argv values passed to the child process.
+        args: Vec<OsString>,
+        /// Human-readable failure detail.
+        detail: String,
+    },
+    /// A fake D-Bus facade was asked to dispatch a call for which no reply was
+    /// enqueued.
+    DbusCallNotQueued {
+        /// Which bus the fake was asked to call on.
+        bus: BusKind,
+        /// Remote service name.
+        service: String,
+        /// Object path.
+        path: String,
+        /// Interface name.
+        interface: String,
+        /// Method or signal member name.
+        member: String,
+    },
+    /// A production D-Bus facade failed before it could return a decoded reply.
+    DbusCallFailed {
+        /// Which bus the call targeted.
+        bus: BusKind,
+        /// Remote service name.
+        service: String,
+        /// Object path.
+        path: String,
+        /// Interface name.
+        interface: String,
+        /// Method or signal member name.
+        member: String,
+        /// Human-readable failure detail.
+        detail: String,
+    },
+}
+
+impl Display for BoundaryError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::CommandNotQueued { program, args } => {
+                write!(
+                    formatter,
+                    "no fixture reply queued for command `{}` with {} arg(s)",
+                    program.display(),
+                    args.len(),
+                )
+            }
+            Self::CommandFailed {
+                program,
+                args,
+                detail,
+            } => {
+                write!(
+                    formatter,
+                    "command `{}` with {} arg(s) failed: {detail}",
+                    program.display(),
+                    args.len(),
+                )
+            }
+            Self::DbusCallNotQueued {
+                bus,
+                service,
+                path,
+                interface,
+                member,
+            } => {
+                let bus_label = match bus {
+                    BusKind::Session => "session",
+                    BusKind::System => "system",
+                };
+                write!(
+                    formatter,
+                    "no fixture reply queued for D-Bus {bus_label} call \
+                     `{service}` `{path}` `{interface}` `{member}`",
+                )
+            }
+            Self::DbusCallFailed {
+                bus,
+                service,
+                path,
+                interface,
+                member,
+                detail,
+            } => {
+                let bus_label = match bus {
+                    BusKind::Session => "session",
+                    BusKind::System => "system",
+                };
+                write!(
+                    formatter,
+                    "D-Bus {bus_label} call `{service}` `{path}` `{interface}` `{member}` failed: {detail}",
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for BoundaryError {}
+
+/// Command-runner boundary implemented by production adapters and test fakes.
+pub trait CommandRunner {
+    /// Runs `program` with `args` and returns the captured output.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BoundaryError`] when the adapter cannot dispatch the command.
+    fn run(
+        &mut self,
+        program: &std::path::Path,
+        args: &[OsString],
+    ) -> Result<CommandOutput, BoundaryError>;
+}
+
+/// Generic D-Bus call facade implemented by production adapters and test fakes.
+pub trait DbusFacade {
+    /// Invokes `member` on `interface` at `object_path` exposed by `service`
+    /// on `bus`, returning the decoded reply.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BoundaryError`] when the adapter cannot dispatch the call.
+    fn call(
+        &mut self,
+        bus: BusKind,
+        service: &str,
+        path: &str,
+        iface: &str,
+        member: &str,
+    ) -> Result<DbusOutput, BoundaryError>;
 }
 
 /// Clock snapshot stub used by daemon and collection boundaries.
@@ -110,45 +254,6 @@ impl FilesystemRoots {
     }
 }
 
-/// Hardware discovery snapshot stub.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct HardwareSnapshot {
-    /// Capabilities discovered on the current host.
-    pub capabilities: BTreeSet<Capability>,
-    /// Metrics that a later collection lane can attempt to populate.
-    pub metrics: BTreeSet<Metric>,
-}
-
-/// Reading snapshot stub.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct ReadingsSnapshot {
-    /// Collection timestamp.
-    pub collected_at: ClockSnapshot,
-    /// Metrics populated in this sample.
-    pub metrics: BTreeSet<Metric>,
-}
-
-/// Mutable daemon state stub shared by later runtime lanes.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DaemonStateSnapshot {
-    /// Active tooltip page index.
-    pub active_page: usize,
-    /// Number of published pages.
-    pub page_count: usize,
-    /// Timestamp of the most recent successful poll.
-    pub last_poll: Option<ClockSnapshot>,
-}
-
-impl Default for DaemonStateSnapshot {
-    fn default() -> Self {
-        Self {
-            active_page: 0,
-            page_count: 1,
-            last_poll: None,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -166,11 +271,21 @@ mod tests {
     }
 
     #[test]
-    fn daemon_state_defaults_to_single_full_page() {
-        let state = DaemonStateSnapshot::default();
+    fn boundary_error_messages_include_context() {
+        let command = BoundaryError::CommandNotQueued {
+            program: PathBuf::from("/bin/false"),
+            args: vec![OsString::from("--flag")],
+        };
+        let dbus = BoundaryError::DbusCallFailed {
+            bus: BusKind::System,
+            service: "org.freedesktop.UPower".to_owned(),
+            path: "/org/freedesktop/UPower".to_owned(),
+            interface: "org.freedesktop.UPower".to_owned(),
+            member: "EnumerateDevices".to_owned(),
+            detail: "connection lost".to_owned(),
+        };
 
-        assert_eq!(state.active_page, 0);
-        assert_eq!(state.page_count, 1);
-        assert_eq!(state.last_poll, None);
+        assert!(format!("{command}").contains("/bin/false"));
+        assert!(format!("{dbus}").contains("connection lost"));
     }
 }
