@@ -5,5 +5,7 @@
 //! take explicit proc/sys roots and clock snapshots.
 
 pub mod cpu;
+pub mod disk;
+pub mod hwmon;
 pub mod memory;
 pub mod network;

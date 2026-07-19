@@ -36,16 +36,16 @@ Only integration owner edits this file. Lane agents write under `handoffs/`.
 | SENSOR-CPU | 3 | verified | GitHub Copilot | rust-migration-base-bootstrap | `plans/handoffs/sensor-cpu-20260719.md` | P3 CPU sensors verified: `rust/src/sensors/cpu.rs` ports the CPU-owned parts of `src/sensors.py` (CPU temp/freq/turbo discovery, aggregate/per-core `/proc/stat` diffs, uptime/loadavg, sysfs+cpuinfo frequency fallback, and history cadence) behind explicit proc/sys roots and `ClockSnapshot`; 17 focused Rust tests cover first/delta/reset/malformed/core-count-change/history/fallback paths, full all-feature Rust gates green (264 tests total), and Python sensor oracle remains green (`tests/test_sensors.py` 4/4); no dependency or lockfile change |
 | SENSOR-MEM | 3 | verified | GitHub Copilot | rust-migration-base-bootstrap | `plans/handoffs/sensor-mem-20260719.md` | P3 memory sensors verified: `rust/src/sensors/memory.rs` ports the memory-owned parts of `src/sensors.py` (`/proc/meminfo` total/available/used parsing, psutil-style `MemAvailable` fallback, swap usage, half-even GiB rounding, and bounded history cadence) behind explicit proc roots and `ClockSnapshot`; 12 focused Rust tests cover direct/fallback/zero/clamp/malformed/history/swap/rounding paths, full all-feature Rust gates green (276 tests total), direct Python `psutil` oracle checks matched the synthetic fallback fixtures, and Python sensor baseline remains green (`tests/test_sensors.py` 4/4); no dependency or lockfile change |
 | SENSOR-NET | 3 | verified | GitHub Copilot | rust-migration-base-bootstrap | `plans/handoffs/sensor-net-20260719.md` | P3 network sensors verified: `rust/src/sensors/network.rs` ports the network-owned parts of `src/sensors.py` (route-device detect, wifi SSID/signal, 10-second net-info TTL, sysfs tx/rx byte-rate diffs, and graph-page network history) behind explicit sys roots, command injection, and `ClockSnapshot`; 11 focused Rust tests cover `ip` fallback, wired/wireless parsing, TTL, interface-switch/counter-reset suppression, and history trimming, full all-feature Rust gates green (287 tests total), and Python sensor baseline remains green (`tests/test_sensors.py` 4/4); no dependency or lockfile change |
-| SENSOR-DISK | 3 | ready | — | — | — | FIXTURES verified; ready for owner assignment |
-| FORMATTER | 4 | blocked | — | — | — | waits render foundations |
-| CHART | 4 | blocked | — | — | — | waits FIXTURES |
-| PAGES | 4 | blocked | — | — | — | waits RENDER-CORE/FIXTURES |
-| PROCESS | 4 | blocked | — | — | — | waits SENSOR-CPU/FIXTURES |
-| POWER | 4 | blocked | — | — | — | waits SENSOR-DISK/FIXTURES |
+| SENSOR-DISK | 3 | verified | GitHub Copilot | rust-migration-base-bootstrap | `plans/handoffs/sensor-disk-20260719.md` | P3 disk sensors verified: `rust/src/sensors/{disk,hwmon}.rs` port the disk-owned parts of `src/sensors.py` (mount resolution, `statvfs` usage math, root-disk topology walk, sysfs-backed disk identity, hwmon disk/fan discovery, 30-second caches, and `/proc/diskstats` byte-rate diffs) behind explicit proc/sys roots and `ClockSnapshot`; 17 focused `disk` tests plus 3 focused `hwmon` tests cover mount filters, NVMe/SCSI labels, partition stacks, TTLs, rate resets, and df-style percent/rounding; full all-feature Rust gates green (307 total tests), and Python sensor baseline remains green (`tests/test_sensors.py` 4/4); no dependency or lockfile change |
+| FORMATTER | 4 | ready | — | — | — | DOMAIN/CONFIG/RENDER-CORE/TRACES verified; ready for owner assignment |
+| CHART | 4 | ready | — | — | — | FIXTURES verified; ready for owner assignment |
+| PAGES | 4 | ready | — | — | — | DOMAIN/RENDER-CORE/FIXTURES verified; ready for owner assignment |
+| PROCESS | 4 | ready | — | — | — | FIXTURES + SENSOR-CPU state types verified; ready for owner assignment |
+| POWER | 4 | ready | — | — | — | FIXTURES + SENSOR-DISK identity/cache groundwork verified; ready for owner assignment |
 | GPU | 4 | blocked | — | — | — | waits PROCESS/FIXTURES |
-| HID | 4 | blocked | — | — | — | waits SCAFFOLD/FIXTURES |
-| NOTIFY | 4 | blocked | — | — | — | waits CONFIG/FIXTURES |
-| COLLECTOR | 5 | blocked | — | — | — | waits all sensor lanes |
+| HID | 4 | ready | — | — | — | SCAFFOLD/FIXTURES verified; ready for owner assignment |
+| NOTIFY | 4 | ready | — | — | — | CONFIG/FIXTURES verified; ready for owner assignment |
+| COLLECTOR | 5 | ready | — | — | — | all Phase 3 sensor lanes verified; ready for owner assignment |
 | DAEMON-CLI | 5 | blocked | — | — | — | waits backend integration |
 | QML-VERIFY | 6 | blocked | — | — | — | waits DAEMON-CLI |
 | PACKAGING | 6 | blocked | — | — | — | waits DAEMON-CLI |
@@ -55,7 +55,8 @@ Only integration owner edits this file. Lane agents write under `handoffs/`.
 ## Milestones
 
 - **Wave 2 complete** (commit `eeb80bd`): all four Phase 2 lanes (DOMAIN, CONFIG, RUNTIME, FIXTURES) verified and integrated. Gate P2 green — Rust 217 tests pass, Python 175 passed + 1 skipped. Wave 3 `RENDER-CORE` and SENSOR-CPU/MEM/NET/DISK lanes are ready; `TRACES` starts after the `RENDER-CORE` API is integrated.
-- **Wave 3 partial sensor progress**: `RENDER-CORE`, `TRACES`, `SENSOR-CPU`, `SENSOR-MEM`, and `SENSOR-NET` are verified. Gate P3 remains open pending `SENSOR-DISK`.
+- **Wave 3 complete**: `RENDER-CORE`, `TRACES`, `SENSOR-CPU`, `SENSOR-MEM`, `SENSOR-NET`, and `SENSOR-DISK` are verified. Gate P3 green — full Rust all-feature verification passes (`cargo fmt --check`, `cargo check`, `cargo clippy -D warnings`, `cargo test`, `cargo doc`) with 307 total Rust tests, and the Python sensor baseline remains green (`tests/test_sensors.py` 4/4).
+- **Wave 4/5 follow-on lanes unblocked**: `FORMATTER`, `CHART`, `PAGES`, `PROCESS`, `POWER`, `HID`, `NOTIFY`, and `COLLECTOR` are now ready for owner assignment; `GPU` remains blocked on `PROCESS` as planned.
 
 ## Accepted deviations
 

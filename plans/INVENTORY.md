@@ -69,6 +69,8 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [x] | `rust/src/sensors/cpu.rs` | new; CPU discovery, `/proc/stat` diffs, uptime/loadavg, cpufreq/turbo, and per-core histories | `SENSOR-CPU` | P3 ports CPU-owned pieces of `src/sensors.py`; 17 focused tests cover first/delta/reset/malformed/history/discovery/fallback |
 | [x] | `rust/src/sensors/memory.rs` | new; `/proc/meminfo` memory/swap readers, total-memory helper, and bounded memory history | `SENSOR-MEM` | P3 ports memory-owned pieces of `src/sensors.py`; 12 focused tests cover direct/fallback/zero/clamp/malformed/history/swap/rounding |
 | [x] | `rust/src/sensors/network.rs` | new; route/device detection, wifi identity/signal, sysfs byte rates, and bounded network history | `SENSOR-NET` | P3 ports network-owned pieces of `src/sensors.py`; 11 focused tests cover `ip` fallback, wired/wireless paths, TTL caching, interface-switch/counter-reset rate resets, and graph-history trimming |
+| [x] | `rust/src/sensors/hwmon.rs` | new; shared hwmon directory/spec/int helpers for disk-owned sensor paths | `SENSOR-DISK` | P3 ports the disk lane's generic hwmon helpers; 3 focused tests cover substring matching, manual spec resolution, and parse failures |
+| [x] | `rust/src/sensors/disk.rs` | new; mount resolution, statvfs usage, block-device identity/topology, hwmon disk/fan caches, and `/proc/diskstats` byte rates | `SENSOR-DISK` | P3 ports disk-owned pieces of `src/sensors.py`; 17 focused tests cover mount filters, NVMe/SCSI labels, partition stacks, TTL caching, rate resets, and df-style usage math |
 | [x] | `rust/src/runtime/mod.rs` | new; runtime path resolution (`runtime_dir`/`state_dir`/accessors) + `ensure_dirs` | `RUNTIME` | P2 ports `src/runtime.py`; lazy per-call path resolution for testability |
 | [x] | `rust/src/runtime/atomic.rs` | new; `write_atomic` primitive (PID-unique tmp + rename-over) | `RUNTIME` | P2 ports `src/daemon.py:_write_atomic` shape; atomicity + tmp-cleanup tests |
 | [x] | `rust/src/runtime/page.rs` | new; page counter (`read_page`/`set_page`/`npages`/`step_page`/`PageDirection`) with flock | `RUNTIME` | P2 ports `src/pagestate.py`; 32-thread concurrency test proves no lost updates |
@@ -134,7 +136,7 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [ ] | `tests/test_notifier.py` | retain then port/archive | `BASE/NOTIFY` | existing assertion mapped to Rust |
 | [ ] | `tests/test_oracle.py` | retain then port/archive | `BASE/INTEGRATION` | oracle fixture/render parity mapped to Rust |
 | [ ] | `tests/test_render_model.py` | retain then port/archive | `BASE/RENDER-CORE` | existing assertion mapped to Rust |
-| [ ] | `tests/test_sensors.py` | retain then port/archive | `BASE/SENSOR-DISK` | existing assertion mapped to Rust |
+| [x] | `tests/test_sensors.py` | retain then port/archive | `BASE/SENSOR-DISK` | existing mount-resolution assertions mapped to Rust disk tests; Python baseline still runs 4/4 |
 | [ ] | `tests/vulture_whitelist.py` | retain then port/archive | `BASE/INTEGRATION` | existing assertion mapped to Rust |
 | [ ] | `tools/demo_shot.py` | preserve/update invocation | `BASE/QML-VERIFY` | tool smoke + target parity |
 | [ ] | `tools/inventory_ast_reporter.py` | preserve/update invocation | `BASE/INTEGRATION` | tool smoke + exact inventory gate |
@@ -472,30 +474,30 @@ Every top-level function/class and class method under `src/`, plus the root entr
 | [ ] | 402 | `needs_periph_rescan` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 420 | `collect` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 606 | `_cached_by_label` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 622 | `_read_hd_temp_cached` | function | `SENSOR-DISK` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 633 | `_read_fan_speed_cached` | function | `SENSOR-DISK` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 640 | `_hwmon_find` | function | `SENSOR-DISK` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 622 | `_read_hd_temp_cached` | function | `SENSOR-DISK` | U/F: Rust `read_hd_temp_cached` TTL cache mirrors Python label-keyed behavior |
+| [x] | 633 | `_read_fan_speed_cached` | function | `SENSOR-DISK` | U/F: Rust `read_fan_speed_cached` TTL cache mirrors Python label-keyed behavior |
+| [x] | 640 | `_hwmon_find` | function | `SENSOR-DISK` | U/F: Rust `hwmon::hwmon_dirs_matching` preserves case-insensitive `name` substring discovery |
 | [ ] | 656 | `_resolve_sensor` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 666 | `_read_path_millideg` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 676 | `_read_path_int` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 687 | `_find_cpu_temp` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 698 | `_find_cpu_freq_path` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 704 | `_find_hd_temps` | function | `SENSOR-DISK` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 730 | `_resolve_nvme_namespace` | function | `SENSOR-DISK` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 744 | `_hwmon_device_label` | function | `SENSOR-DISK` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 770 | `_find_fans` | function | `SENSOR-DISK` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 704 | `_find_hd_temps` | function | `SENSOR-DISK` | U/F: Rust `find_hd_temp_paths` covers override precedence plus NVMe/drivetemp autodetect |
+| [x] | 730 | `_resolve_nvme_namespace` | function | `SENSOR-DISK` | U/F: Rust `resolve_nvme_namespace` maps controller labels to first namespace with fallback |
+| [x] | 744 | `_hwmon_device_label` | function | `SENSOR-DISK` | U/F: Rust `hwmon_device_label` preserves NVMe and SCSI-backed disk labels |
+| [x] | 770 | `_find_fans` | function | `SENSOR-DISK` | U/F: Rust `find_fan_speed_paths` mirrors numbered override discovery and early stop semantics |
 | [x] | 785 | `_token_after` | function | `SENSOR-NET` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 795 | `_detect_net_device` | function | `SENSOR-NET` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 811 | `_is_wireless` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 815 | `_dbm_to_pct` | function | `SENSOR-NET` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 821 | `_read_net_info` | function | `SENSOR-NET` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 855 | `_read_net_info_cached` | function | `SENSOR-NET` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 864 | `_resolve_mount_device` | function | `SENSOR-DISK` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 875 | `_whole_disk_of` | function | `SENSOR-DISK` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 892 | `_detect_disk_io_device` | function | `SENSOR-DISK` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 914 | `_is_rotational` | function | `SENSOR-DISK` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 864 | `_resolve_mount_device` | function | `SENSOR-DISK` | U/F: Rust mount-table parsing resolves mountpoint → device basename including escaped mount paths |
+| [x] | 875 | `_whole_disk_of` | function | `SENSOR-DISK` | U/F: Rust `whole_disk_of` preserves partition-parent discovery with mapper fallback |
+| [x] | 892 | `_detect_disk_io_device` | function | `SENSOR-DISK` | U/F: Rust `detect_disk_io_device` mirrors mount→whole-disk topology walk |
+| [x] | 914 | `_is_rotational` | function | `SENSOR-DISK` | U/F: Rust `is_rotational` preserves kernel queue flag behavior |
 | [ ] | 924 | `_udisks_prop` | function | `POWER` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 940 | `_detect_disks` | function | `SENSOR-DISK` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 940 | `_detect_disks` | function | `SENSOR-DISK` | U/F: Rust `detect_disks` enumerates supported whole disks and preserves rotational classification |
 | [ ] | 984 | `_read_disk_smart` | function | `POWER` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1011 | `_read_disk_smart_cached` | function | `POWER` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1018 | `_find_battery_sys` | function | `POWER` | U/D/F/L: fixture formula, call trace, failures, live where available |
@@ -522,9 +524,9 @@ Every top-level function/class and class method under `src/`, plus the root entr
 | [x] | 1461 | `_read_swap_usage` | function | `SENSOR-MEM` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1468 | `_counter_rate` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1485 | `_read_net_speed` | function | `SENSOR-NET` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1496 | `_resolve_mounts` | function | `SENSOR-DISK` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1518 | `_read_disk_usage` | function | `SENSOR-DISK` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1528 | `_read_disk_io` | function | `SENSOR-DISK` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 1496 | `_resolve_mounts` | function | `SENSOR-DISK` | U/F/P: Rust `resolve_mounts` ports all four existing Python mount-resolution assertions |
+| [x] | 1518 | `_read_disk_usage` | function | `SENSOR-DISK` | U/F: Rust `read_disk_usage` mirrors df/psutil-style `statvfs` percent plus half-even GiB rounding |
+| [x] | 1528 | `_read_disk_io` | function | `SENSOR-DISK` | U/F: Rust `read_disk_io` ports byte-rate diffs with first-sample/device-switch/rollback suppression |
 | [x] | 1538 | `_read_cpu_freq` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1548 | `_read_cpu_turbo` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [ ] | 1558 | `_read_brightness` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
@@ -1238,6 +1240,22 @@ legend as the rest of this file (U/D/F/I/L/P + E0–E5).
 | [x] | `read_net_info_cached` | function | `SENSOR-NET` | U: 10-second TTL cache over `read_net_info`; mirrors `src/sensors.py:_read_net_info_cached` |
 | [x] | `read_net_speed` | function | `SENSOR-NET` | U: sysfs tx/rx diff against monotonic time, with first-sample/device-switch/counter-reset suppression; mirrors `src/sensors.py:_read_net_speed` |
 | [x] | `sample_net_history` | function | `SENSOR-NET` | U: graph-page-gated, cadence-driven bounded up/down history with zero-fill for missing side; mirrors `src/sensors.py:_sample_net_history` |
+
+### `rust/src/sensors/disk.rs`
+
+| Done | Symbol | Kind | Lane | Evidence required |
+|---|---|---|---|---|
+| [x] | `DiskKind` / `DiskIdentity` | enum/struct | `SENSOR-DISK` | U: stable disk-identity shape for later POWER/FORMATTER lanes; NVMe vs ATA + rotational flag |
+| [x] | `DiskUsage` | struct | `SENSOR-DISK` | U: visible percent + half-even rounded used/total GiB result shape |
+| [x] | `DiskState` | struct | `SENSOR-DISK` | U: label-keyed hd-temp/fan caches plus whole-disk byte-rate diff state |
+| [x] | `find_hd_temp_paths` | function | `SENSOR-DISK` | U/F: override precedence plus NVMe/drivetemp autodetect with Python-matching labels; mirrors `src/sensors.py:_find_hd_temps` |
+| [x] | `find_fan_speed_paths` | function | `SENSOR-DISK` | U/F: numbered fan override discovery with first-missing-slot stop; mirrors `src/sensors.py:_find_fans` |
+| [x] | `read_hd_temp_cached` / `read_fan_speed_cached` | functions | `SENSOR-DISK` | U/F: 30-second label-keyed caches over hwmon integer reads; mirrors `src/sensors.py:_read_hd_temp_cached` and `_read_fan_speed_cached` |
+| [x] | `resolve_mounts` | function | `SENSOR-DISK` | U/F/P: explicit-list passthrough plus auto-root filtering/order and escaped-path decoding; mirrors `src/sensors.py:_resolve_mounts` |
+| [x] | `detect_disk_io_device` | function | `SENSOR-DISK` | U/F: mountpoint → whole-disk topology walk with mapper fallback; mirrors `src/sensors.py:_detect_disk_io_device` |
+| [x] | `detect_disks` | function | `SENSOR-DISK` | U/F: supported whole-disk enumeration with rotational classification; mirrors `src/sensors.py:_detect_disks` |
+| [x] | `read_disk_usage` | function | `SENSOR-DISK` | U/F: `statvfs`-backed df/psutil percent semantics plus half-even GiB rounding; mirrors `src/sensors.py:_read_disk_usage` |
+| [x] | `read_disk_io` | function | `SENSOR-DISK` | U/F: `/proc/diskstats` byte-rate diffs with first-sample/device-switch/rollback suppression; mirrors `src/sensors.py:_read_disk_io` |
 
 ### `rust/src/runtime/mod.rs`
 
