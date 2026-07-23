@@ -386,6 +386,28 @@ PlasmoidItem {
 		onTriggered: widget.readOutputs()
 	}
 
+	// Boot-race recovery. The daemon's systemd unit is ordered After=graphical-
+	// session.target, i.e. after plasmashell, so at login the runtime directory
+	// usually does not exist yet when this applet loads. A FolderListModel pointed
+	// at a missing directory never attaches its inotify watch and never notices the
+	// directory being created and filled later — so the panel stays blank until the
+	// widget is removed and re-added (reported as "blank on every reboot"). Until the
+	// first frame arrives, re-point the watcher (re-assigning folder forces a fresh
+	// scan and a fresh watch now that the directory may exist, exactly what remove/
+	// re-add does by hand) and re-cat. The `running` binding stops it on its own the
+	// moment the first non-empty read lands, so it costs nothing once we're up.
+	Timer {
+		id: bootstrap
+		interval: 1000
+		repeat: true
+		running: widget.outputText === ""
+		onTriggered: {
+			outputWatcher.folder = ""
+			outputWatcher.folder = config.runtimeUrl
+			widget.runCommand()
+		}
+	}
+
 	function readOutputs() {
 		widget.runCommand()
 		// The tooltip read stays lazy — the panel's is not. Qt reparses and relays out
