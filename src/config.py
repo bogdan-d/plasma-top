@@ -272,14 +272,16 @@ class NotifyThresholds:
 class NotificationConfig:
     disk_usage: bool = True
     disk_smart: bool = True
-    cpu_temp: bool = True
-    gpu_nvidia_temp: bool = True
+    # OFF by default: under normal heavy load (gaming, compiling) these fire
+    # correctly but constantly and read as noise — see config.toml [notifications].
+    cpu_temp: bool = False
+    gpu_nvidia_temp: bool = False
+    load_avg: bool = False
     hd_temp: bool = True
     battery_sys: bool = True
     battery_mouse: bool = True
     battery_kbd: bool = True
     server_check: bool = False
-    load_avg: bool = True
 
 
 @dataclass

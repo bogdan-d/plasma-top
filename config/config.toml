@@ -194,16 +194,22 @@ load_avg_minutes = 10
 
 # ── Notifications ─────────────────────────────────────────────────────────────
 
+# Per-category on/off for the desktop notifications. The load-driven ones
+# (cpu_temp, gpu_nvidia_temp, load_avg) are OFF by default: under a normal heavy
+# workload — gaming, compiling — a laptop legitimately sustains 80°C+ and a high
+# load average, so as a default they fire correctly but constantly and read as
+# noise. Flip them to true if you want the thermal/load alerts. The rest stay on:
+# they fire rarely and are actionable (a dying disk, a low battery, a full disk).
 [notifications]
 disk_usage      = true
 disk_smart      = true
-cpu_temp        = true
+cpu_temp        = false
 hd_temp         = true
-gpu_nvidia_temp = true
+gpu_nvidia_temp = false
 battery_sys     = true
 battery_mouse   = true
 battery_kbd     = true
-load_avg        = true
+load_avg        = false
 server_check    = false
 
 
