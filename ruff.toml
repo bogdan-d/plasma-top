@@ -4,15 +4,21 @@
 #
 # The point of running ruff here is the F rules (Pyflakes: dead imports, unused
 # variables, undefined/redefined names) — real bugs vulture's dead-code gate
-# doesn't cover the same way. We keep ruff's DEFAULT select (E4/E7/E9 + F) and
-# only silence the pycodestyle style rules this codebase breaks on purpose, so
-# `ruff check` stays green on the current tree and only speaks up for something
-# new and worth fixing. E501 (line length) is deliberately NOT in the default
-# set and stays out: the comments here run wide on purpose.
+# doesn't cover the same way. We select E4/E7/E9 + F and only silence the
+# pycodestyle style rules this codebase breaks on purpose, so `ruff check` stays
+# green on the current tree and only speaks up for something new and worth fixing.
+# E501 (line length) is deliberately left out: the comments here run wide on
+# purpose.
 
 target-version = "py311"
 
 [lint]
+# Pin the select EXPLICITLY rather than leaning on ruff's default. Ruff's default
+# set widened across versions (0.16 flags UP/I/B/SIM/… out of the box), which
+# silently turned the gate into a style/modernization enforcer — 275 findings,
+# 178 of them UP045 (Optional[x] -> x | None), none of them the F-rule bugs this
+# gate exists for. Pinning keeps the gate meaning what the tree was written to.
+select = ["E4", "E7", "E9", "F"]
 # Each ignore is a deliberate house style, not an oversight:
 ignore = [
     "E731",  # assigned lambdas — the metric gates (_g_*) and the cell factories in
