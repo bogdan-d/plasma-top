@@ -20,6 +20,7 @@ Only integration owner edits this file. Lane agents write under `handoffs/`.
 | D002 | Keep Python as test oracle until Phase 8; no Python/Rust FFI | accepted plan assumption |
 | D003 | Synchronous single-crate Rust architecture | accepted plan assumption |
 | D004 | Exact observable parity precedes improvements | accepted plan assumption |
+| D005 | Waive real pacman/user-systemd P6.5 lifecycle; accept disposable staged package evidence | user-approved 2026-07-28 |
 
 ## Lane ledger
 
@@ -49,8 +50,8 @@ Only integration owner edits this file. Lane agents write under `handoffs/`.
 | COLLECTOR | 5 | verified | Codex | `c1fb59e` | `plans/handoffs/collector-codex-20260719.md` | P5.1 verified: `rust/src/sensors/mod.rs` composes static discovery, timed peripheral/network rescan, capability derivation, and per-poll collection in Python-compatible order; 47 collector tests cover isolated proc/sys trees, exact command/D-Bus traces, every sensor family, skip-slow, cache/history cadence, route adoption, no duplicate/unrequested calls, and failure isolation; optional lazy `nvml-wrapper` production adapter preserves GPU-0 NVML preference with non-fatal `nvidia-smi` fallback; full Rust gate green with 498 library + 23 integration tests; Python oracle 175 passed + 1 optional skip |
 | DAEMON-CLI | 5 | verified | Codex | `rust-migration-base-bootstrap` | `plans/handoffs/daemon-cli-codex-20260720.md` | Production command/`busctl` D-Bus/notification facades; CSS/theme reload; full synchronous daemon lifecycle; diagnostics and CLI dispatch; isolated fake-clock/fake-adapter lifecycle + process CLI tests; Rust/Python deterministic CLI diffs green; full Rust/Python gates green |
 | QML-VERIFY | 6 | verified | Codex | `6ffba34` | `plans/handoffs/qml-verify-codex-20260722.md` | P6.1–P6.3 verified on Plasma 6.7.2 Wayland: correct-id Application smoke plus isolated `plasmoidviewer` horizontal/vertical/planar runs under disposable XDG/HOME/runtime roots; actual QML traces prove geometry publication/orientation, watcher refresh, lazy tooltip reads, page/click commands, and root discipline; strict Qt matrix covers panel H/V + main/five deep pages in dark/light/overlay with faithful fastfetch ANSI conversion; human pass confirms hover, pin/unpin, wheel grouping/quick reverse, resize, desktop transparent/background/outline/font/config behavior; no QML workaround or accepted deviation |
-| PACKAGING | 6 | active | Codex | `rust-migration-base-bootstrap` | `plans/handoffs/packaging-codex-20260728.md` | P6.4 native manual/AUR packaging implemented: locked `x86_64` release build with runtime-loaded NVML, FHS asset-root launcher, Rust-only runtime manifest, preserved service/applet/license contracts; repo/`/tmp`-only disposable install, repeat upgrade, Python rollback, uninstall, user-file preservation, and sourced AUR `package()` checks pass; P6.5 real pacman/user-systemd lifecycle remains blocked by immutable non-Arch host and explicit no-system-write constraint |
-| HARDWARE-* | 7 | blocked | — | — | — | waits signed candidate |
+| PACKAGING | 6 | verified | Codex | `703bae7` | `plans/handoffs/packaging-codex-20260728.md` | P6.4 native manual/AUR packaging verified: locked `x86_64` release build with runtime-loaded NVML, FHS asset-root launcher, Rust-only runtime manifest, preserved service/applet/license contracts; repo/`/tmp`-only disposable install, repeat upgrade, Python rollback, uninstall, user-file preservation, and sourced AUR `package()` checks pass; real pacman/user-systemd lifecycle waived by D005 |
+| HARDWARE-* | 7 | ready | — | `703bae7` | — | Gate P6 green; current-host shadow/performance/soak work may begin |
 | CUTOVER | 8 | blocked | — | — | — | waits all gates |
 
 ## Milestones
@@ -69,14 +70,16 @@ Only integration owner edits this file. Lane agents write under `handoffs/`.
 - **Phase 5 collector complete**: capability-driven discovery, rescan, and collection now compose every verified sensor family in Python-compatible order. The collector owns one fresh readings snapshot per poll, domain-specific persistent state, route-device adoption, profiling timings, skip-slow first-paint behavior, and optional lazy NVML construction. Deterministic collector tests prove requested/shared/unrequested call sets, cache/history cadence, adapter failure isolation, and no host I/O.
 - **Gate P5 green**: production boundaries, CSS/theme reload, daemon scheduling/reload/publication/page-wake/signal cleanup, diagnostics, and all CLI commands are integrated. Isolated deterministic lifecycle and process tests cover first paint, normal polls, malformed last-good reload, page latency, runtime-root discipline, and cleanup; deterministic Python/Rust CLI diffs are clean.
 - **Phase 6 QML verification complete**: the unchanged applet passes isolated Application smoke plus real horizontal, vertical, and planar `plasmoidviewer` runs. QML-owned geometry, orientation, watcher/lazy-read behavior, action dispatch, runtime-root discipline, all-page dark/light/overlay Qt renders, hover, pinning, wheel grouping, resize, and desktop appearance/config behavior are verified. Gate P6 now waits only `PACKAGING` P6.4/P6.5.
-- **Phase 6 packaging implementation complete**: manual and AUR channels now build the locked Rust binary, install only native runtime assets, preserve the stable service/applet paths, and carry GPL/NOTICE files. Disposable `/tmp` install, upgrade, Python rollback, uninstall, user-file, and AUR manifest checks pass. Gate P6 still requires real package-manager and user-systemd lifecycle evidence from a disposable Arch Plasma environment.
+- **Phase 6 packaging implementation complete**: manual and AUR channels now build the locked Rust binary, install only native runtime assets, preserve the stable service/applet paths, and carry GPL/NOTICE files. Disposable `/tmp` install, upgrade, Python rollback, uninstall, user-file, and AUR manifest checks pass.
+- **Gate P6 green with D005**: user accepted disposable staged packaging evidence in place of real pacman/user-systemd lifecycle testing on this immutable non-Arch host. Phase 7 current-host shadow, soak, and performance validation is unblocked.
 - **Current aggregate gate**: Rust fmt/check/clippy/test/doc pass with 507 library + 26 integration tests (533 total). Full Python oracle remains green with 175 passed + 1 optional ruff skip; ruff and vulture pass.
 
 ## Accepted deviations
 
-None. Add rows with user approval, affected contract/tests, and rollback.
+| ID | Accepted deviation | Approval/evidence | Risk/rollback |
+|---|---|---|---|
+| D005 | Skip real pacman install/upgrade/Python-downgrade/uninstall and user-systemd lifecycle validation | User approval 2026-07-28; `tools/p6_package_test.sh` covers native install, repeat upgrade, Python rollback, uninstall, user-file preservation, and AUR manifest under `/tmp` | Package-manager hooks or service enablement may still fail on Arch; rollback is the retained Python package/source and D005 can be reopened on an Arch Plasma environment |
 
 ## Current blockers
 
 1. Phase 0 still lacks broader multi-host live-hardware evidence for P0.7. The current host has only an unsupported AMD Strix Halo iGPU (`1002:1586`, `amdgpu`), no Intel/NVIDIA GPU, no system battery, and no supported Bolt mouse/keyboard battery detected. Intel, NVIDIA NVML/fallback, UPower battery/peripheral, and Bolt/HID live paths require other hosts/devices; fixture coverage remains mandatory.
-2. Gate P6 waits only P6.5 real pacman install/upgrade/Python-downgrade/uninstall plus user-systemd lifecycle evidence. Current host is immutable, non-Arch, and explicitly restricted to repository/`/tmp` writes; disposable staged package evidence is green, but cannot replace that live environment gate.

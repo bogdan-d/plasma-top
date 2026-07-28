@@ -1135,7 +1135,7 @@ Existing tests remain oracle evidence until mapped to a passing Rust test or int
 
 ### `install.sh`
 
-- [x] No declared function: shell syntax + full disposable DESTDIR scenario; real host install remains P6.5 environment evidence.
+- [x] No declared function: shell syntax + full disposable DESTDIR scenario; real host install waived by D005.
 
 ### `packaging/pirostats-launcher`
 
@@ -1159,7 +1159,7 @@ Existing tests remain oracle evidence until mapped to a passing Rust test or int
 
 ### `uninstall.sh`
 
-- [x] No declared function: shell syntax + disposable DESTDIR removal scenario; real host service removal remains P6.5 environment evidence.
+- [x] No declared function: shell syntax + disposable DESTDIR removal scenario; real host service removal waived by D005.
 
 ## Rust callable inventory
 

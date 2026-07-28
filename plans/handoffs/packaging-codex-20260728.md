@@ -48,11 +48,12 @@ Results:
 - Rust aggregate passed: 507 library + 26 integration tests.
 - Python oracle passed: 175 passed + 1 optional skip; ruff/vulture green.
 
-## Remaining evidence
+## Accepted waiver
 
 - P6.5 real package-manager install/upgrade/downgrade/uninstall and user-systemd
-  lifecycle require a disposable Arch Plasma VM/session. Current immutable,
-  non-Arch host explicitly forbids system-folder writes, so this was not run.
+  lifecycle was waived by user decision D005 on 2026-07-28. Current immutable,
+  non-Arch host explicitly forbids system-folder writes; staged `/tmp` evidence
+  is accepted for Gate P6.
 - `x86_64` is the only declared AUR architecture because it is the only tested
   native package target. Add another concrete architecture only with build/live
   evidence.
