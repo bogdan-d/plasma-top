@@ -1,6 +1,6 @@
 //! Intel iGPU detection and DRM fdinfo-based usage readings.
 //!
-//! Ports the Intel-owned half of `src/sensors.py` (the PROCESS lane):
+//! Owns Intel GPU behavior formerly grouped inside `src/sensors.py`:
 //!
 //! - [`detect_intel_gpu`] walks `/sys/class/drm/card[0-9]*` for a vendor
 //!   `0x8086` / display-class card and returns the gt frequency sysfs path

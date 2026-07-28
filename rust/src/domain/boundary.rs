@@ -316,7 +316,7 @@ impl Default for ClockSnapshot {
     }
 }
 
-/// Filesystem roots resolved by later runtime/config lanes.
+/// Filesystem roots shared by runtime, config, sensors, and tests.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FilesystemRoots {
     /// Runtime publication root.

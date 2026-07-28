@@ -1,8 +1,9 @@
 # Layout types (row layouts)
 
-The monospace serializer ([src/mono_render.py](../src/mono_render.py)) doesn't
+The monospace serializer
+([rust/src/render/mono.rs](../rust/src/render/mono.rs)) doesn't
 have a layout for every cell count: it reduces everything to **five layout
-plans** (the `kind` field in `_plan_row`), and every row maps onto one of them
+plans (the `Plan` variants selected by `plan_row`), and every row maps onto one of them
 based on its *shape*, not its cell count.
 
 ## The rules that govern everything
@@ -113,30 +114,29 @@ they're left-aligned bars it's `left`.
 
 ## Who builds the rows
 
-The **layout generator is one single thing** (`_plan_row`/`_emit` in
-mono_render.py): no item chooses its own layout, it only produces `Cell`/`Row`
+The **layout generator is one single thing** (`plan_row`/`Plan::emit` in
+`rust/src/render/mono.rs`): no item chooses its own layout, it only produces `Cell`/`Row`
 and the layout is inherited from the shape. What *builds* those rows, though,
 is distinct, across three levels:
 
 - **Regular (declarative)** — standard-shape items (most of them) are *data* in
-  the dispatch table of [registry.py](../src/registry.py), keyed by
-  `(metric, form)`, composed with the cell-factories from
-  [items.py](../src/items.py): `row(label(), value())`, `per(...)` and similar.
-  Adding a regular item is one table row.
+  [rust/src/render/registry.rs](../rust/src/render/registry.rs), keyed by the
+  validated metric/form identity and composed with helpers from
+  [rust/src/render/cells.rs](../rust/src/render/cells.rs). Adding a regular item
+  is a small dispatch entry.
 - **Irregular (exception functions)** — cases with their own logic (net/wifi
   joins, batteries, top_process) are explicit `PanelFormatter` methods in
-  [formatter.py](../src/formatter.py), registered in the same dispatch table as
-  `(f, ident, r, tooltip) -> rows` functions. The bar/column/spark/braille
+  [rust/src/render/formatter.rs](../rust/src/render/formatter.rs), reached through
+  the same dispatch path. The bar/column/spark/braille
   forms — the "own-skeleton" percentage encodings — live together in
-  [traces.py](../src/traces.py) as free `(f, …)` functions of the same shape.
+  [rust/src/render/traces.rs](../rust/src/render/traces.rs).
 - **Shared helpers** — when several irregular ones share the *same* layout
-  (not just different data), the logic lives in a single helper: `_pair_grid`
-  for the `pair` form's paired grid (disk_smart/hd_temp/fan_speed),
-  `_dual_rate_rows` for net_speed/disk_io's two bytes/s metrics. The
-  corresponding exception functions pass only the differences.
+  (not just different data), the logic lives in one helper. Pair forms share the
+  same paired-grid path; net speed and disk I/O share `render_dual_rate_rows`.
+  Callers pass only their metric-specific differences.
 
 The boundary is deliberate: only **structural** duplication (the same layout
-logic repeated) is centralized, not legitimate variety. `traces.py` collapses
+logic repeated) is centralized, not legitimate variety. `render/traces.rs` collapses
 the bar/column/spark/braille duplication onto one combined-row skeleton and one
 standalone builder; the plain label+value rows stay as distinct methods — their
 logic is genuinely different, and a parametric helper would cost more clarity

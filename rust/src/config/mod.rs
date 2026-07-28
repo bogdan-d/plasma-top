@@ -90,12 +90,9 @@ pub const COLUMN_DIGIT_RATIO: f64 = 0.612;
 /// Errors returned by [`load_config`] and the typed-tree deserialization
 /// helpers.
 ///
-/// Local to this module: the frozen [`crate::Error`](crate::error::Error)
-/// enum is owned by the SCAFFOLD lane and does not yet have a `Config`
-/// variant. The integration owner is asked (see handoff) to promote this
-/// type into a `crate::Error::Config` variant so the daemon/CLI lanes can
-/// surface config failures with the same context-rich display as
-/// `Error::Cli`.
+/// Kept as the config-owned source error and promoted through
+/// [`crate::Error::Config`](crate::error::Error::Config) at the application
+/// boundary.
 #[derive(Debug)]
 pub enum ConfigError {
     /// A config file could not be read.

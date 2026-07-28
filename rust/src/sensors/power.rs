@@ -13,15 +13,14 @@
 //! - [`read_battery_sys`] reads system batteries via sysfs first, falling back
 //!   to UPower when `/sys/class/power_supply` is unavailable for a battery.
 //! - [`read_battery_periph`] reads a peripheral battery via UPower properties.
-//! - [`read_battery_bolt`] reads a Logitech Bolt receiver battery via the
-//!   lane-local [`BoltBatteryFacade`] (the HID lane will land the production
-//!   hidraw implementation; tests use a fake).
+//! - [`read_battery_bolt`] reads a Logitech Bolt receiver battery through
+//!   [`BoltBatteryFacade`]; `sensors::hid` provides production hidraw I/O.
 //!
 //! All D-Bus work flows through the shared [`DbusFacade`] trait, and every sysfs
 //! read takes an explicit sys root so tests never touch the host filesystem.
 //! The body encoding of each D-Bus reply is documented on the helper that
-//! consumes it; the production adapter (Wave 5) translates live GDBus replies
-//! into the same `Vec<String>` shapes.
+//! consumes it; the production `busctl` adapter translates JSON replies into
+//! the same `Vec<String>` shapes.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -707,11 +706,11 @@ pub struct BoltBattery {
     pub level: u8,
 }
 
-/// Lane-local facade for the Logitech Bolt HID++ battery query.
+/// Facade for the Logitech Bolt HID++ battery query.
 ///
-/// The HID lane will land the production hidraw implementation; POWER owns only
-/// the cache + retry semantics in [`read_battery_bolt`]. Tests use a trivial
-/// fake. Mirrors Python's `_bolt_query(dev_idx, want_name)` contract.
+/// `sensors::hid` owns production hidraw I/O; this module owns cache and retry
+/// semantics in [`read_battery_bolt`]. Tests use a trivial fake. Mirrors
+/// Python's `_bolt_query(dev_idx, want_name)` contract.
 pub trait BoltBatteryFacade {
     /// Queries the Bolt receiver at `dev_idx`, optionally fetching the device
     /// name. Returns `Ok(None)` when HID++ yields no battery level, including
@@ -801,8 +800,8 @@ fn parse_bool(value: &str) -> Option<bool> {
 
 /// Banker's rounding of `numerator / denominator` for non-negative integers,
 /// matching Python 3's `round()` on the equivalent float division without the
-/// precision loss. Duplicated from `sensors::disk`/`sensors::memory` to keep
-/// the lane self-contained.
+/// precision loss. Local duplication keeps power rounding independent of
+/// sensor-specific private helpers.
 fn round_half_even_ratio(numerator: u128, denominator: u128) -> u128 {
     if denominator == 0 {
         return 0;
@@ -857,7 +856,7 @@ mod tests {
     use std::time::{Duration, SystemTime};
 
     /// Helper to build a `DbusOutput` body tagged with the call signature so
-    /// the fake can echo it. Production adapters build this from real GDBus
+    /// the fake can echo it. Production adapters build this from `busctl` JSON
     /// replies.
     fn dbus_body(
         bus: BusKind,

@@ -1,7 +1,7 @@
 //! Command-runner boundary and its in-memory fake.
 //!
-//! [`CommandRunner`] is the trait the production adapter (`sensors/source.rs`,
-//! Wave 5 COLLECTOR lane) and the in-memory fake both implement. Sensor/daemon
+//! [`CommandRunner`] is implemented by the production adapter in
+//! `crate::adapters` and this in-memory fake. Sensor/daemon
 //! code accepts `impl CommandRunner` (or `&mut dyn CommandRunner`) so tests
 //! can inject [`FakeCommandRunner`] with argv-keyed replies and an ordered
 //! call trace, with no child process ever spawned.

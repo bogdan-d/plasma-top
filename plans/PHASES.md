@@ -221,6 +221,16 @@ performance regression, and all deviations explicitly resolved.
 - **P8.5** Promote/adapt Rust tests, refresh docs, archive oracle fixtures and
   migration plans as historical evidence.
 
+### P8.2 acceptance
+
+The stabilization window closes only when the integration owner records one
+live installed Plasma session covering service restart, panel and tooltip
+refresh, click, wheel paging, pinning, config/style hot reload, and clean
+shutdown. Evidence must include the installed mode and environment, relevant
+journal excerpts, defects found and resolved, and rollback status. D005/D006
+remain explicit exceptions rather than silent skips. User approval closes P8.2;
+there is no fixed calendar duration independent of that evidence.
+
 ### Final gate
 
 - Clean install/upgrade/uninstall tested.

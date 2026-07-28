@@ -4,12 +4,10 @@
 //! raw text/bytes for proc/sys fixtures, and parsed TOML for oracle fixtures
 //! that mirror the BASE schema in `tests/fixtures/oracle_render_full.toml`.
 //!
-//! The Rust side currently defers typed deserialization of the oracle schema
-//! until the `HardwareInfo`/`Readings` types land in Wave 3/4
-//! (DOMAIN/CONFIG lanes). Until then, [`OracleFixtureRaw`] hands downstream
-//! lanes the untyped `toml::Value` tables with stable accessors so they can
-//! extend the typed view without breaking the on-disk schema or this lane's
-//! API.
+//! [`OracleFixtureRaw`] intentionally keeps the retained Python oracle schema
+//! as untyped `toml::Value` tables. Production uses typed snapshots; fixture
+//! consumers can decode only the fields needed without coupling this loader to
+//! every domain type.
 
 use std::fmt::{self, Display, Formatter};
 use std::io;
@@ -94,11 +92,9 @@ impl std::error::Error for FixtureError {
 
 /// Raw, untyped view of an oracle fixture file.
 ///
-/// Mirrors the Python `OracleFixture` shape from `tests/oracle.py` but defers
-/// typed deserialization until the Rust `HardwareInfo`/`Readings` types land
-/// (Wave 3/4 DOMAIN/CONFIG). Downstream lanes extend this with typed
-/// accessors built on top of the raw [`toml::Value`] tables, without changing
-/// the on-disk schema or this lane's surface.
+/// Mirrors the Python `OracleFixture` shape from `tests/oracle.py`. Consumers
+/// build typed accessors over the raw [`toml::Value`] tables without changing
+/// the shared on-disk schema.
 #[derive(Debug, Clone, PartialEq)]
 pub struct OracleFixtureRaw {
     /// Raw `[hardware]` table from the fixture.
@@ -110,8 +106,8 @@ pub struct OracleFixtureRaw {
 impl OracleFixtureRaw {
     /// Returns the raw `[hardware]` table.
     ///
-    /// Downstream lanes read typed fields off this value; this lane never
-    /// interprets the contents.
+    /// Consumers read typed fields off this value; the loader never interprets
+    /// the contents.
     #[must_use]
     pub fn hardware(&self) -> &TomlValue {
         &self.hardware
@@ -119,8 +115,8 @@ impl OracleFixtureRaw {
 
     /// Returns the raw `[readings]` table.
     ///
-    /// Downstream lanes read typed fields off this value; this lane never
-    /// interprets the contents.
+    /// Consumers read typed fields off this value; the loader never interprets
+    /// the contents.
     #[must_use]
     pub fn readings(&self) -> &TomlValue {
         &self.readings

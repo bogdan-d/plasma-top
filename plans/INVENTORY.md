@@ -10,25 +10,28 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 
 | Done | Current file | Disposition | Lane | Required verification |
 |---|---|---|---|---|
+| [x] | `.github/workflows/baseline.yml` | aggregate Rust + retained Python oracle CI | `SCAFFOLD/CUTOVER` | locked Rust fmt/check/clippy/test/doc, Python pytest, and user-install lifecycle jobs |
 | [x] | `.gitignore` | update only for generated Rust artifacts | `SCAFFOLD/QML-VERIFY` | ignore audit (Phase 1: `rust/target/` added; QML-VERIFY re-audits at Gate 6) |
-| [ ] | `CLAUDE.md` | update after cutover | `CUTOVER` | link/content audit |
+| [x] | `.test-artifacts/.gitignore` | retain disposable evidence root without generated artifacts | `BASE/QML-VERIFY` | ignore audit; no generated evidence tracked |
+| [x] | `AGENTS.md` | current Rust-focused agent constraints | `CUTOVER` | production paths, gates, and load-bearing contract audit |
 | [x] | `LICENSE` | preserve | `PACKAGING` | staged manual/AUR manifests include GPL license |
 | [x] | `NOTICE` | preserve | `PACKAGING` | staged manual/AUR manifests include applet attribution |
 | [x] | `README.md` | update for native runtime | `CUTOVER` | P8.1 runtime/dependency/architecture audit |
-| [ ] | `config/config.toml` | preserve | `CONFIG/QML-VERIFY` | byte/key/selector parity |
-| [ ] | `config/machines.toml` | preserve | `CONFIG/QML-VERIFY` | byte/key/selector parity |
-| [ ] | `docs/DESIGN.md` | update after cutover | `CUTOVER` | link/content audit |
-| [ ] | `docs/ITEMS.md` | update after cutover | `CUTOVER` | link/content audit |
-| [ ] | `docs/LAYOUT.md` | update after cutover | `CUTOVER` | link/content audit |
-| [ ] | `docs/PERFORMANCE.md` | update after cutover | `CUTOVER` | link/content audit |
+| [x] | `config/config.toml` | preserve | `CONFIG/QML-VERIFY` | byte/key/selector parity |
+| [x] | `config/machines.toml` | preserve | `CONFIG/QML-VERIFY` | byte/key/selector parity |
+| [x] | `docs/DESIGN.md` | update after cutover | `CUTOVER` | current Rust architecture and contract audit |
+| [x] | `docs/DEVELOPMENT.md` | document Rust production and retained Python oracle setup | `CUTOVER` | setup and aggregate command audit |
+| [x] | `docs/ITEMS.md` | update after cutover | `CUTOVER` | catalogue audit against current token registry |
+| [x] | `docs/LAYOUT.md` | update after cutover | `CUTOVER` | Rust mono-render path and five-plan audit |
+| [x] | `docs/PERFORMANCE.md` | update after cutover | `CUTOVER` | current Rust mechanisms separated from historical Python measurements |
 | [x] | `install.sh` | native system + user-local install | `PACKAGING/CUTOVER` | locked build; disposable system and user install/upgrade/failure/path tests |
-| [ ] | `lang/en.toml` | preserve | `CONFIG/QML-VERIFY` | byte/key/selector parity |
+| [x] | `lang/en.toml` | preserve | `CONFIG/QML-VERIFY` | byte/key/selector parity |
 | [x] | `packaging/aur/PKGBUILD` | modify for native binary | `PACKAGING` | locked x86_64 Rust build + staged package-function manifest audit |
 | [x] | `packaging/aur/pirostats.install` | modify for native binary | `PACKAGING` | native dependency/help text + shell syntax |
 | [x] | `packaging/pirostats-launcher` | add packaged asset-root launcher | `PACKAGING` | staged executable sets `/usr/lib/pirostats` and execs sole Rust binary |
 | [x] | `pirostats` | replace with Rust checkout launcher | `CUTOVER` | P8.1 Rust CLI smoke + explicit Python oracle separation |
 | [x] | `plasmoid/.gitignore` | update only for generated Rust artifacts | `SCAFFOLD/QML-VERIFY` | Gate 6 ignore audit; no generated applet paths needed |
-| [ ] | `plasmoid/LICENSE` | preserve/review | `INTEGRATION` | file-specific inspection |
+| [x] | `plasmoid/LICENSE` | preserve/review | `INTEGRATION` | file-specific inspection |
 | [x] | `plasmoid/package/contents/config/config.qml` | preserve; edit only if approved | `QML-VERIFY` | T6 package/config-page pass; unchanged |
 | [x] | `plasmoid/package/contents/config/main.xml` | preserve; edit only if approved | `QML-VERIFY` | T6 disposable action-path substitution + real page/click traces; unchanged source |
 | [x] | `plasmoid/package/contents/icons/pirostats.svg` | preserve; edit only if approved | `QML-VERIFY` | T6 package load/manifest pass; unchanged |
@@ -46,7 +49,8 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [x] | `plasmoid/package/contents/ui/libconfig/VertAlign.qml` | preserve; edit only if approved | `QML-VERIFY` | T6 config-page load/interaction; unchanged |
 | [x] | `plasmoid/package/contents/ui/main.qml` | preserve; edit only if approved | `QML-VERIFY` | T6 horizontal/vertical/planar geometry, watcher/lazy read, hover, pin, wheel, resize, desktop appearance; unchanged |
 | [x] | `plasmoid/package/metadata.json` | preserve; edit only if approved | `QML-VERIFY` | correct lowercase id loaded through Application + panel runners; unchanged |
-| [ ] | `ruff.toml` | retain until Python removal | `BASE/CUTOVER` | ruff gate |
+| [x] | `requirements-dev.txt` | retain Python oracle dependencies until P8.4 | `BASE/CUTOVER` | clean venv install + full Python oracle gate |
+| [x] | `ruff.toml` | retain until Python removal | `BASE/CUTOVER` | ruff gate |
 | [x] | `rust-toolchain.toml` | new; pin stable Rust + clippy/rustfmt components | `SCAFFOLD` | P1.1 toolchain shell + toolchain present in CI |
 | [x] | `rust/Cargo.lock` | new; committed per parity plan | `SCAFFOLD` | P1.1 lockfile present + `cargo fetch --locked` no-op |
 | [x] | `rust/Cargo.toml` | new; single crate metadata, `test-support` feature | `SCAFFOLD` | P1.1 + P1.2 feature gate; integration-owner path after freeze |
@@ -55,7 +59,8 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [x] | `rust/src/lib.rs` | new; composition root, crate lint attrs | `SCAFFOLD` | P1.2 lint/fmt/clippy/test/doc green; integration-owner path after freeze |
 | [x] | `rust/src/main.rs` | new; thin binary entry | `SCAFFOLD` | P1.2 delegating shell; deny `unsafe_code` |
 | [x] | `rust/src/error.rs` | new; top-level user-facing error context | `SCAFFOLD` | P1.3 typed `Error` enum + `Result` alias |
-| [x] | `rust/src/cli.rs` | new; scaffold-only CLI contract for `daemon`/`render`/`probe`/`profiling`/`list-items`/`page`/`click` | `SCAFFOLD` | P1.3 command names/choices mirror Python `src/daemon.py` |
+| [x] | `rust/src/cli.rs` | production CLI contract for `daemon`/`render`/`probe`/`profiling`/`list-items`/`page`/`click` | `SCAFFOLD` | implemented production command parser/dispatch contract + process CLI tests |
+| [x] | `rust/src/adapters.rs` | production clock, command, D-Bus, NVML, and notification adapters | `DAEMON-CLI/COLLECTOR` | deterministic fake-boundary tests + process CLI integration + Phase 7 live runs |
 | [x] | `rust/src/domain/mod.rs` | new; domain composition map | `SCAFFOLD` | P1.3 frozen re-exports |
 | [x] | `rust/src/domain/form.rs` | new; `Form`/`Shape`/`Surface`/`SurfaceSet` contracts | `SCAFFOLD` | P1.3 mirrors `src/forms.py`; invariant tests |
 | [x] | `rust/src/domain/metric.rs` | new; `Metric`/`MetricSpec`/`Capability` contracts | `SCAFFOLD` | P1.3 mirrors `src/metrics.py` + capability map |
@@ -74,6 +79,8 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [x] | `rust/src/render/chart.rs` | new; deterministic tooltip graph PNG rasterizer (grid/labels/fill/line/overlay) and PNG encode/decode test corpus | `CHART` | P4 decoded-pixel parity against `src/chart.py` for empty/overlay/single/constant corpora + PNG chunk/CRC round-trip |
 | [x] | `rust/src/page_commands.rs` | new; tooltip page registry, command execution/cache, connections formatting, title/pager/default click | `PAGES` | P4 exact Python corpora + fake command traces cover argv, 5-second timeout, PTY fallback, cache, output/error cases, service/process resolution, and page shell |
 | [x] | `rust/src/notify.rs` | new; notification edge/hold/hysteresis state machine and non-fatal facade degradation reporting | `NOTIFY` | P4 exact ordered payload corpus covers all ten notification types, boundaries, monotonic hold, recovery/retrigger, exclusions, retained device state, disabled/absent inputs, and service failure |
+| [x] | `rust/src/daemon.rs` | synchronous lifecycle, reload, collection, rendering, publication, page wake, and shutdown | `DAEMON-CLI` | deterministic lifecycle/process tests + QML/runtime integration + Phase 7 soak |
+| [x] | `rust/src/diagnostics.rs` | production render/probe/profiling/list-items commands | `DAEMON-CLI` | process CLI tests + fixed corpora + current-host probe/profiling evidence |
 | [x] | `rust/src/render/pages.rs` | new; CPU-core, process, and graphs deep-dive page renderer | `PAGES` | P4 exact CPU/process HTML corpora + graphs image/legend/vendor/network structure tests; table-free tooltip shell |
 | [x] | `rust/src/sensors/mod.rs` | new; sensor composition map | `SENSOR-CPU` | P3 module registration for incremental sensor lanes |
 | [x] | `rust/src/sensors/cpu.rs` | new; CPU discovery, `/proc/stat` diffs, uptime/loadavg, cpufreq/turbo, and per-core histories | `SENSOR-CPU` | P3 ports CPU-owned pieces of `src/sensors.py`; 17 focused tests cover first/delta/reset/malformed/history/discovery/fallback |
@@ -82,6 +89,9 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [x] | `rust/src/sensors/hwmon.rs` | new; shared hwmon directory/spec/int helpers for disk-owned sensor paths | `SENSOR-DISK` | P3 ports the disk lane's generic hwmon helpers; 3 focused tests cover substring matching, manual spec resolution, and parse failures |
 | [x] | `rust/src/sensors/disk.rs` | new; mount resolution, statvfs usage, block-device identity/topology, hwmon disk/fan caches, and `/proc/diskstats` byte rates | `SENSOR-DISK` | P3 ports disk-owned pieces of `src/sensors.py`; 17 focused tests cover mount filters, NVMe/SCSI labels, partition stacks, TTL caching, rate resets, and df-style usage math |
 | [x] | `rust/src/sensors/gpu_nvidia.rs` | new; NVIDIA PCI detection, NVML/fallback orchestration, `nvidia-smi` CSV parsing/cache, clamps, and active-GPU history | `GPU` | P4 ports GPU-owned pieces of `src/sensors.py`; 10 focused tests cover no GPU, NVML success/init/read failure, exact fallback request, malformed/error results, all-absent caching, TTL boundary, vendor preference, cadence, gaps, and trimming |
+| [x] | `rust/src/sensors/gpu_intel.rs` | Intel PCI discovery and DRM-fdinfo usage metrics/cache | `PROCESS` | 18 focused absence/discovery/diff/cache tests; live hardware deferred under D006 |
+| [x] | `rust/src/sensors/process.rs` | panel/page process sampling and command-name resolution | `PROCESS` | 22 focused parse/diff/cache/page tests + collector/process-page integration |
+| [x] | `rust/src/sensors/tests.rs` | deterministic collector integration matrix | `COLLECTOR` | 47 collector tests cover all sensor families, call sets, cadence, and failure isolation |
 | [x] | `rust/src/sensors/power.rs` | new; UPower enumeration/properties, UDisks2 SMART discovery/health, sysfs+UPower system-battery reads with fallback, peripheral-battery reads, and Bolt HID++ queries behind a lane-local facade | `POWER` | P4 ports power-owned pieces of `src/sensors.py`; 38 focused tests cover exact D-Bus arguments/timeouts, bus/service/object/property absence, malformed variants, all three cache TTLs, sysfs→UPower fallback, charge-limit collapse, zero-peripheral suppression, and HID failure/no-level parity |
 | [x] | `rust/src/sensors/hid.rs` | new; Bolt hidraw discovery, timeout-bound report I/O, and HID++ 2.0 ROOT/device-name/unified-battery protocol | `HID` | P4 ports `src/bolt_battery.py`; 16 focused tests cover exact packet bytes, discovery, absent/open/write/read failures, timeout, short/mismatch filtering, ten-read bound, feature absence, ASCII replacement, and battery conversion; direct hidraw + safe `nix::poll`, no unsafe/native HID dependency |
 | [x] | `rust/src/runtime/mod.rs` | new; runtime path resolution (`runtime_dir`/`state_dir`/accessors) + `ensure_dirs` | `RUNTIME` | P2 ports `src/runtime.py`; lazy per-call path resolution for testability |
@@ -92,6 +102,7 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [x] | `rust/src/config/geometry.rs` | new; `PanelGeometry` + DMI machine detect + appletsrc vertical detect + geom live/cache + auto-fit | `CONFIG` | P2 ports `src/config.py` lines 380–401 + 471–716; every disk-touch fn has `_at`/`_text`/`_with_dmi` test seam |
 | [x] | `rust/src/config/assets.rs` | new; asset root resolution (`code_root`/`xdg_dir`/`home_dir`/`shipped_*`) with `PIROSTATS_CODE_ROOT` env override | `CONFIG` | P2 replaces Python's `__file__`-relative resolution with `CARGO_MANIFEST_DIR/..` + env override for packaged installs |
 | [x] | `rust/tests/config_default_load.rs` | new; integration test loading shipped `config/config.toml` end-to-end | `CONFIG` | P2 asserts typed fields, threshold vectors, horizontal override, no unknown/misplaced items |
+| [x] | `rust/tests/cli_daemon.rs` | process-level Rust CLI and daemon lifecycle tests | `DAEMON-CLI` | command dispatch, runtime publication, reload, paging, cleanup, and failure cases |
 | [x] | `rust/tests/runtime_paths.rs` | new; integration tests for path resolution + `XDG_RUNTIME_DIR` fallback | `RUNTIME` | env mutation serialized via `ENV_GUARD: Mutex<()>` |
 | [x] | `rust/tests/runtime_atomic.rs` | new; integration tests for atomic writes | `RUNTIME` | success/failure/cleanup matrix |
 | [x] | `rust/tests/runtime_page.rs` | new; integration tests for page counter + concurrency | `RUNTIME` | 32-thread stress + permission-failure path |
@@ -101,62 +112,64 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [x] | `rust/src/test_support/fake_command_runner.rs` | new; argv-keyed FIFO replies/errors + timeout-aware production `CommandRunner` implementation + call trace | `FIXTURES/INTEGRATION` | distinct-argv isolation, exhausted queue, queued adapter failure, and exact 3s/5s timeout traces |
 | [x] | `rust/src/test_support/fake_dbus.rs` | new; signature-keyed D-Bus replies + production `DbusFacade` implementation + exact request trace | `FIXTURES/INTEGRATION` | FIFO order, arguments/timeouts, and empty-queue error |
 | [x] | `rust/src/test_support/fake_notification.rs` | new; deterministic notification facade with ordered payload recording and queued results | `FIXTURES/NOTIFY` | records exact payload order, including failed calls; no desktop service access in tests |
-| [x] | `rust/src/test_support/fixture_loader.rs` | new; `load_text`/`load_bytes`/`load_oracle_fixture` + `OracleFixtureRaw` untyped view | `FIXTURES` | P2 typed deserialization deferred to Wave 3/4 |
+| [x] | `rust/src/test_support/fixture_loader.rs` | `load_text`/`load_bytes`/`load_oracle_fixture` + intentionally raw `OracleFixtureRaw` view | `FIXTURES` | shared Python fixture schema remains decoupled from production typed snapshots |
 | [x] | `rust/tests/fixtures/**` | new; 8 sample fixtures (proc/sys text, oracle TOML, cmd JSON, dbus TOML) | `FIXTURES` | P2 mirrors BASE schema; consumed by loader tests |
-| [x] | `rust/tests/parity_runner.sh` | new; Python/Rust parity diff stub | `FIXTURES` | exits 77 until DAEMON-CLI exposes the Rust `render` command; formatter internals are now integrated |
-| [ ] | `screenshots/desktop-black-text.png` | preserve reference | `QML-VERIFY` | visual comparison; regenerate only approved |
-| [ ] | `screenshots/desktop-white-text.png` | preserve reference | `QML-VERIFY` | visual comparison; regenerate only approved |
-| [ ] | `screenshots/graphs.png` | preserve reference | `QML-VERIFY` | visual comparison; regenerate only approved |
-| [ ] | `screenshots/panel-horizontal.png` | preserve reference | `QML-VERIFY` | visual comparison; regenerate only approved |
-| [ ] | `screenshots/panel-vertical.png` | preserve reference | `QML-VERIFY` | visual comparison; regenerate only approved |
-| [ ] | `screenshots/process.png` | preserve reference | `QML-VERIFY` | visual comparison; regenerate only approved |
+| [ ] | `rust/tests/parity_runner.sh` | deferred shared-fixture Python/Rust parity runner | `FIXTURES` | deferred: exits 77 because production render intentionally has no fixture-only flag; fixed corpora and integration tests carry current parity |
+| [x] | `screenshots/desktop-black-text.png` | preserve reference | `QML-VERIFY` | visual comparison; regenerate only approved |
+| [x] | `screenshots/desktop-white-text.png` | preserve reference | `QML-VERIFY` | visual comparison; regenerate only approved |
+| [x] | `screenshots/graphs.png` | preserve reference | `QML-VERIFY` | visual comparison; regenerate only approved |
+| [x] | `screenshots/panel-horizontal.png` | preserve reference | `QML-VERIFY` | visual comparison; regenerate only approved |
+| [x] | `screenshots/panel-vertical.png` | preserve reference | `QML-VERIFY` | visual comparison; regenerate only approved |
+| [x] | `screenshots/process.png` | preserve reference | `QML-VERIFY` | visual comparison; regenerate only approved |
 | [x] | `service/pirostats.service` | preserve for native binary | `PACKAGING` | staged manifest retains `ExecStart=/usr/bin/pirostats daemon` |
 | [x] | `service/pirostats-user.service` | add user-local path variant | `CUTOVER` | normalized unit parity + `%h/.local/bin/pirostats` assertion |
-| [ ] | `src/__init__.py` | port then remove | `CUTOVER` | symbol + differential parity |
+| [x] | `src/__init__.py` | port then remove | `CUTOVER` | empty oracle package marker; no production or callable behavior; remove in P8.4 |
 | [x] | `src/bolt_battery.py` | port then remove | `HID` | all seven symbols mapped to `rust/src/sensors/hid.rs`; fixed Rust packet assertions match Python-oracle packet bytes; discovery/error/name/battery branches covered by 16 focused tests |
 | [x] | `src/chart.py` | port then remove | `CHART` | symbol + differential parity via Rust chart pixel corpus |
-| [ ] | `src/config.py` | port then remove | `CONFIG` | symbol + differential parity |
-| [ ] | `src/daemon.py` | port then remove | `DAEMON-CLI` | symbol + differential parity |
+| [x] | `src/config.py` | port then remove | `CONFIG` | symbol + differential parity |
+| [x] | `src/daemon.py` | port then remove | `DAEMON-CLI` | symbol + differential parity |
 | [x] | `src/formatter.py` | port then remove | `FORMATTER/PAGES` | main panel/tooltip and deep-dive formatter symbols mapped to Rust formatter/page suites |
-| [ ] | `src/forms.py` | port then remove | `DOMAIN` | symbol + differential parity |
+| [x] | `src/forms.py` | port then remove | `DOMAIN` | symbol + differential parity |
 | [x] | `src/items.py` | port then remove | `FORMATTER` | reusable cell/row builders mapped to Rust formatter/cells tests and byte goldens |
-| [ ] | `src/metrics.py` | port then remove | `DOMAIN` | symbol + differential parity |
-| [ ] | `src/mono_render.py` | port then remove | `RENDER-CORE` | symbol + differential parity |
+| [x] | `src/metrics.py` | port then remove | `DOMAIN` | symbol + differential parity |
+| [x] | `src/mono_render.py` | port then remove | `RENDER-CORE` | symbol + differential parity |
 | [x] | `src/notifier.py` | port then remove | `NOTIFY` | all five symbols mapped to Rust notification boundary/state machine with exact payload and transition tests |
 | [x] | `src/pages.py` | port then remove | `PAGES` | all current page symbols mapped to `rust/src/page_commands.rs` + `rust/src/render/pages.rs`; exact helper/page HTML corpora and command fault traces |
-| [ ] | `src/pagestate.py` | port then remove | `RUNTIME` | symbol + differential parity |
+| [x] | `src/pagestate.py` | port then remove | `RUNTIME` | symbol + differential parity |
 | [x] | `src/registry.py` | port then remove | `DOMAIN/FORMATTER` | token/capability and render-dispatch halves mapped to verified Rust domain/formatter suites |
-| [ ] | `src/render_model.py` | port then remove | `RENDER-CORE` | symbol + differential parity |
-| [ ] | `src/runtime.py` | port then remove | `RUNTIME` | symbol + differential parity |
-| [ ] | `src/sensors.py` | port then remove | `SENSOR-*/COLLECTOR` | symbol + differential parity |
-| [ ] | `src/traces.py` | port then remove | `TRACES` | symbol + differential parity |
-| [ ] | `src/units.py` | port then remove | `DOMAIN` | symbol + differential parity |
-| [ ] | `style/icons.toml` | preserve | `CONFIG/QML-VERIFY` | byte/key/selector parity |
-| [ ] | `style/style-dark.css` | preserve | `CONFIG/QML-VERIFY` | byte/key/selector parity |
-| [ ] | `style/style-light.css` | preserve | `CONFIG/QML-VERIFY` | byte/key/selector parity |
-| [ ] | `style/style-overlay.css` | preserve | `CONFIG/QML-VERIFY` | byte/key/selector parity |
-| [ ] | `tests/conftest.py` | retain then port/archive | `BASE/INTEGRATION` | existing assertion mapped to Rust |
+| [x] | `src/render_model.py` | port then remove | `RENDER-CORE` | symbol + differential parity |
+| [x] | `src/runtime.py` | port then remove | `RUNTIME` | symbol + differential parity |
+| [x] | `src/sensors.py` | port then remove | `SENSOR-*/COLLECTOR` | symbol + differential parity |
+| [x] | `src/traces.py` | port then remove | `TRACES` | symbol + differential parity |
+| [x] | `src/units.py` | port then remove | `DOMAIN` | symbol + differential parity |
+| [x] | `style/icons.toml` | preserve | `CONFIG/QML-VERIFY` | byte/key/selector parity |
+| [x] | `style/style-dark.css` | preserve | `CONFIG/QML-VERIFY` | byte/key/selector parity |
+| [x] | `style/style-light.css` | preserve | `CONFIG/QML-VERIFY` | byte/key/selector parity |
+| [x] | `style/style-overlay.css` | preserve | `CONFIG/QML-VERIFY` | byte/key/selector parity |
+| [x] | `tests/conftest.py` | retain then port/archive | `BASE/INTEGRATION` | existing assertion mapped to Rust |
 | [x] | `tests/golden/panel_h.html` | preserve oracle | `FORMATTER` | byte-identical Rust horizontal-panel snapshot |
 | [x] | `tests/golden/panel_v.html` | preserve oracle | `FORMATTER` | byte-identical Rust vertical-panel snapshot |
 | [x] | `tests/golden/tooltip.html` | preserve oracle | `FORMATTER` | byte-identical Rust main-tooltip snapshot |
+| [x] | `tests/fixtures/oracle_render_full.toml` | preserve full deterministic Python oracle fixture | `BASE/FIXTURES` | Python golden assertion + verbatim Rust fixture-loader corpus |
 | [ ] | `tests/oracle.py` | retain then port/archive | `BASE/INTEGRATION` | oracle fixture/render parity mapped to Rust |
-| [ ] | `tests/test_config.py` | retain then port/archive | `BASE/CONFIG` | existing assertion mapped to Rust |
-| [ ] | `tests/test_deadcode.py` | retain then port/archive | `BASE/INTEGRATION` | existing assertion mapped to Rust |
+| [x] | `tests/test_config.py` | retain then port/archive | `BASE/CONFIG` | existing assertion mapped to Rust |
+| [x] | `tests/test_deadcode.py` | retain then port/archive | `BASE/INTEGRATION` | existing assertion mapped to Rust |
 | [x] | `tests/test_formatter.py` | retain oracle; mapped to Rust formatter suite | `BASE/FORMATTER` | existing assertion preserved in Python and mapped to Rust formatter coverage |
 | [x] | `tests/test_golden_render.py` | retain oracle; mapped to Rust formatter goldens | `BASE/FORMATTER` | existing assertion preserved in Python and mapped to Rust panel/tooltip golden coverage |
 | [ ] | `tests/test_inventory.py` | retain then port/archive | `BASE/INTEGRATION` | inventory gate + reporter smoke |
-| [ ] | `tests/test_items.py` | retain then port/archive | `BASE/DOMAIN` | existing assertion mapped to Rust |
-| [ ] | `tests/test_lint.py` | retain then port/archive | `BASE/INTEGRATION` | existing assertion mapped to Rust |
-| [ ] | `tests/test_mono_render.py` | retain then port/archive | `BASE/RENDER-CORE` | existing assertion mapped to Rust |
+| [x] | `tests/test_items.py` | retain then port/archive | `BASE/DOMAIN` | existing assertion mapped to Rust |
+| [x] | `tests/test_lint.py` | retain then port/archive | `BASE/INTEGRATION` | existing assertion mapped to Rust |
+| [x] | `tests/test_mono_render.py` | retain then port/archive | `BASE/RENDER-CORE` | existing assertion mapped to Rust |
 | [x] | `tests/test_notifier.py` | retain oracle; mapped to Rust notification suite | `BASE/NOTIFY` | all existing hold/hysteresis assertions preserved and expanded across every alert/failure path |
 | [ ] | `tests/test_oracle.py` | retain then port/archive | `BASE/INTEGRATION` | oracle fixture/render parity mapped to Rust |
-| [ ] | `tests/test_render_model.py` | retain then port/archive | `BASE/RENDER-CORE` | existing assertion mapped to Rust |
+| [x] | `tests/test_render_model.py` | retain then port/archive | `BASE/RENDER-CORE` | existing assertion mapped to Rust |
 | [x] | `tests/test_sensors.py` | retain then port/archive | `BASE/SENSOR-DISK` | existing mount-resolution assertions mapped to Rust disk tests; Python baseline still runs 4/4 |
-| [ ] | `tests/vulture_whitelist.py` | retain then port/archive | `BASE/INTEGRATION` | existing assertion mapped to Rust |
+| [x] | `tests/vulture_whitelist.py` | retain then port/archive | `BASE/INTEGRATION` | existing assertion mapped to Rust |
 | [ ] | `tools/demo_shot.py` | preserve/update invocation | `BASE/QML-VERIFY` | tool smoke + target parity |
-| [ ] | `tools/inventory_ast_reporter.py` | preserve/update invocation | `BASE/INTEGRATION` | tool smoke + exact inventory gate |
+| [x] | `tools/inventory_ast_reporter.py` | preserve/update invocation | `BASE/INTEGRATION` | tool smoke + exact inventory gate |
 | [ ] | `tools/manual_tooltip_preview.py` | preserve/update invocation | `BASE/QML-VERIFY` | tool smoke + target parity |
 | [x] | `tools/python_oracle.py` | retain Python CLI as explicit stabilization oracle | `CUTOVER` | P8.1 oracle CLI smoke; never installed |
+| [x] | `tools/python_live_matrix.sh` | retained Python live-probe matrix for stabilization comparisons | `BASE/HARDWARE` | Phase 7 near-simultaneous Python/Rust probe evidence; never installed |
 | [x] | `tools/p6_live_matrix.sh` | add isolated horizontal/vertical/planar applet gate | `QML-VERIFY` | geometry/orientation/watcher/lazy/action traces + human interaction evidence |
 | [x] | `tools/p6_png_diff.py` | add strict fixed-image comparator | `QML-VERIFY` | dimension/mean/max/fraction synthetic threshold check |
 | [x] | `tools/p6_qt_matrix.sh` | add fixed-host all-page/theme Qt matrix | `QML-VERIFY` | 24 valid screenshots + table-free/golden pre-gates + environment manifest |
@@ -172,7 +185,7 @@ Every top-level function/class and class method under `src/`, plus the root entr
 
 ### `src/__init__.py`
 
-- [ ] No declared callable: verify module constants/import/entry behavior and final disposition.
+- [x] No declared callable: verify module constants/import/entry behavior and final disposition.
 
 ### `src/bolt_battery.py`
 
@@ -197,85 +210,85 @@ Every top-level function/class and class method under `src/`, plus the root entr
 
 | Done | Line | Symbol | Kind | Lane | Evidence required |
 |---|---:|---|---|---|---|
-| [ ] | 34 | `default_config_path` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
-| [ ] | 43 | `resolve_style` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
-| [ ] | 52 | `user_machines_path` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
-| [ ] | 60 | `_deep_merge` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
-| [ ] | 70 | `_from_dict` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
-| [ ] | 86 | `DisplayConfig` | class | `CONFIG` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 98 | `PagesConfig` | class | `CONFIG` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 111 | `BarConfig` | class | `CONFIG` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 134 | `SparkConfig` | class | `CONFIG` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 144 | `BrailleConfig` | class | `CONFIG` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 154 | `ColumnConfig` | class | `CONFIG` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 188 | `Section` | class | `CONFIG` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 195 | `Surface` | class | `CONFIG` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 205 | `Surface.has` | method | `CONFIG` | U/D: direct + Python differential; boundaries |
-| [ ] | 210 | `Surface.item_set` | method | `CONFIG` | U/D: direct + Python differential; boundaries |
-| [ ] | 215 | `ThresholdConfig` | class | `CONFIG` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 251 | `NotifyThresholds` | class | `CONFIG` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 272 | `NotificationConfig` | class | `CONFIG` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 286 | `SensorOverrides` | class | `CONFIG` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 300 | `DiskConfig` | class | `CONFIG` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 318 | `BatteryConfig` | class | `CONFIG` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 328 | `SystemUpdatesConfig` | class | `CONFIG` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 336 | `ServerCheckConfig` | class | `CONFIG` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 344 | `Config` | class | `CONFIG` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 380 | `detect_machine` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
-| [ ] | 406 | `_build_section` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
-| [ ] | 410 | `_load_toml_at` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
-| [ ] | 424 | `_resolve_items` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
-| [ ] | 440 | `_parse_surface` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
-| [ ] | 508 | `PanelGeometry` | class | `CONFIG` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 523 | `_parse_kde_ini` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
-| [ ] | 540 | `_int_or_none` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
-| [ ] | 553 | `_detect_vertical_from_appletsrc` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
-| [ ] | 570 | `_parse_geom` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
-| [ ] | 592 | `_read_geom_file` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
-| [ ] | 611 | `cache_live_geom` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
-| [ ] | 629 | `detect_panel_geometry` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
-| [ ] | 651 | `detect_vertical_layout` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
-| [ ] | 657 | `_auto_fit_panel` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
-| [ ] | 719 | `apply_canonical_width` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
-| [ ] | 738 | `machines_path_for` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
-| [ ] | 745 | `machine_source_paths` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
-| [ ] | 755 | `_load_machines` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
-| [ ] | 772 | `load_config` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
-| [ ] | 851 | `_drop_items` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
-| [ ] | 863 | `_drop_unknown_items` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
-| [ ] | 873 | `_drop_misplaced_items` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
+| [x] | 34 | `default_config_path` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
+| [x] | 43 | `resolve_style` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
+| [x] | 52 | `user_machines_path` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
+| [x] | 60 | `_deep_merge` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
+| [x] | 70 | `_from_dict` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
+| [x] | 86 | `DisplayConfig` | class | `CONFIG` | U/D: defaults, construction, invariants, round-trip |
+| [x] | 98 | `PagesConfig` | class | `CONFIG` | U/D: defaults, construction, invariants, round-trip |
+| [x] | 111 | `BarConfig` | class | `CONFIG` | U/D: defaults, construction, invariants, round-trip |
+| [x] | 134 | `SparkConfig` | class | `CONFIG` | U/D: defaults, construction, invariants, round-trip |
+| [x] | 144 | `BrailleConfig` | class | `CONFIG` | U/D: defaults, construction, invariants, round-trip |
+| [x] | 154 | `ColumnConfig` | class | `CONFIG` | U/D: defaults, construction, invariants, round-trip |
+| [x] | 188 | `Section` | class | `CONFIG` | U/D: defaults, construction, invariants, round-trip |
+| [x] | 195 | `Surface` | class | `CONFIG` | U/D: defaults, construction, invariants, round-trip |
+| [x] | 205 | `Surface.has` | method | `CONFIG` | U/D: direct + Python differential; boundaries |
+| [x] | 210 | `Surface.item_set` | method | `CONFIG` | U/D: direct + Python differential; boundaries |
+| [x] | 215 | `ThresholdConfig` | class | `CONFIG` | U/D: defaults, construction, invariants, round-trip |
+| [x] | 251 | `NotifyThresholds` | class | `CONFIG` | U/D: defaults, construction, invariants, round-trip |
+| [x] | 272 | `NotificationConfig` | class | `CONFIG` | U/D: defaults, construction, invariants, round-trip |
+| [x] | 286 | `SensorOverrides` | class | `CONFIG` | U/D: defaults, construction, invariants, round-trip |
+| [x] | 300 | `DiskConfig` | class | `CONFIG` | U/D: defaults, construction, invariants, round-trip |
+| [x] | 318 | `BatteryConfig` | class | `CONFIG` | U/D: defaults, construction, invariants, round-trip |
+| [x] | 328 | `SystemUpdatesConfig` | class | `CONFIG` | U/D: defaults, construction, invariants, round-trip |
+| [x] | 336 | `ServerCheckConfig` | class | `CONFIG` | U/D: defaults, construction, invariants, round-trip |
+| [x] | 344 | `Config` | class | `CONFIG` | U/D: defaults, construction, invariants, round-trip |
+| [x] | 380 | `detect_machine` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
+| [x] | 406 | `_build_section` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
+| [x] | 410 | `_load_toml_at` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
+| [x] | 424 | `_resolve_items` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
+| [x] | 440 | `_parse_surface` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
+| [x] | 508 | `PanelGeometry` | class | `CONFIG` | U/D: defaults, construction, invariants, round-trip |
+| [x] | 523 | `_parse_kde_ini` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
+| [x] | 540 | `_int_or_none` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
+| [x] | 553 | `_detect_vertical_from_appletsrc` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
+| [x] | 570 | `_parse_geom` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
+| [x] | 592 | `_read_geom_file` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
+| [x] | 611 | `cache_live_geom` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
+| [x] | 629 | `detect_panel_geometry` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
+| [x] | 651 | `detect_vertical_layout` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
+| [x] | 657 | `_auto_fit_panel` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
+| [x] | 719 | `apply_canonical_width` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
+| [x] | 738 | `machines_path_for` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
+| [x] | 745 | `machine_source_paths` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
+| [x] | 755 | `_load_machines` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
+| [x] | 772 | `load_config` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
+| [x] | 851 | `_drop_items` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
+| [x] | 863 | `_drop_unknown_items` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
+| [x] | 873 | `_drop_misplaced_items` | function | `CONFIG` | U/D: direct + Python differential; boundaries |
 
 ### `src/daemon.py`
 
 | Done | Line | Symbol | Kind | Lane | Evidence required |
 |---|---:|---|---|---|---|
-| [ ] | 55 | `_css_path_for` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
-| [ ] | 65 | `_parse_rgb` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
-| [ ] | 74 | `_window_bg` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
-| [ ] | 102 | `_plasma_is_light` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
-| [ ] | 122 | `_read_css_file` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
-| [ ] | 138 | `_overlay_css_path` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
-| [ ] | 147 | `_read_css` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
-| [ ] | 160 | `_strip_html` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
-| [ ] | 200 | `_mtime` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
-| [ ] | 207 | `_write_atomic` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
-| [ ] | 213 | `_render_page` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
-| [ ] | 237 | `_render_tooltip` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
-| [ ] | 244 | `_publish_pages` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
-| [ ] | 252 | `_cleanup` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
-| [ ] | 263 | `_warmed_readings` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
-| [ ] | 278 | `run_probe` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
-| [ ] | 312 | `_tooltip_html_for_render` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
-| [ ] | 324 | `run_render` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
-| [ ] | 396 | `_print_timings` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
-| [ ] | 413 | `_print_cache_state` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
-| [ ] | 460 | `run_profile` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
-| [ ] | 610 | `_log_boot_ready` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
-| [ ] | 628 | `run_daemon` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
-| [ ] | 824 | `run_list_items` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
-| [ ] | 853 | `run_page` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
-| [ ] | 865 | `run_click` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
-| [ ] | 877 | `main` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
+| [x] | 55 | `_css_path_for` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
+| [x] | 65 | `_parse_rgb` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
+| [x] | 74 | `_window_bg` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
+| [x] | 102 | `_plasma_is_light` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
+| [x] | 122 | `_read_css_file` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
+| [x] | 138 | `_overlay_css_path` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
+| [x] | 147 | `_read_css` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
+| [x] | 160 | `_strip_html` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
+| [x] | 200 | `_mtime` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
+| [x] | 207 | `_write_atomic` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
+| [x] | 213 | `_render_page` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
+| [x] | 237 | `_render_tooltip` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
+| [x] | 244 | `_publish_pages` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
+| [x] | 252 | `_cleanup` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
+| [x] | 263 | `_warmed_readings` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
+| [x] | 278 | `run_probe` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
+| [x] | 312 | `_tooltip_html_for_render` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
+| [x] | 324 | `run_render` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
+| [x] | 396 | `_print_timings` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
+| [x] | 413 | `_print_cache_state` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
+| [x] | 460 | `run_profile` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
+| [x] | 610 | `_log_boot_ready` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
+| [x] | 628 | `run_daemon` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
+| [x] | 824 | `run_list_items` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
+| [x] | 853 | `run_page` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
+| [x] | 865 | `run_click` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
+| [x] | 877 | `main` | function | `DAEMON-CLI` | I/D/F: process or daemon call trace + errors |
 
 ### `src/formatter.py`
 
@@ -334,10 +347,10 @@ Every top-level function/class and class method under `src/`, plus the root entr
 
 | Done | Line | Symbol | Kind | Lane | Evidence required |
 |---|---:|---|---|---|---|
-| [ ] | 25 | `Shape` | class | `DOMAIN` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 34 | `Surface` | class | `DOMAIN` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 47 | `Form` | class | `DOMAIN` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 83 | `form_from_token` | function | `DOMAIN` | U/D: direct + Python differential; boundaries |
+| [x] | 25 | `Shape` | class | `DOMAIN` | U/D: defaults, construction, invariants, round-trip |
+| [x] | 34 | `Surface` | class | `DOMAIN` | U/D: defaults, construction, invariants, round-trip |
+| [x] | 47 | `Form` | class | `DOMAIN` | U/D: defaults, construction, invariants, round-trip |
+| [x] | 83 | `form_from_token` | function | `DOMAIN` | U/D: direct + Python differential; boundaries |
 
 ### `src/items.py`
 
@@ -365,11 +378,11 @@ Every top-level function/class and class method under `src/`, plus the root entr
 
 | Done | Line | Symbol | Kind | Lane | Evidence required |
 |---|---:|---|---|---|---|
-| [ ] | 29 | `_ALWAYS` | function | `DOMAIN` | U/D: direct + Python differential; boundaries |
-| [ ] | 63 | `Metric` | class | `DOMAIN` | U/D: defaults, construction, invariants, round-trip |
-| [ ] | 78 | `_m` | function | `DOMAIN` | U/D: direct + Python differential; boundaries |
-| [ ] | 141 | `supports` | function | `DOMAIN` | U/D: direct + Python differential; boundaries |
-| [ ] | 150 | `item_surfaces` | function | `DOMAIN` | U/D: direct + Python differential; boundaries |
+| [x] | 29 | `_ALWAYS` | function | `DOMAIN` | U/D: direct + Python differential; boundaries |
+| [x] | 63 | `Metric` | class | `DOMAIN` | U/D: defaults, construction, invariants, round-trip |
+| [x] | 78 | `_m` | function | `DOMAIN` | U/D: direct + Python differential; boundaries |
+| [x] | 141 | `supports` | function | `DOMAIN` | U/D: direct + Python differential; boundaries |
+| [x] | 150 | `item_surfaces` | function | `DOMAIN` | U/D: direct + Python differential; boundaries |
 
 ### `src/mono_render.py`
 
@@ -421,24 +434,24 @@ Every top-level function/class and class method under `src/`, plus the root entr
 
 | Done | Line | Symbol | Kind | Lane | Evidence required |
 |---|---:|---|---|---|---|
-| [ ] | 19 | `read_page` | function | `RUNTIME` | U/I/F: direct + filesystem/concurrency failures |
-| [ ] | 28 | `set_page` | function | `RUNTIME` | U/I/F: direct + filesystem/concurrency failures |
-| [ ] | 37 | `_npages` | function | `RUNTIME` | U/I/F: direct + filesystem/concurrency failures |
-| [ ] | 44 | `step_page` | function | `RUNTIME` | U/I/F: direct + filesystem/concurrency failures |
+| [x] | 19 | `read_page` | function | `RUNTIME` | U/I/F: direct + filesystem/concurrency failures |
+| [x] | 28 | `set_page` | function | `RUNTIME` | U/I/F: direct + filesystem/concurrency failures |
+| [x] | 37 | `_npages` | function | `RUNTIME` | U/I/F: direct + filesystem/concurrency failures |
+| [x] | 44 | `step_page` | function | `RUNTIME` | U/I/F: direct + filesystem/concurrency failures |
 
 ### `src/registry.py`
 
 | Done | Line | Symbol | Kind | Lane | Evidence required |
 |---|---:|---|---|---|---|
-| [ ] | 37 | `_form_token` | function | `DOMAIN` | U/D: direct + Python differential; boundaries |
+| [x] | 37 | `_form_token` | function | `DOMAIN` | U/D: direct + Python differential; boundaries |
 | [x] | 56 | `_historied` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
 | [x] | 148 | `render` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 164 | `parse` | function | `DOMAIN` | U/D: direct + Python differential; boundaries |
+| [x] | 164 | `parse` | function | `DOMAIN` | U/D: direct + Python differential; boundaries |
 | [x] | 181 | `render_item` | function | `FORMATTER` | U/D: direct + Python differential; boundaries |
-| [ ] | 189 | `item_gate` | function | `DOMAIN` | U/D: direct + Python differential; boundaries |
-| [ ] | 206 | `needed_capabilities` | function | `DOMAIN` | U/D: direct + Python differential; boundaries |
-| [ ] | 227 | `unknown_item_names` | function | `DOMAIN` | U/D: direct + Python differential; boundaries |
-| [ ] | 233 | `misplaced_items` | function | `DOMAIN` | U/D: direct + Python differential; boundaries |
+| [x] | 189 | `item_gate` | function | `DOMAIN` | U/D: direct + Python differential; boundaries |
+| [x] | 206 | `needed_capabilities` | function | `DOMAIN` | U/D: direct + Python differential; boundaries |
+| [x] | 227 | `unknown_item_names` | function | `DOMAIN` | U/D: direct + Python differential; boundaries |
+| [x] | 233 | `misplaced_items` | function | `DOMAIN` | U/D: direct + Python differential; boundaries |
 
 ### `src/render_model.py`
 
@@ -470,8 +483,8 @@ Every top-level function/class and class method under `src/`, plus the root entr
 
 | Done | Line | Symbol | Kind | Lane | Evidence required |
 |---|---:|---|---|---|---|
-| [ ] | 30 | `_runtime_dir` | function | `RUNTIME` | U/I/F: direct + filesystem/concurrency failures |
-| [ ] | 63 | `ensure_dirs` | function | `RUNTIME` | U/I/F: direct + filesystem/concurrency failures |
+| [x] | 30 | `_runtime_dir` | function | `RUNTIME` | U/I/F: direct + filesystem/concurrency failures |
+| [x] | 63 | `ensure_dirs` | function | `RUNTIME` | U/I/F: direct + filesystem/concurrency failures |
 
 ### `src/sensors.py`
 
@@ -480,7 +493,7 @@ Every top-level function/class and class method under `src/`, plus the root entr
 | [x] | 65 | `_bus` | function | `POWER` | U: folded into the shared `DbusFacade::call` boundary; system bus connection owned by the production adapter, tests use `FakeDbus` |
 | [x] | 78 | `_upower_enumerate` | function | `POWER` | U/D/F: Rust `power::upower_enumerate` issues `EnumerateDevices` on the system bus and decodes the flat `[path1, ...]` reply body; empty when the bus/service/call is unavailable |
 | [x] | 93 | `_upower_device_props` | function | `POWER` | U/D/F: Rust `power::upower_device_props` models Python's proxy cached-property read as one `GetAll` call whose interleaved `[k, v, ...]` body decodes `Percentage`/`State`/`EnergyRate`/`Model`/`Type`; None on any failure |
-| [ ] | 116 | `timed_section` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 116 | `timed_section` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 131 | `BatterySys` | class | `INTEGRATION` | U: mapped to typed `BatterySystemReading`; default/state token invariants tested |
 | [x] | 140 | `BatteryPeriph` | class | `INTEGRATION` | U: mapped to typed `BatteryPeripheralReading`; empty aggregate invariants tested |
 | [x] | 146 | `DiskUsage` | class | `INTEGRATION` | U: mapped to typed `DiskUsageReading`; formatter and disk formula tests consume it |
@@ -491,17 +504,17 @@ Every top-level function/class and class method under `src/`, plus the root entr
 | [x] | 215 | `_RateState` | class | `INTEGRATION` | U: mapped to `RateState`; empty previous-sample state tested through rate readers |
 | [x] | 224 | `DaemonState` | class | `INTEGRATION` | U: mapped to typed `DaemonStateSnapshot`; empty cross-poll state tested |
 | [x] | 294 | `Readings` | class | `INTEGRATION` | U: mapped to typed `ReadingsSnapshot`; empty zero-time default and formatter consumption tested |
-| [ ] | 359 | `discover_hardware` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 383 | `rescan_peripherals` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 402 | `needs_periph_rescan` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 420 | `collect` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 606 | `_cached_by_label` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 359 | `discover_hardware` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 383 | `rescan_peripherals` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 402 | `needs_periph_rescan` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 420 | `collect` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 606 | `_cached_by_label` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 622 | `_read_hd_temp_cached` | function | `SENSOR-DISK` | U/F: Rust `read_hd_temp_cached` TTL cache mirrors Python label-keyed behavior |
 | [x] | 633 | `_read_fan_speed_cached` | function | `SENSOR-DISK` | U/F: Rust `read_fan_speed_cached` TTL cache mirrors Python label-keyed behavior |
 | [x] | 640 | `_hwmon_find` | function | `SENSOR-DISK` | U/F: Rust `hwmon::hwmon_dirs_matching` preserves case-insensitive `name` substring discovery |
-| [ ] | 656 | `_resolve_sensor` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 666 | `_read_path_millideg` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 676 | `_read_path_int` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 656 | `_resolve_sensor` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 666 | `_read_path_millideg` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 676 | `_read_path_int` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 687 | `_find_cpu_temp` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 698 | `_find_cpu_freq_path` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 704 | `_find_hd_temps` | function | `SENSOR-DISK` | U/F: Rust `find_hd_temp_paths` covers override precedence plus NVMe/drivetemp autodetect |
@@ -510,7 +523,7 @@ Every top-level function/class and class method under `src/`, plus the root entr
 | [x] | 770 | `_find_fans` | function | `SENSOR-DISK` | U/F: Rust `find_fan_speed_paths` mirrors numbered override discovery and early stop semantics |
 | [x] | 785 | `_token_after` | function | `SENSOR-NET` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 795 | `_detect_net_device` | function | `SENSOR-NET` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 811 | `_is_wireless` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 811 | `_is_wireless` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 815 | `_dbm_to_pct` | function | `SENSOR-NET` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 821 | `_read_net_info` | function | `SENSOR-NET` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 855 | `_read_net_info_cached` | function | `SENSOR-NET` | U/D/F/L: fixture formula, call trace, failures, live where available |
@@ -523,9 +536,9 @@ Every top-level function/class and class method under `src/`, plus the root entr
 | [x] | 984 | `_read_disk_smart` | function | `POWER` | U/D/F: Rust `power::read_disk_smart` triggers `SmartUpdate` then decodes NVMe `SmartCriticalWarning` (healthy iff empty) / ATA `SmartFailing` (healthy iff false); None when any call fails |
 | [x] | 1011 | `_read_disk_smart_cached` | function | `POWER` | U/F: Rust `power::read_disk_smart_cached` mirrors `_cached_by_label` TTL semantics with per-drive intervals (HDD vs SSD) and caches None until TTL elapses |
 | [x] | 1018 | `_find_battery_sys` | function | `POWER` | U/F: Rust `power::find_battery_sys` filters/sorts UPower paths containing `/battery_BAT` |
-| [ ] | 1022 | `_find_peripherals` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 1022 | `_find_peripherals` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1061 | `_detect_cpu_turbo_supported` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1069 | `_detect_has_backlight` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 1069 | `_detect_has_backlight` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1081 | `_detect_has_wifi` | function | `SENSOR-NET` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1091 | `_detect_nvidia` | function | `GPU` | U/F: Rust `detect_nvidia` uses explicit sys root and requires vendor `0x10de` plus display class `0x03`; missing/malformed fixture trees return false; live NVIDIA deferred to Phase 7 |
 | [x] | 1102 | `_detect_intel_gpu` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
@@ -544,14 +557,14 @@ Every top-level function/class and class method under `src/`, plus the root entr
 | [x] | 1408 | `_sample_gpu_history` | function | `GPU` | U/D: Rust `sample_gpu_history` covers graphs gating, NVIDIA preference, Intel fallback, cadence, decoder-zero fill, missing-sample buffer exposure, and bounded trimming; fixed Python oracle assertions match |
 | [x] | 1438 | `_sample_net_history` | function | `SENSOR-NET` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1461 | `_read_swap_usage` | function | `SENSOR-MEM` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1468 | `_counter_rate` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 1468 | `_counter_rate` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1485 | `_read_net_speed` | function | `SENSOR-NET` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1496 | `_resolve_mounts` | function | `SENSOR-DISK` | U/F/P: Rust `resolve_mounts` ports all four existing Python mount-resolution assertions |
 | [x] | 1518 | `_read_disk_usage` | function | `SENSOR-DISK` | U/F: Rust `read_disk_usage` mirrors df/psutil-style `statvfs` percent plus half-even GiB rounding |
 | [x] | 1528 | `_read_disk_io` | function | `SENSOR-DISK` | U/F: Rust `read_disk_io` ports byte-rate diffs with first-sample/device-switch/rollback suppression |
 | [x] | 1538 | `_read_cpu_freq` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1548 | `_read_cpu_turbo` | function | `SENSOR-CPU` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1558 | `_read_brightness` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 1558 | `_read_brightness` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1574 | `_sysfs_bat_rate` | function | `POWER` | U/F: Rust `power::sysfs_bat_rate` reads `power_now` (µW) and applies banker's-rounding watts via `round_half_even_ratio`; returns 0 on read/parse failure. Pulled forward from COLLECTOR because `_read_battery_sys` needs it. |
 | [x] | 1584 | `_sysfs_bat_charge_limit` | function | `POWER` | U/F: Rust `power::sysfs_bat_charge_limit` reads `charge_control_end_threshold`, returning None when absent or reporting 100 (no meaningful limit). Pulled forward from COLLECTOR. |
 | [x] | 1604 | `_sysfs_bat_read` | function | `POWER` | U/F: Rust `power::sysfs_bat_read` reads `capacity`/`status`/`power_now`, maps status via `_SYSFS_BAT_STATUS_MAP`, returns None on sysfs absence (triggers the UPower fallback in `read_battery_sys`). Pulled forward from COLLECTOR. |
@@ -563,12 +576,12 @@ Every top-level function/class and class method under `src/`, plus the root entr
 | [x] | 1789 | `_read_intel_gpu_metrics_cached` | function | `PROCESS` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1802 | `_gpu_cache_ttl` | function | `GPU` | U/D: Rust `gpu_cache_ttl` selects 0s while NVML is usable and 3s after absence/init failure; cache-hit and exact-expiry tests |
 | [x] | 1809 | `_nvidia_cap` | function | `GPU` | U/D: Rust `nvidia_cap` matches Python for None, negative, ordinary, and >99 values |
-| [ ] | 1818 | `_pynvml_handle_get` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 1818 | `_pynvml_handle_get` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
 | [x] | 1835 | `_read_nvidia_pynvml` | function | `GPU` | U/F: typed `NvmlFacade::read_device_zero` preserves mandatory read failure versus optional fan/decoder absence; success values clamp and init/read failures take the Python fallback paths; live adapter deferred to COLLECTOR/Phase 7 |
 | [x] | 1859 | `_read_nvidia_smi` | function | `GPU` | U/D/F E1: exact executable/query/format/5s timeout, CSV fan/decoder reorder, unsupported fields, nonzero/signal, malformed/short/invalid UTF-8, and adapter timeout/error |
 | [x] | 1883 | `_read_nvidia` | function | `GPU` | U/D/F: NVML preferred, permanent init failure, retryable read failure, fallback, all-None cache, 0s/3s cadence, and timestamp update mapped to Rust `read_nvidia` |
-| [ ] | 1894 | `_read_count_file` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
-| [ ] | 1905 | `_read_server_file` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 1894 | `_read_count_file` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
+| [x] | 1905 | `_read_server_file` | function | `COLLECTOR` | U/D/F/L: fixture formula, call trace, failures, live where available |
 
 ### `src/traces.py`
 
@@ -593,7 +606,7 @@ Every top-level function/class and class method under `src/`, plus the root entr
 
 ### `src/units.py`
 
-- [ ] No declared callable: verify module constants/import/entry behavior and final disposition.
+- [x] No declared callable: verify module constants/import/entry behavior and final disposition.
 
 ### `tools/python_oracle.py`
 
@@ -605,7 +618,7 @@ Existing tests remain oracle evidence until mapped to a passing Rust test or int
 
 ### `tests/conftest.py`
 
-- [ ] No declared callable: preserve/port file-level behavior.
+- [x] No declared callable: fixture path setup remains covered by the full Python oracle gate.
 
 ### `tests/oracle.py`
 
@@ -630,63 +643,63 @@ Existing tests remain oracle evidence until mapped to a passing Rust test or int
 
 | Done | Line | Symbol | Kind | Lane | Evidence required |
 |---|---:|---|---|---|---|
-| [ ] | 11 | `test_apply_canonical_width_sets_resolved_width` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 17 | `test_apply_canonical_width_does_not_ratchet` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 24 | `test_apply_canonical_width_floors_at_builtin_minimum` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 30 | `test_apply_canonical_width_ignores_nonpositive` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 39 | `test_deep_merge_override_scalar` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 44 | `test_deep_merge_nested_dicts_merge_recursively` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 51 | `test_deep_merge_does_not_mutate_base` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 57 | `test_deep_merge_dict_replaces_non_dict` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 65 | `test_detect_machine_no_dmi_access_returns_none` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 72 | `test_detect_machine_board_contains_match` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 82 | `test_detect_machine_no_match_returns_none` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 89 | `test_detect_machine_product_contains_match` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 96 | `test_detect_machine_ignores_non_dict_entries` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 105 | `test_resolve_items_plain` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 109 | `test_resolve_items_add_appends_without_dups_preserving_order` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 114 | `test_resolve_items_remove` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 119 | `test_parse_surface_order_drives_sections` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 135 | `test_parse_surface_order_add_appends_section` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 146 | `test_surface_has_and_item_set_empty` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 154 | `test_drop_unknown_items_removes_typos` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 163 | `test_drop_unknown_items_spares_separators` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 175 | `test_drop_misplaced_items_removes_panel_only_from_the_tooltip` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 184 | `test_drop_misplaced_items_removes_tooltip_only_from_the_panel` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 194 | `test_drop_misplaced_items_leaves_a_section_empty_rather_than_absent` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 205 | `test_load_config_missing_path_returns_no_machine` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 211 | `test_load_config_section_schema` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 230 | `test_load_config_machine_items_add` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 251 | `test_load_config_machine_order_add_new_section` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 272 | `test_unknown_item_names_flags_only_unknowns` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 278 | `test_default_config_has_no_unknown_items` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 288 | `test_load_config_warns_on_unknown_item` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 300 | `test_detect_vertical_layout_defaults_vertical_without_appletsrc` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 307 | `test_detect_vertical_layout_reads_panel_edge` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 329 | `_patch_plasma` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 344 | `test_detect_panel_geometry_reads_geom_file` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 352 | `test_detect_panel_geometry_falls_back_to_appletsrc_orientation` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 360 | `test_detect_panel_geometry_ignores_degenerate_geom_file` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 368 | `test_detect_panel_geometry_stale_geom_orientation_uses_appletsrc` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 378 | `test_detect_panel_geometry_defaults_when_unreadable` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 387 | `test_read_geom_falls_back_to_cache_when_live_absent` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 398 | `test_read_geom_prefers_live_over_cache` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 409 | `test_read_geom_none_when_live_absent_and_no_cache` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 416 | `test_cache_live_geom_persists_valid_live` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 427 | `test_cache_live_geom_ignores_degenerate_and_absent` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 443 | `test_auto_fit_panel_derives_knobs_from_geometry` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 460 | `test_auto_fit_bar_height_zero_uses_main_advance` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 471 | `test_auto_fit_horizontal_sizes_column_height` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 481 | `test_auto_fit_noop_when_geometry_unpublished` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 509 | `test_orientation_override_horizontal_picks_column` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 518 | `test_orientation_override_vertical_picks_bar` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
-| [ ] | 527 | `test_column_panel_width_loads` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 11 | `test_apply_canonical_width_sets_resolved_width` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 17 | `test_apply_canonical_width_does_not_ratchet` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 24 | `test_apply_canonical_width_floors_at_builtin_minimum` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 30 | `test_apply_canonical_width_ignores_nonpositive` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 39 | `test_deep_merge_override_scalar` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 44 | `test_deep_merge_nested_dicts_merge_recursively` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 51 | `test_deep_merge_does_not_mutate_base` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 57 | `test_deep_merge_dict_replaces_non_dict` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 65 | `test_detect_machine_no_dmi_access_returns_none` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 72 | `test_detect_machine_board_contains_match` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 82 | `test_detect_machine_no_match_returns_none` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 89 | `test_detect_machine_product_contains_match` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 96 | `test_detect_machine_ignores_non_dict_entries` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 105 | `test_resolve_items_plain` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 109 | `test_resolve_items_add_appends_without_dups_preserving_order` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 114 | `test_resolve_items_remove` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 119 | `test_parse_surface_order_drives_sections` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 135 | `test_parse_surface_order_add_appends_section` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 146 | `test_surface_has_and_item_set_empty` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 154 | `test_drop_unknown_items_removes_typos` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 163 | `test_drop_unknown_items_spares_separators` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 175 | `test_drop_misplaced_items_removes_panel_only_from_the_tooltip` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 184 | `test_drop_misplaced_items_removes_tooltip_only_from_the_panel` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 194 | `test_drop_misplaced_items_leaves_a_section_empty_rather_than_absent` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 205 | `test_load_config_missing_path_returns_no_machine` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 211 | `test_load_config_section_schema` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 230 | `test_load_config_machine_items_add` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 251 | `test_load_config_machine_order_add_new_section` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 272 | `test_unknown_item_names_flags_only_unknowns` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 278 | `test_default_config_has_no_unknown_items` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 288 | `test_load_config_warns_on_unknown_item` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 300 | `test_detect_vertical_layout_defaults_vertical_without_appletsrc` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 307 | `test_detect_vertical_layout_reads_panel_edge` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 329 | `_patch_plasma` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 344 | `test_detect_panel_geometry_reads_geom_file` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 352 | `test_detect_panel_geometry_falls_back_to_appletsrc_orientation` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 360 | `test_detect_panel_geometry_ignores_degenerate_geom_file` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 368 | `test_detect_panel_geometry_stale_geom_orientation_uses_appletsrc` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 378 | `test_detect_panel_geometry_defaults_when_unreadable` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 387 | `test_read_geom_falls_back_to_cache_when_live_absent` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 398 | `test_read_geom_prefers_live_over_cache` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 409 | `test_read_geom_none_when_live_absent_and_no_cache` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 416 | `test_cache_live_geom_persists_valid_live` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 427 | `test_cache_live_geom_ignores_degenerate_and_absent` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 443 | `test_auto_fit_panel_derives_knobs_from_geometry` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 460 | `test_auto_fit_bar_height_zero_uses_main_advance` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 471 | `test_auto_fit_horizontal_sizes_column_height` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 481 | `test_auto_fit_noop_when_geometry_unpublished` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 509 | `test_orientation_override_horizontal_picks_column` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 518 | `test_orientation_override_vertical_picks_bar` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
+| [x] | 527 | `test_column_panel_width_loads` | function | `BASE/CONFIG` | P: preserve assertion; map to Rust test |
 
 ### `tests/test_deadcode.py`
 
 | Done | Line | Symbol | Kind | Lane | Evidence required |
 |---|---:|---|---|---|---|
-| [ ] | 24 | `test_no_dead_code` | function | `BASE/INTEGRATION` | P: preserve assertion; map to Rust test |
+| [x] | 24 | `test_no_dead_code` | function | `BASE/INTEGRATION` | P: preserve assertion; map to Rust test |
 
 ### `tests/test_formatter.py`
 
@@ -781,34 +794,34 @@ Existing tests remain oracle evidence until mapped to a passing Rust test or int
 | [ ] | 43 | `_file_counts` | function | `BASE/INTEGRATION` | P/I: preserve inventory/reporter gate + exact markdown sync |
 | [ ] | 54 | `_call_edge_rows` | function | `BASE/INTEGRATION` | P/I: preserve inventory/reporter gate + exact markdown sync |
 | [ ] | 82 | `test_inventory_ast_reporter_workspace_smoke` | function | `BASE/INTEGRATION` | P/I: preserve inventory/reporter gate + exact markdown sync |
-| [ ] | 135 | `test_inventory_call_edge_table_matches_ast_reporter` | function | `BASE/INTEGRATION` | P/I: preserve inventory/reporter gate + exact markdown sync |
+| [ ] | 140 | `test_inventory_call_edge_table_matches_ast_reporter` | function | `BASE/INTEGRATION` | P/I: preserve inventory/reporter gate + exact markdown sync |
 
 ### `tests/test_items.py`
 
 | Done | Line | Symbol | Kind | Lane | Evidence required |
 |---|---:|---|---|---|---|
-| [ ] | 13 | `_cfg` | function | `BASE/DOMAIN` | P: preserve assertion; map to Rust test |
-| [ ] | 25 | `_where` | function | `BASE/DOMAIN` | P: preserve assertion; map to Rust test |
-| [ ] | 34 | `test_cpu_usage_needs_no_dedicated_sensor` | function | `BASE/DOMAIN` | P: preserve assertion; map to Rust test |
-| [ ] | 39 | `test_item_pulls_its_capability` | function | `BASE/DOMAIN` | P: preserve assertion; map to Rust test |
-| [ ] | 44 | `test_metric_can_need_multiple_capabilities` | function | `BASE/DOMAIN` | P: preserve assertion; map to Rust test |
-| [ ] | 49 | `test_form_does_not_change_the_capability` | function | `BASE/DOMAIN` | P: preserve assertion; map to Rust test |
-| [ ] | 55 | `test_notification_keeps_sensor_alive_without_the_item` | function | `BASE/DOMAIN` | P: preserve assertion; map to Rust test |
-| [ ] | 61 | `test_unknown_token_contributes_nothing` | function | `BASE/DOMAIN` | P: preserve assertion; map to Rust test |
-| [ ] | 65 | `test_gpu_nvidia_metrics_share_one_capability` | function | `BASE/DOMAIN` | P: preserve assertion; map to Rust test |
-| [ ] | 72 | `test_unknown_item_names_flags_bad_metric_and_bad_form` | function | `BASE/DOMAIN` | P: preserve assertion; map to Rust test |
-| [ ] | 80 | `test_value_metrics_live_on_both_surfaces` | function | `BASE/DOMAIN` | P: preserve assertion; map to Rust test |
-| [ ] | 86 | `test_bare_visuals_are_panel_only` | function | `BASE/DOMAIN` | P: preserve assertion; map to Rust test |
-| [ ] | 93 | `test_wide_forms_and_string_metrics_are_tooltip_only` | function | `BASE/DOMAIN` | P: preserve assertion; map to Rust test |
-| [ ] | 100 | `test_misplaced_items_flags_tooltip_only_in_panel` | function | `BASE/DOMAIN` | P: preserve assertion; map to Rust test |
-| [ ] | 108 | `test_misplaced_items_flags_panel_only_in_tooltip` | function | `BASE/DOMAIN` | P: preserve assertion; map to Rust test |
-| [ ] | 117 | `test_misplaced_items_ignores_unknown_names` | function | `BASE/DOMAIN` | P: preserve assertion; map to Rust test |
+| [x] | 13 | `_cfg` | function | `BASE/DOMAIN` | P: preserve assertion; map to Rust test |
+| [x] | 25 | `_where` | function | `BASE/DOMAIN` | P: preserve assertion; map to Rust test |
+| [x] | 34 | `test_cpu_usage_needs_no_dedicated_sensor` | function | `BASE/DOMAIN` | P: preserve assertion; map to Rust test |
+| [x] | 39 | `test_item_pulls_its_capability` | function | `BASE/DOMAIN` | P: preserve assertion; map to Rust test |
+| [x] | 44 | `test_metric_can_need_multiple_capabilities` | function | `BASE/DOMAIN` | P: preserve assertion; map to Rust test |
+| [x] | 49 | `test_form_does_not_change_the_capability` | function | `BASE/DOMAIN` | P: preserve assertion; map to Rust test |
+| [x] | 55 | `test_notification_keeps_sensor_alive_without_the_item` | function | `BASE/DOMAIN` | P: preserve assertion; map to Rust test |
+| [x] | 61 | `test_unknown_token_contributes_nothing` | function | `BASE/DOMAIN` | P: preserve assertion; map to Rust test |
+| [x] | 65 | `test_gpu_nvidia_metrics_share_one_capability` | function | `BASE/DOMAIN` | P: preserve assertion; map to Rust test |
+| [x] | 72 | `test_unknown_item_names_flags_bad_metric_and_bad_form` | function | `BASE/DOMAIN` | P: preserve assertion; map to Rust test |
+| [x] | 80 | `test_value_metrics_live_on_both_surfaces` | function | `BASE/DOMAIN` | P: preserve assertion; map to Rust test |
+| [x] | 86 | `test_bare_visuals_are_panel_only` | function | `BASE/DOMAIN` | P: preserve assertion; map to Rust test |
+| [x] | 93 | `test_wide_forms_and_string_metrics_are_tooltip_only` | function | `BASE/DOMAIN` | P: preserve assertion; map to Rust test |
+| [x] | 100 | `test_misplaced_items_flags_tooltip_only_in_panel` | function | `BASE/DOMAIN` | P: preserve assertion; map to Rust test |
+| [x] | 108 | `test_misplaced_items_flags_panel_only_in_tooltip` | function | `BASE/DOMAIN` | P: preserve assertion; map to Rust test |
+| [x] | 117 | `test_misplaced_items_ignores_unknown_names` | function | `BASE/DOMAIN` | P: preserve assertion; map to Rust test |
 
 ### `tests/test_lint.py`
 
 | Done | Line | Symbol | Kind | Lane | Evidence required |
 |---|---:|---|---|---|---|
-| [ ] | 24 | `test_ruff_clean` | function | `BASE/INTEGRATION` | P: preserve assertion; map to Rust test |
+| [x] | 24 | `test_ruff_clean` | function | `BASE/INTEGRATION` | P: preserve assertion; map to Rust test |
 
 ### `tests/test_mono_render.py`
 
@@ -899,7 +912,7 @@ Existing tests remain oracle evidence until mapped to a passing Rust test or int
 
 ### `tests/vulture_whitelist.py`
 
-- [ ] No declared callable: preserve/port file-level behavior.
+- [x] No declared callable: dynamic Python-oracle lookups remain covered by the vulture gate until P8.4.
 
 ### `tools/demo_shot.py`
 
@@ -913,31 +926,31 @@ Existing tests remain oracle evidence until mapped to a passing Rust test or int
 
 | Done | Line | Symbol | Kind | Lane | Evidence required |
 |---|---:|---|---|---|---|
-| [ ] | 39 | `CallContext` | class | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
-| [ ] | 44 | `_display_path` | function | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
-| [ ] | 51 | `_read_source` | function | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
-| [ ] | 56 | `_callee_text` | function | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
-| [ ] | 63 | `_callee_key` | function | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
-| [ ] | 79 | `_iter_targets` | function | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
-| [ ] | 107 | `FileAnalyzer` | class | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
-| [ ] | 108 | `FileAnalyzer.__init__` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
-| [ ] | 115 | `FileAnalyzer.analyze` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
-| [ ] | 140 | `FileAnalyzer._visit_module_stmt` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
-| [ ] | 149 | `FileAnalyzer._visit_recorded_class` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
-| [ ] | 164 | `FileAnalyzer._visit_recorded_function` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
-| [ ] | 178 | `FileAnalyzer._visit_class_header` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
-| [ ] | 188 | `FileAnalyzer._visit_function_header` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
-| [ ] | 197 | `FileAnalyzer._record_callable` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
-| [ ] | 220 | `FileAnalyzer._context` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
-| [ ] | 227 | `FileAnalyzer._current_context` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
-| [ ] | 230 | `FileAnalyzer.visit_FunctionDef` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
-| [ ] | 235 | `FileAnalyzer.visit_AsyncFunctionDef` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
-| [ ] | 240 | `FileAnalyzer.visit_ClassDef` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
-| [ ] | 245 | `FileAnalyzer.visit_Call` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
-| [ ] | 265 | `analyze_file` | function | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
-| [ ] | 272 | `build_report` | function | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
-| [ ] | 312 | `build_parser` | function | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
-| [ ] | 337 | `main` | function | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [x] | 39 | `CallContext` | class | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [x] | 44 | `_display_path` | function | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [x] | 51 | `_read_source` | function | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [x] | 56 | `_callee_text` | function | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [x] | 63 | `_callee_key` | function | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [x] | 79 | `_iter_targets` | function | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [x] | 107 | `FileAnalyzer` | class | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [x] | 108 | `FileAnalyzer.__init__` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [x] | 115 | `FileAnalyzer.analyze` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [x] | 140 | `FileAnalyzer._visit_module_stmt` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [x] | 149 | `FileAnalyzer._visit_recorded_class` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [x] | 164 | `FileAnalyzer._visit_recorded_function` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [x] | 178 | `FileAnalyzer._visit_class_header` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [x] | 188 | `FileAnalyzer._visit_function_header` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [x] | 197 | `FileAnalyzer._record_callable` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [x] | 220 | `FileAnalyzer._context` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [x] | 227 | `FileAnalyzer._current_context` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [x] | 230 | `FileAnalyzer.visit_FunctionDef` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [x] | 235 | `FileAnalyzer.visit_AsyncFunctionDef` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [x] | 240 | `FileAnalyzer.visit_ClassDef` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [x] | 245 | `FileAnalyzer.visit_Call` | method | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [x] | 265 | `analyze_file` | function | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [x] | 272 | `build_report` | function | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [x] | 312 | `build_parser` | function | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
+| [x] | 337 | `main` | function | `BASE/INTEGRATION` | I: tool smoke + exact inventory gate |
 
 ### `tools/manual_tooltip_preview.py`
 
@@ -952,8 +965,8 @@ Existing tests remain oracle evidence until mapped to a passing Rust test or int
 | Done | Line | Symbol | Kind | Lane | Evidence required |
 |---|---:|---|---|---|---|
 | [x] | 65 | `_plasmoid_output` | function | `QML-VERIFY` | I/E4: fastfetch SGR/newline conversion matrix + focused sample assertions |
-| [x] | 162 | `_qml_for_html` | function | `BASE/QML-VERIFY` | I/E4: 24-cell Qt matrix |
-| [x] | 177 | `main` | function | `BASE/QML-VERIFY` | I/E4: 24-cell Qt matrix |
+| [x] | 163 | `_qml_for_html` | function | `BASE/QML-VERIFY` | I/E4: 24-cell Qt matrix |
+| [x] | 178 | `main` | function | `BASE/QML-VERIFY` | I/E4: 24-cell Qt matrix |
 
 ### `tools/p6_png_diff.py`
 
@@ -1166,22 +1179,22 @@ Existing tests remain oracle evidence until mapped to a passing Rust test or int
 
 ## Rust callable inventory
 
-Mirrors the Python ledger for new Rust callables introduced by the migration.
-Each entry's `Lane` is the lane that owns the *final* shape; `SCAFFOLD` rows
-are contracts that downstream lanes extend. Evidence codes follow the same
+Mirrors the Python ledger for production Rust callables. Each entry's `Lane` is
+the migration lane that established the final shape; `SCAFFOLD` rows are shared
+contracts now consumed by the completed implementation. Evidence codes follow the same
 legend as the rest of this file (U/D/F/I/L/P + E0–E5).
 
 ### `rust/src/lib.rs`
 
 | Done | Symbol | Kind | Lane | Evidence required |
 |---|---|---|---|---|
-| [x] | `run` | function | `SCAFFOLD` | U: dispatch tests for `Help`/`Version`/`ScaffoldOnly` |
+| [x] | `run` | function | `SCAFFOLD` | U/I: dispatch tests cover help/version and every production command |
 
 ### `rust/src/error.rs`
 
 | Done | Symbol | Kind | Lane | Evidence required |
 |---|---|---|---|---|
-| [x] | `Error` | enum | `SCAFFOLD` | U: variants surface `Cli` + `ScaffoldOnly` |
+| [x] | `Error` | enum | `SCAFFOLD` | U: `Cli`, `Config`, and contextual `Runtime` variants |
 | [x] | `Result` | alias | `SCAFFOLD` | U: alias used by `run` |
 
 ### `rust/src/cli.rs`
@@ -1271,7 +1284,7 @@ legend as the rest of this file (U/D/F/I/L/P + E0–E5).
 |---|---|---|---|---|
 | [x] | `TimedValue` | struct | `INTEGRATION` | U: empty default captures the shared TTL-cache shape |
 | [x] | `BatterySystemCache` / `BatteryPeripheralCache` / `NetworkInfoCache` | structs | `INTEGRATION` | U: typed cached cross-poll state replaces stringly placeholder state |
-| [x] | `CounterRateState` / `GpuCache` | structs | `INTEGRATION` | U: typed diff/cache state shared by future collectors |
+| [x] | `CounterRateState` / `GpuCache` | structs | `INTEGRATION` | U: typed diff/cache state shared by active collectors |
 | [x] | `NotificationLatch` / `NotificationState` | structs | `NOTIFY` | U/D: sustained and edge state, per-device ownership, default invariants, and retention after device removal match Python |
 | [x] | `DaemonStateSnapshot` | struct | `INTEGRATION/NOTIFY` | U: default/invariant tests cover typed cross-poll state, daemon-owned notification latches, and retained page/poll bookkeeping |
 
@@ -1320,7 +1333,7 @@ legend as the rest of this file (U/D/F/I/L/P + E0–E5).
 
 | Done | Symbol | Kind | Lane | Evidence required |
 |---|---|---|---|---|
-| [x] | `PanelFormatter` | struct | `FORMATTER` | U/D: borrowed config/hardware formatter shell for main panel/tooltip parity |
+| [x] | `PanelFormatter` | struct | `FORMATTER` | U/D: borrowed config/hardware formatter for main panel/tooltip parity |
 | [x] | `PanelFormatter::new` / `with_now_unix` / `format_panel` / `format_tooltip` / `canonical_width` | methods | `FORMATTER` | U/D: shipped panel H/V + tooltip goldens, deterministic battery alternation, and canonical-width guard |
 | [x] | `PanelFormatter::build_entries` + item-render helper family | methods | `FORMATTER` | U/D: section collapse, titles, separators, regular/irregular rows, paired rows, batteries, dual-rate rows, and formatter-owned dispatch from `src/formatter.py` |
 
@@ -1371,7 +1384,7 @@ legend as the rest of this file (U/D/F/I/L/P + E0–E5).
 | [x] | `FakeNotificationFacade` | struct | `FIXTURES/NOTIFY` | U/F E1: ordered full-payload recording and queued results; records failed attempts; no real desktop calls |
 | [x] | `FakeCommandRunner` / `CommandCall` + re-exported `CommandRunner` trait | structs + trait | `FIXTURES`/`INTEGRATION` | U: argv-keyed FIFO output/error queues + exact program/argv/timeout call trace + `next_call`; implements production `CommandRunner` |
 | [x] | `FakeDbus` + re-exported `DbusFacade` trait | struct + trait | `FIXTURES`/`INTEGRATION` | U: signature-keyed reply FIFO + exact `DbusRequest` trace including typed arguments and timeout; implements promoted `domain::boundary::DbusFacade` |
-| [x] | `FixtureLoader` + `OracleFixtureRaw` | struct + struct | `FIXTURES` | U: `load_text`/`load_bytes`/`load_oracle_fixture` (raw `toml::Value` view); typed deserialization deferred to Wave 3/4 |
+| [x] | `FixtureLoader` + `OracleFixtureRaw` | struct + struct | `FIXTURES` | U: `load_text`/`load_bytes`/`load_oracle_fixture`; raw `toml::Value` preserves the shared oracle schema without coupling to production snapshots |
 | [x] | `FixtureError` / re-exported `BoundaryError` | enums | `FIXTURES`/`INTEGRATION` | U: loader errors stay test-local; fake boundary failures now use the promoted production `BoundaryError` contract |
 | [x] | `DbusCall` type alias | alias | `FIXTURES` | U: `(BusKind, String, String, String, String)` for trace slices |
 
@@ -1408,7 +1421,7 @@ legend as the rest of this file (U/D/F/I/L/P + E0–E5).
 |---|---|---|---|---|
 | [x] | `NetInfo` | struct | `SENSOR-NET` | U: route device + IP + optional wifi SSID/signal result shape |
 | [x] | `NetworkState` | struct | `SENSOR-NET` | U: cached route info, per-interface rate diff state, and graph-history buffers |
-| [x] | `NetworkState::net_up_history` / `net_down_history` | methods | `SENSOR-NET` | U: read-only history exposure for future formatter/chart lanes |
+| [x] | `NetworkState::net_up_history` / `net_down_history` | methods | `SENSOR-NET` | U: read-only history exposure consumed by graph rendering |
 | [x] | `detect_net_device` | function | `SENSOR-NET` | U: exact `ip route get` → `ip route show default` fallback and `dev` token parsing; mirrors `src/sensors.py:_detect_net_device` |
 | [x] | `detect_has_wifi` | function | `SENSOR-NET` | U: sysfs wireless-interface presence detection; mirrors `src/sensors.py:_detect_has_wifi` |
 | [x] | `dbm_to_pct` | function | `SENSOR-NET` | U: linear clamped dBm→percent conversion; mirrors `src/sensors.py:_dbm_to_pct` |
@@ -1421,7 +1434,7 @@ legend as the rest of this file (U/D/F/I/L/P + E0–E5).
 
 | Done | Symbol | Kind | Lane | Evidence required |
 |---|---|---|---|---|
-| [x] | `DiskKind` / `DiskIdentity` | enum/struct | `SENSOR-DISK` | U: stable disk-identity shape for later POWER/FORMATTER lanes; NVMe vs ATA + rotational flag |
+| [x] | `DiskKind` / `DiskIdentity` | enum/struct | `SENSOR-DISK` | U: stable disk identity consumed by power and formatting; NVMe vs ATA + rotational flag |
 | [x] | `DiskUsage` | struct | `SENSOR-DISK` | U: visible percent + half-even rounded used/total GiB result shape |
 | [x] | `DiskState` | struct | `SENSOR-DISK` | U: label-keyed hd-temp/fan caches plus whole-disk byte-rate diff state |
 | [x] | `find_hd_temp_paths` | function | `SENSOR-DISK` | U/F: override precedence plus NVMe/drivetemp autodetect with Python-matching labels; mirrors `src/sensors.py:_find_hd_temps` |
@@ -1487,7 +1500,7 @@ legend as the rest of this file (U/D/F/I/L/P + E0–E5).
 
 | Done | Symbol | Kind | Lane | Evidence required |
 |---|---|---|---|---|
-| [x] | `PageDirection` | enum | `RUNTIME` | U: local `{ Next, Prev }`; `cli::PageDirection` bridge deferred to Wave 5 |
+| [x] | `PageDirection` | enum | `RUNTIME` | U/I: local `{ Next, Prev }`; `daemon::run_page` owns CLI translation |
 | [x] | `read_page` / `npages` | functions | `RUNTIME` | U: missing-file + garbage defaults (0 / 1); mirrors `src/pagestate.py` |
 | [x] | `set_page` | function | `RUNTIME` | I: atomic write via `write_atomic`; PID-unique tmp matches Python's `page.{pid}.tmp` scheme |
 | [x] | `step_page` | function | `RUNTIME` | I: flock serialization (`nix::fcntl::Flock::LockExclusive`); early-out when `npages ≤ 1`; `rem_euclid` wrap for negative deltas; **32-thread concurrency test proves no lost updates**; readonly-dir permission failure propagates `Err` |
@@ -1501,7 +1514,7 @@ legend as the rest of this file (U/D/F/I/L/P + E0–E5).
 | [x] | `load_config` / `load_config_with_dmi` / `load_config_with_machine` | functions | `CONFIG` | U+I: ports `src/config.py:load_config`; `_with_dmi` test seam replaces Python's monkeypatch pattern |
 | [x] | `apply_canonical_width` | function | `CONFIG` | U: non-ratcheting tooltip-width resolver; floors at `TOOLTIP_WIDTH_FLOOR` |
 | [x] | `drop_unknown_items` / `drop_misplaced_items` / `drop_items` | functions | `CONFIG` | U: delegates to `domain::registry::{unknown_item_names, misplaced_items}` — NO local duplicates |
-| [x] | `ConfigError` | enum | `CONFIG` | U: `Io`/`Toml` variants; `Error::Config` promotion proposed for Wave 5 |
+| [x] | `ConfigError` | enum | `CONFIG` | U/I: `Io`/`Toml` variants promoted through `Error::Config` |
 | [x] | constants `TOOLTIP_WIDTH_FLOOR`/`BRAILLE_LENGTH_MULTIPLIER`/`CSS_ADVANCE_RATIO`/`BAR_SAFETY_PX`/`COLUMN_DIGIT_RATIO` | consts | `CONFIG` | U: mirror `src/config.py` underscored variants |
 
 ### `rust/src/config/merge.rs`

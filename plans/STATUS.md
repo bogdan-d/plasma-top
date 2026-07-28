@@ -53,7 +53,7 @@ Only integration owner edits this file. Lane agents write under `handoffs/`.
 | QML-VERIFY | 6 | verified | Codex | `6ffba34` | `plans/handoffs/qml-verify-codex-20260722.md` | P6.1–P6.3 verified on Plasma 6.7.2 Wayland: correct-id Application smoke plus isolated `plasmoidviewer` horizontal/vertical/planar runs under disposable XDG/HOME/runtime roots; actual QML traces prove geometry publication/orientation, watcher refresh, lazy tooltip reads, page/click commands, and root discipline; strict Qt matrix covers panel H/V + main/five deep pages in dark/light/overlay with faithful fastfetch ANSI conversion; human pass confirms hover, pin/unpin, wheel grouping/quick reverse, resize, desktop transparent/background/outline/font/config behavior; no QML workaround or accepted deviation |
 | PACKAGING | 6 | verified | Codex | `703bae7` | `plans/handoffs/packaging-codex-20260728.md` | P6.4 native manual/AUR packaging verified: locked `x86_64` release build with runtime-loaded NVML, FHS asset-root launcher, Rust-only runtime manifest, preserved service/applet/license contracts; repo/`/tmp`-only disposable install, repeat upgrade, Python rollback, uninstall, user-file preservation, and sourced AUR `package()` checks pass; real pacman/user-systemd lifecycle waived by D005 |
 | HARDWARE-* | 7 | verified | Codex | `3bfe101` | `plans/handoffs/hardware-current-host-codex-20260728.md` | Current-host P7.1/P7.2/P7.4/P7.5 pass; unavailable live paths have mandatory fixture proof and explicit D006 acceptance; Gate P7 green |
-| CUTOVER | 8 | active | Codex | `31ec788` + working tree | `plans/handoffs/cutover-p8.1-codex-20260728.md` | P8.1 verified: `pre-rust-cutover` rollback tag; system package and checkout CLI Rust-authoritative; Python launcher oracle-only; supported user-local install/uninstall implemented and disposable lifecycle gate green; P8.2 live stabilization remains |
+| CUTOVER | 8 | active | Codex | `f11050c` | `plans/handoffs/cutover-p8.1-codex-20260728.md` | P8.1 verified: `pre-rust-cutover` rollback tag; system package and checkout CLI Rust-authoritative; Python launcher oracle-only; supported user-local install/uninstall implemented and disposable lifecycle gate green; P8.2 live stabilization remains |
 
 ## Milestones
 
@@ -69,7 +69,7 @@ Only integration owner edits this file. Lane agents write under `handoffs/`.
 - **Wave 4 GPU complete**: `GPU` is verified and integrated at the lane level. Rust now owns NVIDIA display-device discovery, fixtureable NVML metric selection, exact `nvidia-smi` fallback and TTL behavior, metric clamps, and active-vendor graph history. COLLECTOR now supplies the optional lazy production NVML loader/handle adapter; NVIDIA live hardware remains a Phase 7 evidence gap on the current AMD-only host.
 - **Wave 4 notify complete / Gate P4 green**: `NOTIFY` is verified. The shared production/test notification contract preserves title/body/icon/critical urgency/never timeout, its fake records ordered attempts without desktop I/O, and the Rust state machine matches all Python edge/hold/hysteresis/per-device/exclusion/retention behavior. Adapter failures are returned as ordered degradation evidence while later alerts and latch transitions continue.
 - **Phase 5 collector complete**: capability-driven discovery, rescan, and collection now compose every verified sensor family in Python-compatible order. The collector owns one fresh readings snapshot per poll, domain-specific persistent state, route-device adoption, profiling timings, skip-slow first-paint behavior, and optional lazy NVML construction. Deterministic collector tests prove requested/shared/unrequested call sets, cache/history cadence, adapter failure isolation, and no host I/O.
-- **Gate P5 green**: production boundaries, CSS/theme reload, daemon scheduling/reload/publication/page-wake/signal cleanup, diagnostics, and all CLI commands are integrated. Isolated deterministic lifecycle and process tests cover first paint, normal polls, malformed last-good reload, page latency, runtime-root discipline, and cleanup; deterministic Python/Rust CLI diffs are clean.
+- **Gate P5 green**: production boundaries, CSS/theme reload, daemon scheduling/reload/publication/page-wake/signal cleanup, diagnostics, and all CLI commands are integrated. Isolated deterministic lifecycle and process tests cover first paint, normal polls, malformed last-good reload, page latency, runtime-root discipline, and cleanup; fixed Python byte corpora, Rust integration tests, and Phase 7 near-simultaneous probe comparisons provide parity evidence. The original shared-fixture CLI runner remains deferred because the production Rust CLI intentionally has no fixture flag.
 - **Phase 6 QML verification complete**: the unchanged applet passes isolated Application smoke plus real horizontal, vertical, and planar `plasmoidviewer` runs. QML-owned geometry, orientation, watcher/lazy-read behavior, action dispatch, runtime-root discipline, all-page dark/light/overlay Qt renders, hover, pinning, wheel grouping, resize, and desktop appearance/config behavior are verified. Gate P6 now waits only `PACKAGING` P6.4/P6.5.
 - **Phase 6 packaging implementation complete**: manual and AUR channels now build the locked Rust binary, install only native runtime assets, preserve the stable service/applet paths, and carry GPL/NOTICE files. Disposable `/tmp` install, upgrade, Python rollback, uninstall, user-file, and AUR manifest checks pass.
 - **Gate P6 green with D005**: user accepted disposable staged packaging evidence in place of real pacman/user-systemd lifecycle testing on this immutable non-Arch host. Phase 7 current-host shadow, soak, and performance validation is unblocked.
@@ -77,6 +77,19 @@ Only integration owner edits this file. Lane agents write under `handoffs/`.
 - **Gate P7 green with D006**: user accepted fixture-backed deferral of unavailable Intel/NVIDIA/battery/HID and mutation-driven live validation until suitable hardware is available. Gaps remain documented and reopenable; cutover is unblocked.
 - **P8.1 cutover complete**: production packaging and service remain Rust-only; checkout `./pirostats` is now Rust-authoritative; Python survives only as an explicit, uninstalled oracle. Annotated tag `pre-rust-cutover` preserves the pre-cutover rollback point. User-local install/uninstall now supports immutable hosts without sudo or `/usr` writes and passes disposable lifecycle/path/failure tests. P8.2 live stabilization is next.
 - **Current aggregate gate**: Rust fmt/check/clippy/test/doc pass with 507 library + 26 integration tests (533 total). Full Python oracle remains green with 175 passed + 1 optional ruff skip; ruff and vulture pass.
+
+## Active Phase 8 work
+
+- **P8.2:** collect and approve the live installed-Plasma evidence defined in
+  `PHASES.md`; user-local activation remains the primary missing live path.
+- **Parity evidence:** fixed corpora and integration/live comparisons are green.
+  `rust/tests/parity_runner.sh` remains an explicit skip until a fixture-only
+  Rust diagnostic seam is approved or the runner is retired.
+- **Inventory:** verified implementation rows are reconciled. Unchecked rows are
+  limited to the deferred shared-fixture runner, inventory-gate strengthening,
+  oracle archival, and two preview-tool smokes.
+- **P8.4/P8.5:** remove Python only after P8.2 approval, then promote/archive
+  oracle evidence and migration plans.
 
 ## Accepted deviations
 

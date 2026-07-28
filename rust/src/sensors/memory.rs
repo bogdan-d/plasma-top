@@ -1,6 +1,6 @@
 //! Memory and swap readings from `/proc/meminfo`.
 //!
-//! This module ports the Wave 3 memory lane from `src/sensors.py`: RAM usage,
+//! RAM usage,
 //! rounded used/total GiB values for the tooltip, swap usage, and bounded
 //! shared memory history. The production Python code delegates to
 //! `psutil.virtual_memory()` / `psutil.swap_memory()`. Here we mirror the
@@ -40,10 +40,8 @@ pub struct MemoryUsage {
 
 /// Reads total RAM bytes from `/proc/meminfo`.
 ///
-/// This is the deterministic Rust counterpart to the Python lane's
-/// `_mem_total_bytes()` helper, without the global process cache. Later lanes
-/// can cache the constant at their orchestration boundary if they need the same
-/// optimization.
+/// Deterministic counterpart to Python's `_mem_total_bytes()` helper, without a
+/// global process cache. The collector owns any longer-lived value.
 #[must_use]
 pub fn read_mem_total_bytes(proc_root: &Path) -> Option<u64> {
     load_meminfo(proc_root)?.mem_total

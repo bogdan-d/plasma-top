@@ -1,9 +1,9 @@
 //! Test support: deterministic fakes and fixture loaders shared by
-//! integration tests and downstream lanes.
+//! integration tests.
 //!
 //! This module is gated behind the `test-support` cargo feature and excluded
-//! from production builds. It provides the in-memory boundaries every later
-//! sensor/adapter lane depends on:
+//! from production builds. It provides the in-memory boundaries used by
+//! sensor, adapter, formatter, and daemon tests:
 //!
 //! - [`FixtureRoot`] for virtual filesystem roots (proc/sys/run subtrees).
 //! - [`FakeClock`] for deterministic clock advancement (rate/history/hysteresis).

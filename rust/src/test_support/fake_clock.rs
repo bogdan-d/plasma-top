@@ -1,7 +1,6 @@
 //! Deterministic clock for rate/history/state-machine tests.
 //!
-//! [`FakeClock`] is the dependency SENSOR-CPU/MEM/NET/DISK lanes (Wave 3) and
-//! NOTIFY (Wave 4) inject in place of the real monotonic/wall clocks so tests
+//! [`FakeClock`] replaces real monotonic/wall clocks so sensor and notification tests
 //! can drive history cadence and hysteresis without sleeping. The two clocks
 //! advance together by a configurable step.
 

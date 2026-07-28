@@ -1,9 +1,8 @@
 //! Token, separator, and capability boundary — the Rust mirror of the token
 //! layer in `src/registry.py`.
 //!
-//! The dispatch half of `src/registry.py` (`_RENDER[(metric, form)] -> GroupFn`)
-//! belongs to the FORMATTER lane; this module ports only what the DOMAIN layer
-//! owns: the [`parse`] boundary that formatter/config/sensors consume, the
+//! Render dispatch belongs to `crate::render::registry`; this module owns the
+//! [`parse`] boundary that formatter/config/sensors consume, the
 //! [`unknown_item_names`] / [`misplaced_items`] validators, and the
 //! [`needed_capabilities`] derivation that drives the collector's call set.
 

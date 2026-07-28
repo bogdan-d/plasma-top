@@ -78,6 +78,8 @@ Do not smuggle behavior changes into conflict resolution.
 - `active` — one assigned owner
 - `handoff` — agent reports done, awaiting verification
 - `integrated` — integration owner merged and reran lane gate
+- `verified` — integrated lane whose cited aggregate evidence was rerun and
+  accepted by the integration owner
 - `rejected` — handoff failed scope/parity/quality; new attempt required
 - `deferred` — explicitly outside current phase
 
@@ -94,4 +96,3 @@ Do not smuggle behavior changes into conflict resolution.
 - Exact oracle differences are zero or documented/approved.
 - Commands independently reproducible.
 - Docs/comments describe current invariant, not migration history.
-

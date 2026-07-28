@@ -276,7 +276,7 @@ impl Metric {
         }
     }
 
-    /// Returns the frozen scaffold metadata for the metric.
+    /// Returns the intrinsic metadata for the metric.
     #[must_use]
     pub fn spec(self) -> MetricSpec {
         match self {

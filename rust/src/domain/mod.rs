@@ -1,4 +1,4 @@
-//! Frozen domain contracts for the Rust migration scaffold.
+//! Domain contracts shared by config, collection, rendering, and adapters.
 
 pub mod boundary;
 pub mod form;

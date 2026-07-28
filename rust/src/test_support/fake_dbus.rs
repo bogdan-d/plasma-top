@@ -1,9 +1,7 @@
 //! D-Bus facade boundary and its in-memory fake.
 //!
-//! [`DbusFacade`] is the trait the production UPower/UDisks2/freedesktop-notify
-//! adapters (Wave 4 POWER/NOTIFY lanes) and the in-memory fake both implement.
-//! Each production facade is a separate trait owned by the matching lane — this
-//! crate-level trait captures only the shared call shape so domain logic stays
+//! [`DbusFacade`] is implemented by the production `busctl` adapter and this
+//! in-memory fake. The trait captures only the shared call shape so domain logic stays
 //! testable without a live session or system bus.
 
 use std::collections::{HashMap, VecDeque};

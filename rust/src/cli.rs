@@ -141,7 +141,7 @@ pub enum PageDirection {
 pub enum CliError {
     /// The command line contained a non-Unicode token where a textual flag or subcommand was expected.
     NonUnicodeArgument,
-    /// The top-level command name is not part of the scaffold contract.
+    /// The top-level command name is unsupported.
     UnknownCommand {
         /// The unrecognized command text.
         command: String,
@@ -172,10 +172,9 @@ pub enum CliError {
 }
 
 impl Cli {
-    /// Parses the current scaffold CLI contract.
+    /// Parses the supported CLI contract.
     ///
-    /// The parser intentionally accepts only the current command names and flag
-    /// shapes needed to freeze the contract for later implementation slices.
+    /// The parser accepts only documented command names and flag shapes.
     ///
     /// # Errors
     ///
@@ -254,7 +253,7 @@ impl Display for CliError {
         match self {
             Self::NonUnicodeArgument => write!(
                 formatter,
-                "non-unicode arguments are not supported by the scaffold parser"
+                "non-unicode arguments are not supported by the CLI parser"
             ),
             Self::UnknownCommand { command } => write!(
                 formatter,

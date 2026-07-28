@@ -1,6 +1,6 @@
 //! Top-process sampling and cmdline resolution.
 //!
-//! Ports the process-owned half of `src/sensors.py` (the PROCESS lane):
+//! Owns process sampling formerly grouped inside `src/sensors.py`:
 //!
 //! - [`read_proc_stat_times`] scans `/proc/[pid]/stat` for the per-process
 //!   jiffies/RSS snapshot that the CPU-diff uses.
@@ -38,7 +38,7 @@ pub const CMDLINE_READ: usize = 512;
 /// Resolved cmdline name cap; the formatter truncates further to the column.
 pub const CMDLINE_MAX: usize = 64;
 /// Panel top-process row count (Top 1/2/3). Mirrors Python's
-/// `TOP_PROCESS_COUNT`. The collector lane slices the full list to this many.
+/// `TOP_PROCESS_COUNT`. The collector slices the full list to this many.
 pub const TOP_PROCESS_COUNT: usize = 3;
 /// Panel top-process TTL — scanning `/proc/[pid]/stat` is too costly per poll.
 pub const TOP_PROCESS_TTL: Duration = Duration::from_secs(15);

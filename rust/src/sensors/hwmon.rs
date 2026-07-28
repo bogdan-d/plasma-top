@@ -2,9 +2,9 @@
 //!
 //! The Python sensor module uses a small cluster of generic hwmon helpers to
 //! locate sensor directories, resolve manual `chip|file` overrides, and parse
-//! integer-valued sysfs files. Wave 3 keeps the same responsibilities here in a
-//! small sibling module so `disk.rs` can stay focused on disk-owned behavior
-//! while later lanes may reuse the same deterministic helpers.
+//! integer-valued sysfs files. Responsibilities stay in a
+//! small sibling module so `disk.rs` stays focused and other sensors can reuse
+//! the same deterministic helpers.
 
 use std::fs;
 use std::path::{Path, PathBuf};

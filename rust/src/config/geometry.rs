@@ -8,7 +8,7 @@
 //!
 //! [`detect_machine`] is the odd one out — it has nothing to do with panel
 //! geometry, but it shares the same DMI-touching pattern and is colocated
-//! here per the lane contract. Its pure core [`detect_machine_with_dmi`]
+//! here because its pure core [`detect_machine_with_dmi`]
 //! takes the board/product strings directly.
 
 use std::collections::BTreeMap;
@@ -391,9 +391,8 @@ pub fn auto_fit_panel(cfg: &mut Config, geo: &PanelGeometry) {
 
 /// The board/product DMI paths the daemon reads for machine detection.
 ///
-/// Exposed so the RUNTIME lane can wire a fixtureable sysfs root once it
-/// owns the filesystem boundary; today [`detect_machine`] reads the host
-/// paths directly, matching Python.
+/// [`detect_machine`] reads these host paths; tests use
+/// [`detect_machine_with_dmi`] to avoid host dependence.
 #[must_use]
 pub fn dmi_paths() -> (PathBuf, PathBuf) {
     (

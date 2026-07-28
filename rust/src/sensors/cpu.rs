@@ -1,6 +1,6 @@
 //! CPU discovery and `/proc`-based readings.
 //!
-//! This module ports the Wave 3 CPU lane from `src/sensors.py`: CPU usage via
+//! CPU usage via
 //! `/proc/stat` diffs, per-core usage/history for the `cpu_cores` page,
 //! uptime/load average, CPU frequency, and turbo detection/discovery. The API
 //! is deterministic by construction: callers provide proc/sys roots and a

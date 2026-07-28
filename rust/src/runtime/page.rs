@@ -6,10 +6,8 @@
 //! read-modify-write never drops a notch — the "wheel skips pages / goes
 //! dead" bug that the Python docstring warns about.
 //!
-//! `PageDirection` is defined locally rather than re-exported from `cli.rs`
-//! to keep `runtime` free of a CLI-layer dependency: `cli` is a composition
-//! root owned by the integration owner (see `plans/LANES.md`), and the
-//! `DAEMON-CLI` lane wires `cli::PageDirection` -> [`PageDirection`] in Wave 5.
+//! `PageDirection` is defined locally to keep runtime independent of the CLI;
+//! `daemon::run_page` translates between the two boundary types.
 
 use std::fs::{File, OpenOptions};
 use std::io;

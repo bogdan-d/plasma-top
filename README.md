@@ -22,7 +22,8 @@ PiroStats renders CPU, memory, drives, GPU, temperatures, batteries, network and
 load as HTML that a bundled Plasma applet displays. The daemon runs in memory and
 atomically writes the panel and tooltip under `$XDG_RUNTIME_DIR/pirostats` (falling
 back to `/tmp/pirostats-$UID` when unavailable), and the applet just cats them, so
-there are **zero process forks in the hot path**.
+display refresh needs no browser, shell pipeline, or per-metric process. Optional
+command-backed sensors and pages remain isolated behind timeout-bound adapters.
 
 ## Features
 

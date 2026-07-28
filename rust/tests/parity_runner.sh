@@ -3,9 +3,9 @@
 # Parity runner: diff the Python oracle output against the Rust formatter for
 # a shared fixture.
 #
-# Status: STUB. The Rust formatter is Wave 4 work (FORMATTER lane) and is not
-# yet wired. This script fixes the contract and the eventual call shape so the
-# integration owner can replace the Rust side in-place when Wave 4 lands.
+# Status: DEFERRED. Production `pirostats render` is implemented but deliberately
+# has no fixture-only CLI flag. Fixed byte corpora and integration tests carry
+# formatter parity until a shared-fixture diagnostic seam is approved.
 #
 # Contract:
 #   $1 = path to oracle fixture TOML (shared between Python and Rust)
@@ -14,11 +14,10 @@
 # Output:
 #   - exit 0 if the two outputs match (or are both empty);
 #   - exit 1 with a unified diff if they differ;
-#   - exit 77 ("skip") if the Rust binary does not yet implement `render`
-#     (the current state — Wave 4 FORMATTER lane will close this).
+#   - exit 77 ("skip") while the Rust CLI has no `render --fixture` seam.
 #
-# The script intentionally does NOT fake-implement parity: the failure path
-# stays explicit so integration can see when Wave 4 needs to be wired.
+# The script intentionally does not add a production-only fixture flag or fake
+# parity. Exit 77 keeps the missing diagnostic seam visible.
 
 set -euo pipefail
 
@@ -54,11 +53,10 @@ if ! python3 "${repo_root}/tests/oracle.py" "${fixture}" "${component}" >"${py_o
     exit 1
 fi
 
-# Expected Rust interface (Wave 4 FORMATTER lane):
+# Deferred Rust diagnostic interface:
 #   pirostats render --fixture <path> --component <panel_v|panel_h|tooltip>
-# Until Wave 4 lands, the binary exits non-zero with an `Error::ScaffoldOnly`
-# for `render`. We report parity as "not yet implemented" and exit 77 so any
-# caller can detect the deferred state without conflating it with a real diff.
+# Production render rejects `--fixture`. Report that deferred test seam as a
+# skip rather than conflating it with a real output mismatch.
 rust_bin="${rust_dir}/target/debug/pirostats"
 if [[ ! -x "${rust_bin}" ]]; then
     rust_bin="${rust_dir}/target-p2-fixtures/debug/pirostats"
@@ -79,5 +77,5 @@ if "${rust_bin}" render \
     exit 1
 fi
 
-echo "parity: Rust formatter not yet implemented (Wave 4 FORMATTER lane)" >&2
+echo "parity: shared-fixture Rust render seam is not implemented" >&2
 exit 77

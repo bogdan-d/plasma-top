@@ -22,8 +22,7 @@ const COMPILE_TIME_CODE_ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/..");
 
 /// Env var name that overrides the shipped-tree root for packaged installs.
 ///
-/// Cross-lane contract: documented here so PACKAGING (Wave 6) can rely on the
-/// name and the daemon can read the same env when it loads config.
+/// Packaging and the checkout launcher set this same name before config loads.
 pub const PIROSTATS_CODE_ROOT_ENV: &str = "PIROSTATS_CODE_ROOT";
 
 /// Returns the path to the shipped asset tree.

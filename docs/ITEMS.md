@@ -14,8 +14,8 @@ word); in the **panel** the same item is drawn as the glyph alone followed by
 its value, to stay compact. Sparklines/bars are shown here with unicode blocks
 (`▁▂▃▅▇█`, `⣀⣤⣶⣿`) standing in for the real Nerd Font drawing.
 
-A token is **bare** unless the metric offers more than one rendering; only then
-does it take a `:suffix`. See [TOKEN_GRAMMAR.md](TOKEN_GRAMMAR.md) for the rule.
+A token is **bare** when the metric has one intrinsic rendering. Generic forms
+use a `:suffix`; `pirostats list-items` is the authoritative token list.
 
 ---
 

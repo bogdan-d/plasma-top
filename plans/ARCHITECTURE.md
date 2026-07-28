@@ -11,10 +11,11 @@ rust/
   Cargo.toml
   Cargo.lock
   src/
-    lib.rs                  composition map only
+    lib.rs                  command dispatch and composition map
     main.rs                 process entry
     cli.rs                  argument parsing and dispatch
     error.rs                top-level user-facing error context
+    adapters.rs             production clock/command/D-Bus/notification boundaries
     domain/
       mod.rs
       form.rs               Form, Shape, Surface
@@ -38,7 +39,6 @@ rust/
       pages.rs              formatted page shells
     sensors/
       mod.rs                discovery/collect composition, capability routing
-      source.rs             fixtureable filesystem/clock/command boundaries
       cpu.rs
       memory.rs
       process.rs
@@ -56,7 +56,7 @@ rust/
     page_commands.rs        ss/fastfetch/click execution and formatting
     notify.rs               latches + notification adapter
     daemon.rs               single owner of loop/reload/shutdown
-    diagnostics.rs          probe/render/profile/list-items
+    diagnostics.rs          render/probe/profiling/list-items commands
   tests/
     oracle_*.rs
     cli_*.rs
@@ -194,4 +194,3 @@ cargo doc --manifest-path rust/Cargo.toml --no-deps
 
 Adjust `--all-features` only if optional native features cannot coexist; document
 the supported feature matrix rather than hiding failures.
-

@@ -1,6 +1,6 @@
 //! Disk mounts, usage, hwmon, identity, and byte-rate readings.
 //!
-//! This module ports the Wave 3 disk lane from `src/sensors.py`: mountpoint
+//! Mountpoint
 //! selection, disk-usage reads, root-disk device resolution, disk byte-rate
 //! diffs, hwmon-backed disk temperature and fan discovery, and a deterministic
 //! disk-identity view for later SMART work. All host I/O goes through explicit
@@ -26,7 +26,7 @@ const DISKSTAT_SECTOR_BYTES: u64 = 512;
 const BYTES_PER_GIB: u64 = 1024 * 1024 * 1024;
 const DISK_TEMPERATURE_CHIPS: [&str; 2] = ["nvme", "drivetemp"];
 
-/// Stable disk identity class used by later SMART/formatter lanes.
+/// Stable disk identity class used by SMART collection and formatting.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum DiskKind {
     /// NVMe namespace-backed disk.

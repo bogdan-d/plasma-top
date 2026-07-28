@@ -41,8 +41,8 @@ pub use error::{Error, Result};
 
 /// Parses and executes one command.
 ///
-/// Phase 1 intentionally stops after help/version output or after confirming
-/// that a requested runtime command is recognized but not yet implemented.
+/// Dispatch remains synchronous; feature modules own runtime behavior and
+/// return contextual errors to this composition root.
 ///
 /// # Errors
 ///
@@ -86,7 +86,7 @@ mod tests {
     }
 
     #[test]
-    fn help_text_no_longer_describes_a_scaffold() {
+    fn help_text_omits_internal_migration_terms() {
         assert!(!cli::help_text().contains("scaffold"));
     }
 }

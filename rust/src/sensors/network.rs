@@ -1,6 +1,6 @@
 //! Network route, wifi, and byte-rate readings.
 //!
-//! This module ports the Wave 3 network lane from `src/sensors.py`: active
+//! Active
 //! route/device detection via `ip`, wifi SSID/signal via `iw`, interface
 //! presence via sysfs, per-interface tx/rx byte rates from
 //! `/sys/class/net/<if>/statistics`, and the graphs page's bounded network
