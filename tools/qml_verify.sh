@@ -12,9 +12,10 @@ Launch an isolated Plasma applet backed by the Rust daemon.
   --smoke     Run a short non-interactive load check, then exit.
   --no-build  Reuse rust/target/release/pirostats.
 
-Without --smoke, close the plasmawindowed window to finish. While open, check
-hover tooltip, middle-click pinning, wheel paging, and geometry changes. All
-temporary files and the user-local test applet copy are removed on exit.
+Without --smoke, close the plasmawindowed window to finish an Application-form
+inspection. `plasmawindowed` cannot emulate panel form factors; use
+tools/p6_live_matrix.sh for horizontal/vertical interaction checks. All temporary
+files and the user-local test applet copy are removed on exit.
 EOF
 }
 
@@ -160,9 +161,10 @@ Isolated QML verification running.
   daemon:    $daemon_pid
   applet:    $qml_pid
 
-Check hover tooltip, middle-click pin/unpin, wheel paging, page updates, and
-window/geometry changes. Close plasmawindowed to clean up. No system paths or
-production runtime files are touched.
+Application-form inspection only; this host does not exercise compact panel
+behavior. Close plasmawindowed to clean up. Run tools/p6_live_matrix.sh for
+horizontal/vertical geometry, hover, pinning, and wheel evidence. No system
+paths or production runtime files are touched.
 EOF
 
 wait "$qml_pid"

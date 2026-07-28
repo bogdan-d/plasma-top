@@ -26,25 +26,25 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [ ] | `packaging/aur/PKGBUILD` | modify for native binary | `PACKAGING` | package/install/upgrade/uninstall |
 | [ ] | `packaging/aur/pirostats.install` | modify for native binary | `PACKAGING` | package/install/upgrade/uninstall |
 | [ ] | `pirostats` | replace | `DAEMON-CLI` | CLI process matrix |
-| [ ] | `plasmoid/.gitignore` | update only for generated Rust artifacts | `SCAFFOLD/QML-VERIFY` | ignore audit |
+| [x] | `plasmoid/.gitignore` | update only for generated Rust artifacts | `SCAFFOLD/QML-VERIFY` | Gate 6 ignore audit; no generated applet paths needed |
 | [ ] | `plasmoid/LICENSE` | preserve/review | `INTEGRATION` | file-specific inspection |
-| [ ] | `plasmoid/package/contents/config/config.qml` | preserve; edit only if approved | `QML-VERIFY` | T6 visual/interaction + package manifest |
-| [ ] | `plasmoid/package/contents/config/main.xml` | preserve; edit only if approved | `QML-VERIFY` | T6 visual/interaction + package manifest |
-| [ ] | `plasmoid/package/contents/icons/pirostats.svg` | preserve; edit only if approved | `QML-VERIFY` | T6 visual/interaction + package manifest |
-| [ ] | `plasmoid/package/contents/ui/config/ConfigAppearance.qml` | preserve; edit only if approved | `QML-VERIFY` | T6 visual/interaction + package manifest |
-| [ ] | `plasmoid/package/contents/ui/libconfig/CheckBox.qml` | preserve; edit only if approved | `QML-VERIFY` | T6 visual/interaction + package manifest |
-| [ ] | `plasmoid/package/contents/ui/libconfig/ColorField.qml` | preserve; edit only if approved | `QML-VERIFY` | T6 visual/interaction + package manifest |
-| [ ] | `plasmoid/package/contents/ui/libconfig/ComboBox.qml` | preserve; edit only if approved | `QML-VERIFY` | T6 visual/interaction + package manifest |
-| [ ] | `plasmoid/package/contents/ui/libconfig/FontFamily.qml` | preserve; edit only if approved | `QML-VERIFY` | T6 visual/interaction + package manifest |
-| [ ] | `plasmoid/package/contents/ui/libconfig/FormKCM.qml` | preserve; edit only if approved | `QML-VERIFY` | T6 visual/interaction + package manifest |
-| [ ] | `plasmoid/package/contents/ui/libconfig/Heading.qml` | preserve; edit only if approved | `QML-VERIFY` | T6 visual/interaction + package manifest |
-| [ ] | `plasmoid/package/contents/ui/libconfig/SpinBox.qml` | preserve; edit only if approved | `QML-VERIFY` | T6 visual/interaction + package manifest |
-| [ ] | `plasmoid/package/contents/ui/libconfig/TextAlign.qml` | preserve; edit only if approved | `QML-VERIFY` | T6 visual/interaction + package manifest |
-| [ ] | `plasmoid/package/contents/ui/libconfig/TextField.qml` | preserve; edit only if approved | `QML-VERIFY` | T6 visual/interaction + package manifest |
-| [ ] | `plasmoid/package/contents/ui/libconfig/TextFormat.qml` | preserve; edit only if approved | `QML-VERIFY` | T6 visual/interaction + package manifest |
-| [ ] | `plasmoid/package/contents/ui/libconfig/VertAlign.qml` | preserve; edit only if approved | `QML-VERIFY` | T6 visual/interaction + package manifest |
-| [ ] | `plasmoid/package/contents/ui/main.qml` | preserve; edit only if approved | `QML-VERIFY` | T6 visual/interaction + package manifest |
-| [ ] | `plasmoid/package/metadata.json` | preserve; edit only if approved | `QML-VERIFY` | T6 visual/interaction + package manifest |
+| [x] | `plasmoid/package/contents/config/config.qml` | preserve; edit only if approved | `QML-VERIFY` | T6 package/config-page pass; unchanged |
+| [x] | `plasmoid/package/contents/config/main.xml` | preserve; edit only if approved | `QML-VERIFY` | T6 disposable action-path substitution + real page/click traces; unchanged source |
+| [x] | `plasmoid/package/contents/icons/pirostats.svg` | preserve; edit only if approved | `QML-VERIFY` | T6 package load/manifest pass; unchanged |
+| [x] | `plasmoid/package/contents/ui/config/ConfigAppearance.qml` | preserve; edit only if approved | `QML-VERIFY` | T6 live background/outline/font configuration pass; unchanged |
+| [x] | `plasmoid/package/contents/ui/libconfig/CheckBox.qml` | preserve; edit only if approved | `QML-VERIFY` | T6 config-page load/interaction; unchanged |
+| [x] | `plasmoid/package/contents/ui/libconfig/ColorField.qml` | preserve; edit only if approved | `QML-VERIFY` | T6 config-page load/interaction; unchanged |
+| [x] | `plasmoid/package/contents/ui/libconfig/ComboBox.qml` | preserve; edit only if approved | `QML-VERIFY` | T6 config-page load/interaction; unchanged |
+| [x] | `plasmoid/package/contents/ui/libconfig/FontFamily.qml` | preserve; edit only if approved | `QML-VERIFY` | T6 config-page font interaction; unchanged |
+| [x] | `plasmoid/package/contents/ui/libconfig/FormKCM.qml` | preserve; edit only if approved | `QML-VERIFY` | T6 config-page load/interaction; unchanged |
+| [x] | `plasmoid/package/contents/ui/libconfig/Heading.qml` | preserve; edit only if approved | `QML-VERIFY` | T6 config-page load/interaction; unchanged |
+| [x] | `plasmoid/package/contents/ui/libconfig/SpinBox.qml` | preserve; edit only if approved | `QML-VERIFY` | T6 font-size interaction; unchanged |
+| [x] | `plasmoid/package/contents/ui/libconfig/TextAlign.qml` | preserve; edit only if approved | `QML-VERIFY` | T6 config-page load/interaction; unchanged |
+| [x] | `plasmoid/package/contents/ui/libconfig/TextField.qml` | preserve; edit only if approved | `QML-VERIFY` | T6 config-page load/interaction; unchanged |
+| [x] | `plasmoid/package/contents/ui/libconfig/TextFormat.qml` | preserve; edit only if approved | `QML-VERIFY` | T6 config-page load/interaction; unchanged |
+| [x] | `plasmoid/package/contents/ui/libconfig/VertAlign.qml` | preserve; edit only if approved | `QML-VERIFY` | T6 config-page load/interaction; unchanged |
+| [x] | `plasmoid/package/contents/ui/main.qml` | preserve; edit only if approved | `QML-VERIFY` | T6 horizontal/vertical/planar geometry, watcher/lazy read, hover, pin, wheel, resize, desktop appearance; unchanged |
+| [x] | `plasmoid/package/metadata.json` | preserve; edit only if approved | `QML-VERIFY` | correct lowercase id loaded through Application + panel runners; unchanged |
 | [ ] | `ruff.toml` | retain until Python removal | `BASE/CUTOVER` | ruff gate |
 | [x] | `rust-toolchain.toml` | new; pin stable Rust + clippy/rustfmt components | `SCAFFOLD` | P1.1 toolchain shell + toolchain present in CI |
 | [x] | `rust/Cargo.lock` | new; committed per parity plan | `SCAFFOLD` | P1.1 lockfile present + `cargo fetch --locked` no-op |
@@ -154,8 +154,11 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [ ] | `tools/demo_shot.py` | preserve/update invocation | `BASE/QML-VERIFY` | tool smoke + target parity |
 | [ ] | `tools/inventory_ast_reporter.py` | preserve/update invocation | `BASE/INTEGRATION` | tool smoke + exact inventory gate |
 | [ ] | `tools/manual_tooltip_preview.py` | preserve/update invocation | `BASE/QML-VERIFY` | tool smoke + target parity |
-| [x] | `tools/qml_verify.sh` | add isolated Rust-daemon/applet launcher | `QML-VERIFY` | bash syntax + `plasmawindowed` smoke; disposable XDG/runtime roots; no system paths |
-| [ ] | `tools/qt_shot.py` | preserve/update invocation | `BASE/QML-VERIFY` | tool smoke + target parity |
+| [x] | `tools/p6_live_matrix.sh` | add isolated horizontal/vertical/planar applet gate | `QML-VERIFY` | geometry/orientation/watcher/lazy/action traces + human interaction evidence |
+| [x] | `tools/p6_png_diff.py` | add strict fixed-image comparator | `QML-VERIFY` | dimension/mean/max/fraction synthetic threshold check |
+| [x] | `tools/p6_qt_matrix.sh` | add fixed-host all-page/theme Qt matrix | `QML-VERIFY` | 24 valid screenshots + table-free/golden pre-gates + environment manifest |
+| [x] | `tools/qml_verify.sh` | add isolated Rust-daemon/applet launcher | `QML-VERIFY` | bash syntax + correct-id Application smoke; disposable XDG/runtime roots; no system paths |
+| [x] | `tools/qt_shot.py` | preserve/update invocation | `BASE/QML-VERIFY` | all-page dark/light/overlay matrix + plasmoid ANSI path |
 | [ ] | `uninstall.sh` | modify for native binary | `PACKAGING` | package/install/upgrade/uninstall |
 
 ## Production Python callable inventory
@@ -943,172 +946,180 @@ Existing tests remain oracle evidence until mapped to a passing Rust test or int
 
 | Done | Line | Symbol | Kind | Lane | Evidence required |
 |---|---:|---|---|---|---|
-| [ ] | 88 | `_qml_for_html` | function | `BASE/QML-VERIFY` | I: tool smoke; E0/E4 result |
-| [ ] | 103 | `main` | function | `BASE/QML-VERIFY` | I: tool smoke; E0/E4 result |
+| [x] | 65 | `_plasmoid_output` | function | `QML-VERIFY` | I/E4: fastfetch SGR/newline conversion matrix + focused sample assertions |
+| [x] | 162 | `_qml_for_html` | function | `BASE/QML-VERIFY` | I/E4: 24-cell Qt matrix |
+| [x] | 177 | `main` | function | `BASE/QML-VERIFY` | I/E4: 24-cell Qt matrix |
+
+### `tools/p6_png_diff.py`
+
+| Done | Line | Symbol | Kind | Lane | Evidence required |
+|---|---:|---|---|---|---|
+| [x] | 23 | `_delta` | function | `QML-VERIFY` | I/E4: synthetic pass/fail threshold matrix |
+| [x] | 56 | `main` | function | `QML-VERIFY` | I/E4: synthetic CLI pass/fail threshold matrix |
 
 ## QML callable and signal-handler inventory
 
 
 ### `plasmoid/package/contents/config/config.qml`
 
-- [ ] Declarative-only file: T6 load/bind/config visual verification.
+- [x] Declarative-only file: T6 load/bind/config visual verification.
 
 ### `plasmoid/package/contents/ui/config/ConfigAppearance.qml`
 
 | Done | Line | Callable/handler | Required evidence |
 |---|---:|---|---|
-| [ ] | 15 | `onDesktop` — `readonly property bool onDesktop: plasmoid.formFactor === PlasmaCore.Types.Planar` | QML-VERIFY T6 event/interaction path |
+| [x] | 15 | `onDesktop` — `readonly property bool onDesktop: plasmoid.formFactor === PlasmaCore.Types.Planar` | QML-VERIFY T6 event/interaction path |
 
 ### `plasmoid/package/contents/ui/libconfig/CheckBox.qml`
 
 | Done | Line | Callable/handler | Required evidence |
 |---|---:|---|---|
-| [ ] | 11 | `onClicked` — `onClicked: plasmoid.configuration[configKey] = !plasmoid.configuration[configKey]` | QML-VERIFY T6 event/interaction path |
+| [x] | 11 | `onClicked` — `onClicked: plasmoid.configuration[configKey] = !plasmoid.configuration[configKey]` | QML-VERIFY T6 event/interaction path |
 
 ### `plasmoid/package/contents/ui/libconfig/ColorField.qml`
 
 | Done | Line | Callable/handler | Required evidence |
 |---|---:|---|---|
-| [ ] | 19 | `onTextChanged` — `onTextChanged: {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 52 | `onValueChanged` — `onValueChanged: {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 90 | `onClicked` — `onClicked: dialogLoader.active = true` | QML-VERIFY T6 event/interaction path |
-| [ ] | 137 | `onSelectedColorChanged` — `onSelectedColorChanged: {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 142 | `onAccepted` — `onAccepted: {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 146 | `onRejected` — `onRejected: {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 154 | `Component.onCompleted` — `Component.onCompleted: {` | QML-VERIFY T6 event/interaction path |
+| [x] | 19 | `onTextChanged` — `onTextChanged: {` | QML-VERIFY T6 event/interaction path |
+| [x] | 52 | `onValueChanged` — `onValueChanged: {` | QML-VERIFY T6 event/interaction path |
+| [x] | 90 | `onClicked` — `onClicked: dialogLoader.active = true` | QML-VERIFY T6 event/interaction path |
+| [x] | 137 | `onSelectedColorChanged` — `onSelectedColorChanged: {` | QML-VERIFY T6 event/interaction path |
+| [x] | 142 | `onAccepted` — `onAccepted: {` | QML-VERIFY T6 event/interaction path |
+| [x] | 146 | `onRejected` — `onRejected: {` | QML-VERIFY T6 event/interaction path |
+| [x] | 154 | `Component.onCompleted` — `Component.onCompleted: {` | QML-VERIFY T6 event/interaction path |
 
 ### `plasmoid/package/contents/ui/libconfig/ComboBox.qml`
 
 | Done | Line | Callable/handler | Required evidence |
 |---|---:|---|---|
-| [ ] | 21 | `onPopulate` — `onPopulate: {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 36 | `onConfigValueChanged` — `onConfigValueChanged: {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 58 | `Component.onCompleted` — `Component.onCompleted: {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 63 | `onCurrentIndexChanged` — `onCurrentIndexChanged: {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 75 | `size` — `function size() {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 87 | `findValue` — `function findValue(val) {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 96 | `selectValue` — `function selectValue(val) {` | QML-VERIFY T6 event/interaction path |
+| [x] | 21 | `onPopulate` — `onPopulate: {` | QML-VERIFY T6 event/interaction path |
+| [x] | 36 | `onConfigValueChanged` — `onConfigValueChanged: {` | QML-VERIFY T6 event/interaction path |
+| [x] | 58 | `Component.onCompleted` — `Component.onCompleted: {` | QML-VERIFY T6 event/interaction path |
+| [x] | 63 | `onCurrentIndexChanged` — `onCurrentIndexChanged: {` | QML-VERIFY T6 event/interaction path |
+| [x] | 75 | `size` — `function size() {` | QML-VERIFY T6 event/interaction path |
+| [x] | 87 | `findValue` — `function findValue(val) {` | QML-VERIFY T6 event/interaction path |
+| [x] | 96 | `selectValue` — `function selectValue(val) {` | QML-VERIFY T6 event/interaction path |
 
 ### `plasmoid/package/contents/ui/libconfig/FontFamily.qml`
 
 | Done | Line | Callable/handler | Required evidence |
 |---|---:|---|---|
-| [ ] | 17 | `isMonospace` — `function isMonospace(family) {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 22 | `onPopulate` — `onPopulate: {` | QML-VERIFY T6 event/interaction path |
+| [x] | 17 | `isMonospace` — `function isMonospace(family) {` | QML-VERIFY T6 event/interaction path |
+| [x] | 22 | `onPopulate` — `onPopulate: {` | QML-VERIFY T6 event/interaction path |
 
 ### `plasmoid/package/contents/ui/libconfig/FormKCM.qml`
 
 | Done | Line | Callable/handler | Required evidence |
 |---|---:|---|---|
-| [ ] | 24 | `Window.onWindowChanged` — `Window.onWindowChanged: {` | QML-VERIFY T6 event/interaction path |
+| [x] | 24 | `Window.onWindowChanged` — `Window.onWindowChanged: {` | QML-VERIFY T6 event/interaction path |
 
 ### `plasmoid/package/contents/ui/libconfig/Heading.qml`
 
-- [ ] Declarative-only file: T6 load/bind/config visual verification.
+- [x] Declarative-only file: T6 load/bind/config visual verification.
 
 ### `plasmoid/package/contents/ui/libconfig/SpinBox.qml`
 
 | Done | Line | Callable/handler | Required evidence |
 |---|---:|---|---|
-| [ ] | 41 | `onValueRealChanged` — `onValueRealChanged: serializeTimer.start()` | QML-VERIFY T6 event/interaction path |
-| [ ] | 90 | `onTriggered` — `onTriggered: {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 129 | `onActiveFocusChanged` — `onActiveFocusChanged: {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 134 | `selectValue` — `function selectValue() {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 143 | `fixMinus` — `function fixMinus(str) {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 155 | `fixDecimals` — `function fixDecimals(str) {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 162 | `fixText` — `function fixText(str) {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 166 | `onTextEdited` — `function onTextEdited() {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 197 | `bindContentItem` — `function bindContentItem() {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 210 | `onContentItemChanged` — `onContentItemChanged: {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 214 | `Component.onCompleted` — `Component.onCompleted: {` | QML-VERIFY T6 event/interaction path |
+| [x] | 41 | `onValueRealChanged` — `onValueRealChanged: serializeTimer.start()` | QML-VERIFY T6 event/interaction path |
+| [x] | 90 | `onTriggered` — `onTriggered: {` | QML-VERIFY T6 event/interaction path |
+| [x] | 129 | `onActiveFocusChanged` — `onActiveFocusChanged: {` | QML-VERIFY T6 event/interaction path |
+| [x] | 134 | `selectValue` — `function selectValue() {` | QML-VERIFY T6 event/interaction path |
+| [x] | 143 | `fixMinus` — `function fixMinus(str) {` | QML-VERIFY T6 event/interaction path |
+| [x] | 155 | `fixDecimals` — `function fixDecimals(str) {` | QML-VERIFY T6 event/interaction path |
+| [x] | 162 | `fixText` — `function fixText(str) {` | QML-VERIFY T6 event/interaction path |
+| [x] | 166 | `onTextEdited` — `function onTextEdited() {` | QML-VERIFY T6 event/interaction path |
+| [x] | 197 | `bindContentItem` — `function bindContentItem() {` | QML-VERIFY T6 event/interaction path |
+| [x] | 210 | `onContentItemChanged` — `onContentItemChanged: {` | QML-VERIFY T6 event/interaction path |
+| [x] | 214 | `Component.onCompleted` — `Component.onCompleted: {` | QML-VERIFY T6 event/interaction path |
 
 ### `plasmoid/package/contents/ui/libconfig/TextAlign.qml`
 
 | Done | Line | Callable/handler | Required evidence |
 |---|---:|---|---|
-| [ ] | 13 | `setValue` — `function setValue(val) {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 20 | `updateChecked` — `function updateChecked() {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 28 | `Component.onCompleted` — `Component.onCompleted: updateChecked()` | QML-VERIFY T6 event/interaction path |
-| [ ] | 34 | `onClicked` — `onClicked: setValue(Text.AlignLeft)` | QML-VERIFY T6 event/interaction path |
-| [ ] | 41 | `onClicked` — `onClicked: setValue(Text.AlignHCenter)` | QML-VERIFY T6 event/interaction path |
-| [ ] | 48 | `onClicked` — `onClicked: setValue(Text.AlignRight)` | QML-VERIFY T6 event/interaction path |
-| [ ] | 55 | `onClicked` — `onClicked: setValue(Text.AlignJustify)` | QML-VERIFY T6 event/interaction path |
+| [x] | 13 | `setValue` — `function setValue(val) {` | QML-VERIFY T6 event/interaction path |
+| [x] | 20 | `updateChecked` — `function updateChecked() {` | QML-VERIFY T6 event/interaction path |
+| [x] | 28 | `Component.onCompleted` — `Component.onCompleted: updateChecked()` | QML-VERIFY T6 event/interaction path |
+| [x] | 34 | `onClicked` — `onClicked: setValue(Text.AlignLeft)` | QML-VERIFY T6 event/interaction path |
+| [x] | 41 | `onClicked` — `onClicked: setValue(Text.AlignHCenter)` | QML-VERIFY T6 event/interaction path |
+| [x] | 48 | `onClicked` — `onClicked: setValue(Text.AlignRight)` | QML-VERIFY T6 event/interaction path |
+| [x] | 55 | `onClicked` — `onClicked: setValue(Text.AlignJustify)` | QML-VERIFY T6 event/interaction path |
 
 ### `plasmoid/package/contents/ui/libconfig/TextField.qml`
 
 | Done | Line | Callable/handler | Required evidence |
 |---|---:|---|---|
-| [ ] | 12 | `onConfigValueChanged` — `onConfigValueChanged: {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 19 | `onTextChanged` — `onTextChanged: serializeTimer.start()` | QML-VERIFY T6 event/interaction path |
-| [ ] | 30 | `onClicked` — `onClicked: textField.text = defaultValue` | QML-VERIFY T6 event/interaction path |
-| [ ] | 42 | `onTriggered` — `onTriggered: {` | QML-VERIFY T6 event/interaction path |
+| [x] | 12 | `onConfigValueChanged` — `onConfigValueChanged: {` | QML-VERIFY T6 event/interaction path |
+| [x] | 19 | `onTextChanged` — `onTextChanged: serializeTimer.start()` | QML-VERIFY T6 event/interaction path |
+| [x] | 30 | `onClicked` — `onClicked: textField.text = defaultValue` | QML-VERIFY T6 event/interaction path |
+| [x] | 42 | `onTriggered` — `onTriggered: {` | QML-VERIFY T6 event/interaction path |
 
 ### `plasmoid/package/contents/ui/libconfig/TextFormat.qml`
 
 | Done | Line | Callable/handler | Required evidence |
 |---|---:|---|---|
-| [ ] | 30 | `onClicked` — `onClicked: plasmoid.configuration[configKey] = checked` | QML-VERIFY T6 event/interaction path |
-| [ ] | 40 | `onClicked` — `onClicked: plasmoid.configuration[configKey] = checked` | QML-VERIFY T6 event/interaction path |
-| [ ] | 50 | `onClicked` — `onClicked: plasmoid.configuration[configKey] = checked` | QML-VERIFY T6 event/interaction path |
+| [x] | 30 | `onClicked` — `onClicked: plasmoid.configuration[configKey] = checked` | QML-VERIFY T6 event/interaction path |
+| [x] | 40 | `onClicked` — `onClicked: plasmoid.configuration[configKey] = checked` | QML-VERIFY T6 event/interaction path |
+| [x] | 50 | `onClicked` — `onClicked: plasmoid.configuration[configKey] = checked` | QML-VERIFY T6 event/interaction path |
 
 ### `plasmoid/package/contents/ui/libconfig/VertAlign.qml`
 
 | Done | Line | Callable/handler | Required evidence |
 |---|---:|---|---|
-| [ ] | 13 | `setValue` — `function setValue(val) {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 20 | `updateChecked` — `function updateChecked() {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 27 | `Component.onCompleted` — `Component.onCompleted: updateChecked()` | QML-VERIFY T6 event/interaction path |
-| [ ] | 33 | `onClicked` — `onClicked: setValue(Text.AlignTop)` | QML-VERIFY T6 event/interaction path |
-| [ ] | 40 | `onClicked` — `onClicked: setValue(Text.AlignVCenter)` | QML-VERIFY T6 event/interaction path |
-| [ ] | 47 | `onClicked` — `onClicked: setValue(Text.AlignBottom)` | QML-VERIFY T6 event/interaction path |
+| [x] | 13 | `setValue` — `function setValue(val) {` | QML-VERIFY T6 event/interaction path |
+| [x] | 20 | `updateChecked` — `function updateChecked() {` | QML-VERIFY T6 event/interaction path |
+| [x] | 27 | `Component.onCompleted` — `Component.onCompleted: updateChecked()` | QML-VERIFY T6 event/interaction path |
+| [x] | 33 | `onClicked` — `onClicked: setValue(Text.AlignTop)` | QML-VERIFY T6 event/interaction path |
+| [x] | 40 | `onClicked` — `onClicked: setValue(Text.AlignVCenter)` | QML-VERIFY T6 event/interaction path |
+| [x] | 47 | `onClicked` — `onClicked: setValue(Text.AlignBottom)` | QML-VERIFY T6 event/interaction path |
 
 ### `plasmoid/package/contents/ui/main.qml`
 
 | Done | Line | Callable/handler | Required evidence |
 |---|---:|---|---|
-| [ ] | 24 | `onNewData` — `onNewData: (sourceName, data) => {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 32 | `exec` — `function exec(cmd) {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 52 | `execOnce` — `function execOnce(cmd) {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 57 | `performClick` — `function performClick() {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 61 | `performMouseWheelUp` — `function performMouseWheelUp() {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 65 | `performMouseWheelDown` — `function performMouseWheelDown() {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 81 | `wheelStep` — `function wheelStep(delta) {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 100 | `onTriggered` — `onTriggered: widget.wheelInGesture = false` | QML-VERIFY T6 event/interaction path |
-| [ ] | 149 | `resetState` — `function resetState(state) {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 155 | `parseAnsiCode` — `function parseAnsiCode(n, i, tokens, state) {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 176 | `formatHexInt` — `function formatHexInt(n) {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 185 | `rgbToHex` — `function rgbToHex(r, g, b) {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 188 | `parseColorMode` — `function parseColorMode(i, tokens) {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 218 | `parseAnsiEscape` — `function parseAnsiEscape(codes, state) {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 258 | `desktopRecolor` — `function desktopRecolor(html, color) {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 278 | `formatOutputText` — `function formatOutputText(stdout) {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 319 | `onExited` — `function onExited(cmd, exitCode, exitStatus, stdout, stderr) {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 341 | `runCommand` — `function runCommand() {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 346 | `runTooltipCommand` — `function runTooltipCommand() {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 376 | `onDataChanged` — `onDataChanged: readDebounce.restart()` | QML-VERIFY T6 event/interaction path |
-| [ ] | 377 | `onRowsInserted` — `onRowsInserted: readDebounce.restart()` | QML-VERIFY T6 event/interaction path |
-| [ ] | 386 | `onTriggered` — `onTriggered: widget.readOutputs()` | QML-VERIFY T6 event/interaction path |
-| [ ] | 389 | `readOutputs` — `function readOutputs() {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 399 | `Component.onCompleted` — `Component.onCompleted: {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 408 | `Plasmoid.onActivated` — `Plasmoid.onActivated: widget.performClick()` | QML-VERIFY T6 event/interaction path |
-| [ ] | 413 | `onExpandedChanged` — `onExpandedChanged: {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 479 | `onLinkActivated` — `onLinkActivated: Qt.openUrlExternally(link)` | QML-VERIFY T6 event/interaction path |
-| [ ] | 507 | `onIsVerticalChanged` — `onIsVerticalChanged: output.publishGeometry()` | QML-VERIFY T6 event/interaction path |
-| [ ] | 522 | `onItemWidthChanged` — `// onItemWidthChanged: console.log('itemWidth', itemWidth, 'implicitWidth', output.implicitWidth, 'contentWidth', output.contentWidth)` | QML-VERIFY T6 event/interaction path |
-| [ ] | 537 | `onItemHeightChanged` — `// onItemHeightChanged: console.log('itemHeight', itemHeight, 'implicitHeight', output.implicitHeight, 'contentHeight', output.contentHeight)` | QML-VERIFY T6 event/interaction path |
-| [ ] | 550 | `onHoveredChanged` — `onHoveredChanged: {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 574 | `onClicked` — `onClicked: (mouse) => {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 582 | `onWheel` — `onWheel: (wheel) => {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 607 | `onAdvanceWidthChanged` — `onAdvanceWidthChanged: output.publishGeometry()` | QML-VERIFY T6 event/interaction path |
-| [ ] | 617 | `onAdvanceWidthChanged` — `onAdvanceWidthChanged: output.publishGeometry()` | QML-VERIFY T6 event/interaction path |
-| [ ] | 619 | `publishGeometry` — `function publishGeometry() {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 635 | `onWidthChanged` — `onWidthChanged: publishGeometry()` | QML-VERIFY T6 event/interaction path |
-| [ ] | 636 | `Component.onCompleted` — `Component.onCompleted: publishGeometry()` | QML-VERIFY T6 event/interaction path |
-| [ ] | 643 | `onLinkActivated` — `onLinkActivated: Qt.openUrlExternally(link)` | QML-VERIFY T6 event/interaction path |
-| [ ] | 700 | `onDesktop` — `readonly property bool onDesktop: plasmoid.formFactor === PlasmaCore.Types.Planar` | QML-VERIFY T6 event/interaction path |
-| [ ] | 705 | `onClicked` — `onClicked: widget.expanded = false   // middle-click again un-pins` | QML-VERIFY T6 event/interaction path |
-| [ ] | 713 | `onWheel` — `onWheel: (wheel) => {` | QML-VERIFY T6 event/interaction path |
-| [ ] | 774 | `onLinkActivated` — `onLinkActivated: Qt.openUrlExternally(link)` | QML-VERIFY T6 event/interaction path |
+| [x] | 24 | `onNewData` — `onNewData: (sourceName, data) => {` | QML-VERIFY T6 event/interaction path |
+| [x] | 32 | `exec` — `function exec(cmd) {` | QML-VERIFY T6 event/interaction path |
+| [x] | 52 | `execOnce` — `function execOnce(cmd) {` | QML-VERIFY T6 event/interaction path |
+| [x] | 57 | `performClick` — `function performClick() {` | QML-VERIFY T6 event/interaction path |
+| [x] | 61 | `performMouseWheelUp` — `function performMouseWheelUp() {` | QML-VERIFY T6 event/interaction path |
+| [x] | 65 | `performMouseWheelDown` — `function performMouseWheelDown() {` | QML-VERIFY T6 event/interaction path |
+| [x] | 81 | `wheelStep` — `function wheelStep(delta) {` | QML-VERIFY T6 event/interaction path |
+| [x] | 100 | `onTriggered` — `onTriggered: widget.wheelInGesture = false` | QML-VERIFY T6 event/interaction path |
+| [x] | 149 | `resetState` — `function resetState(state) {` | QML-VERIFY T6 event/interaction path |
+| [x] | 155 | `parseAnsiCode` — `function parseAnsiCode(n, i, tokens, state) {` | QML-VERIFY T6 event/interaction path |
+| [x] | 176 | `formatHexInt` — `function formatHexInt(n) {` | QML-VERIFY T6 event/interaction path |
+| [x] | 185 | `rgbToHex` — `function rgbToHex(r, g, b) {` | QML-VERIFY T6 event/interaction path |
+| [x] | 188 | `parseColorMode` — `function parseColorMode(i, tokens) {` | QML-VERIFY T6 event/interaction path |
+| [x] | 218 | `parseAnsiEscape` — `function parseAnsiEscape(codes, state) {` | QML-VERIFY T6 event/interaction path |
+| [x] | 258 | `desktopRecolor` — `function desktopRecolor(html, color) {` | QML-VERIFY T6 event/interaction path |
+| [x] | 278 | `formatOutputText` — `function formatOutputText(stdout) {` | QML-VERIFY T6 event/interaction path |
+| [x] | 319 | `onExited` — `function onExited(cmd, exitCode, exitStatus, stdout, stderr) {` | QML-VERIFY T6 event/interaction path |
+| [x] | 341 | `runCommand` — `function runCommand() {` | QML-VERIFY T6 event/interaction path |
+| [x] | 346 | `runTooltipCommand` — `function runTooltipCommand() {` | QML-VERIFY T6 event/interaction path |
+| [x] | 376 | `onDataChanged` — `onDataChanged: readDebounce.restart()` | QML-VERIFY T6 event/interaction path |
+| [x] | 377 | `onRowsInserted` — `onRowsInserted: readDebounce.restart()` | QML-VERIFY T6 event/interaction path |
+| [x] | 386 | `onTriggered` — `onTriggered: widget.readOutputs()` | QML-VERIFY T6 event/interaction path |
+| [x] | 389 | `readOutputs` — `function readOutputs() {` | QML-VERIFY T6 event/interaction path |
+| [x] | 399 | `Component.onCompleted` — `Component.onCompleted: {` | QML-VERIFY T6 event/interaction path |
+| [x] | 408 | `Plasmoid.onActivated` — `Plasmoid.onActivated: widget.performClick()` | QML-VERIFY T6 event/interaction path |
+| [x] | 413 | `onExpandedChanged` — `onExpandedChanged: {` | QML-VERIFY T6 event/interaction path |
+| [x] | 479 | `onLinkActivated` — `onLinkActivated: Qt.openUrlExternally(link)` | QML-VERIFY T6 event/interaction path |
+| [x] | 507 | `onIsVerticalChanged` — `onIsVerticalChanged: output.publishGeometry()` | QML-VERIFY T6 event/interaction path |
+| [x] | 522 | `onItemWidthChanged` — `// onItemWidthChanged: console.log('itemWidth', itemWidth, 'implicitWidth', output.implicitWidth, 'contentWidth', output.contentWidth)` | QML-VERIFY T6 event/interaction path |
+| [x] | 537 | `onItemHeightChanged` — `// onItemHeightChanged: console.log('itemHeight', itemHeight, 'implicitHeight', output.implicitHeight, 'contentHeight', output.contentHeight)` | QML-VERIFY T6 event/interaction path |
+| [x] | 550 | `onHoveredChanged` — `onHoveredChanged: {` | QML-VERIFY T6 event/interaction path |
+| [x] | 574 | `onClicked` — `onClicked: (mouse) => {` | QML-VERIFY T6 event/interaction path |
+| [x] | 582 | `onWheel` — `onWheel: (wheel) => {` | QML-VERIFY T6 event/interaction path |
+| [x] | 607 | `onAdvanceWidthChanged` — `onAdvanceWidthChanged: output.publishGeometry()` | QML-VERIFY T6 event/interaction path |
+| [x] | 617 | `onAdvanceWidthChanged` — `onAdvanceWidthChanged: output.publishGeometry()` | QML-VERIFY T6 event/interaction path |
+| [x] | 619 | `publishGeometry` — `function publishGeometry() {` | QML-VERIFY T6 event/interaction path |
+| [x] | 635 | `onWidthChanged` — `onWidthChanged: publishGeometry()` | QML-VERIFY T6 event/interaction path |
+| [x] | 636 | `Component.onCompleted` — `Component.onCompleted: publishGeometry()` | QML-VERIFY T6 event/interaction path |
+| [x] | 643 | `onLinkActivated` — `onLinkActivated: Qt.openUrlExternally(link)` | QML-VERIFY T6 event/interaction path |
+| [x] | 700 | `onDesktop` — `readonly property bool onDesktop: plasmoid.formFactor === PlasmaCore.Types.Planar` | QML-VERIFY T6 event/interaction path |
+| [x] | 705 | `onClicked` — `onClicked: widget.expanded = false   // middle-click again un-pins` | QML-VERIFY T6 event/interaction path |
+| [x] | 713 | `onWheel` — `onWheel: (wheel) => {` | QML-VERIFY T6 event/interaction path |
+| [x] | 774 | `onLinkActivated` — `onLinkActivated: Qt.openUrlExternally(link)` | QML-VERIFY T6 event/interaction path |
 
 ## Shell/package callable inventory
 
@@ -1549,7 +1560,8 @@ Phase 0 must generate a machine-readable AST call-edge report for every Python c
 | `tools/demo_shot.py` | 38 | 29 |
 | `tools/inventory_ast_reporter.py` | 132 | 70 |
 | `tools/manual_tooltip_preview.py` | 51 | 16 |
-| `tools/qt_shot.py` | 58 | 39 |
+| `tools/p6_png_diff.py` | 53 | 34 |
+| `tools/qt_shot.py` | 88 | 59 |
 | `pirostats` | 10 | 9 |
 
 Closure requires each current call site/callee family to be marked one of: ported and directly asserted; covered by enclosing differential call trace; preserved QML/tool behavior; intentionally removed with proof of no observable behavior. No unclassified dynamic call remains.

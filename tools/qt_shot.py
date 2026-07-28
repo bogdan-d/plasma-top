@@ -43,6 +43,7 @@ avoids opening windows; grabWindow() still works.
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -51,6 +52,80 @@ from PyQt6.QtCore import Qt, QObject, QUrl
 from PyQt6.QtGui import QColor
 from PyQt6.QtQuick import QQuickView
 from PyQt6.QtWidgets import QApplication
+
+_ANSI_COLORS = {
+    30: "#000000", 31: "#aa0000", 32: "#00aa00", 33: "#aa6500",
+    34: "#0000aa", 35: "#aa00aa", 36: "#00aaaa", 37: "#aaaaaa",
+    90: "#656565", 91: "#ff6565", 92: "#65ff65", 93: "#ffff65",
+    94: "#6565ff", 95: "#ff65ff", 96: "#65ffff", 97: "#ffffff",
+}
+_SGR_RE = re.compile(r"\x1b\[(\d+(?:;\d+)*)?m")
+
+
+def _plasmoid_output(text: str) -> str:
+    """Apply main.qml's ANSI/newline conversion before RichText rendering."""
+    if text.endswith("\n"):
+        text = text[:-1]
+    close_tags: list[str] = []
+    bold = False
+
+    def reset() -> str:
+        nonlocal bold
+        result = " ".join(close_tags)
+        close_tags.clear()
+        bold = False
+        return result
+
+    def color(tokens: list[int], index: int) -> str | None:
+        if index + 1 >= len(tokens):
+            return None
+        mode = tokens[index + 1]
+        if mode == 2 and index + 4 < len(tokens):
+            r, g, b = (max(0, min(value, 255)) for value in tokens[index + 2:index + 5])
+            return f"#{r:02x}{g:02x}{b:02x}"
+        if mode != 5 or index + 2 >= len(tokens):
+            return None
+        value = tokens[index + 2]
+        if 0 <= value <= 7:
+            return _ANSI_COLORS[value + 30]
+        if 8 <= value <= 15:
+            return _ANSI_COLORS[value - 8 + 90]
+        if 16 <= value <= 231:
+            value -= 16
+            # Keep main.qml's JavaScript division/modulo/Math.floor order.
+            parts = (value / 36 % 6, value / 6 % 6, value % 6)
+            levels = tuple(0 if part == 0 else int(40 * part + 55) for part in parts)
+            return f"#{levels[0]:02x}{levels[1]:02x}{levels[2]:02x}"
+        if 232 <= value <= 255:
+            gray = (value - 232) * 10 + 8
+            return f"#{gray:02x}{gray:02x}{gray:02x}"
+        return None
+
+    def replace(match: re.Match[str]) -> str:
+        nonlocal bold
+        tokens = [int(token) for token in (match.group(1) or "0").split(";")]
+        output: list[str] = []
+        for index, token in enumerate(tokens):
+            if token == 0:
+                output.append(reset())
+            elif token == 1:
+                close_tags.append("</b>")
+                bold = True
+                output.append("<b>")
+            elif token in (38, 48):
+                ansi_color = color(tokens, index)
+                if token == 38 and ansi_color:
+                    close_tags.append("</font>")
+                    output.append(f'<font color="{ansi_color}">')
+            elif token in _ANSI_COLORS:
+                if bold and 30 <= token <= 37:
+                    token += 60
+                close_tags.append("</font>")
+                output.append(f'<font color="{_ANSI_COLORS[token]}">')
+        return "".join(output)
+
+    converted = _SGR_RE.sub(replace, text) + reset()
+    return converted.replace("\n", "<br>")
 
 # Faithful to the applet's Text (package/contents/ui/main.qml):
 # same wrapMode, lineHeight and — important — font.pointSize (not pixelSize) in
@@ -121,6 +196,8 @@ def main() -> int:
                     help="sizes the window to the content's NATURAL width/height "
                          "instead of the viewport (--html only): makes the tooltip as wide as "
                          "in Plasma, not as wide as --width")
+    ap.add_argument("--plasmoid-output", action="store_true",
+                    help="apply main.qml ANSI/newline output conversion before rendering")
     args = ap.parse_args()
 
     app = QApplication(sys.argv)
@@ -135,7 +212,10 @@ def main() -> int:
     if args.qml:
         qml_path = args.qml
     else:
-        qml = _qml_for_html(args.html.read_text(encoding="utf-8"), args.bg, args.font,
+        html_text = args.html.read_text(encoding="utf-8")
+        if args.plasmoid_output:
+            html_text = _plasmoid_output(html_text)
+        qml = _qml_for_html(html_text, args.bg, args.font,
                             args.size, args.point, args.pad, args.lineheight, args.fit)
         tmp = Path(tempfile.mkstemp(suffix=".qml")[1])
         tmp.write_text(qml, encoding="utf-8")
