@@ -8,7 +8,7 @@
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard};
 
-use pirostats::runtime::{
+use plasma_top::runtime::{
     geom_file, lock_file, npages_file, page_file, panel_file, runtime_dir, state_dir, tooltip_file,
 };
 
@@ -24,7 +24,7 @@ fn lock_env() -> MutexGuard<'static, ()> {
 #[test]
 fn runtime_dir_honors_xdg_runtime_dir_when_set() {
     let _guard = lock_env();
-    let custom = PathBuf::from("/tmp/pirostats-rust-test-xdg-set");
+    let custom = PathBuf::from("/tmp/plasma-top-rust-test-xdg-set");
 
     // SAFETY: `ENV_GUARD` is held; no other thread in this binary can read or
     // mutate `XDG_RUNTIME_DIR` until the guard drops. No worker threads are
@@ -34,7 +34,7 @@ fn runtime_dir_honors_xdg_runtime_dir_when_set() {
     // SAFETY: same mutex contract as above; restoring env after the read.
     unsafe { std::env::remove_var("XDG_RUNTIME_DIR") };
 
-    assert_eq!(resolved, custom.join("pirostats"));
+    assert_eq!(resolved, custom.join("plasma-top"));
 }
 
 #[test]
@@ -51,7 +51,7 @@ fn runtime_dir_treats_empty_xdg_as_unset() {
         .to_str()
         .unwrap_or_else(|| panic!("non-utf8 path {resolved:?}"));
     assert!(
-        s.starts_with("/tmp/pirostats-"),
+        s.starts_with("/tmp/plasma-top-"),
         "empty XDG should fall back, got {s}"
     );
 }
@@ -68,11 +68,11 @@ fn runtime_dir_falls_back_to_tmp_uid_when_xdg_unset() {
         .to_str()
         .unwrap_or_else(|| panic!("non-utf8 path {resolved:?}"));
     assert!(
-        s.starts_with("/tmp/pirostats-"),
-        "expected /tmp/pirostats-<uid> fallback, got {s}"
+        s.starts_with("/tmp/plasma-top-"),
+        "expected /tmp/plasma-top-<uid> fallback, got {s}"
     );
     // Sanity-check the uid suffix parses as a number.
-    let suffix = &s["/tmp/pirostats-".len()..];
+    let suffix = &s["/tmp/plasma-top-".len()..];
     assert!(
         suffix.parse::<u32>().is_ok(),
         "fallback suffix should be a numeric uid, got {suffix}"
@@ -82,7 +82,7 @@ fn runtime_dir_falls_back_to_tmp_uid_when_xdg_unset() {
 #[test]
 fn all_path_accessors_match_documented_layout() {
     let _guard = lock_env();
-    let custom = PathBuf::from("/tmp/pirostats-rust-test-layout");
+    let custom = PathBuf::from("/tmp/plasma-top-rust-test-layout");
 
     // SAFETY: `ENV_GUARD` held; isolated env mutation within this binary.
     unsafe { std::env::set_var("XDG_RUNTIME_DIR", &custom) };
@@ -99,7 +99,7 @@ fn all_path_accessors_match_documented_layout() {
     // SAFETY: same mutex contract; restoring after all reads.
     unsafe { std::env::remove_var("XDG_RUNTIME_DIR") };
 
-    assert_eq!(runtime, custom.join("pirostats"));
+    assert_eq!(runtime, custom.join("plasma-top"));
     assert_eq!(state, runtime.join("state"));
 
     assert_eq!(panel, runtime.join("panel.html"));

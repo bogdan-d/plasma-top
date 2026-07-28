@@ -4,15 +4,15 @@
 //! Forces `vertical = Some(false)` so the orientation override is
 //! deterministic and does not depend on the host's Plasma state. The
 //! shipped `config.toml` lives under the repo's `config/` directory; this
-//! test resolves it via [`pirostats::config::load_config`] with `path =
+//! test resolves it via [`plasma_top::config::load_config`] with `path =
 //! None`, exercising the same default-resolution path the daemon uses.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use std::collections::BTreeSet;
 
-use pirostats::config::{DiskConfig, Mounts, load_config};
-use pirostats::domain::registry::unknown_item_names;
+use plasma_top::config::{DiskConfig, Mounts, load_config};
+use plasma_top::domain::registry::unknown_item_names;
 
 #[test]
 fn loads_shipped_config_with_forced_horizontal() {

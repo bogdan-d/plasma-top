@@ -14,9 +14,9 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
 
-use pirostats::runtime::atomic::write_atomic;
-use pirostats::runtime::page::{PageDirection, npages, read_page, set_page, step_page};
-use pirostats::runtime::{ensure_dirs, npages_file, page_file};
+use plasma_top::runtime::atomic::write_atomic;
+use plasma_top::runtime::page::{PageDirection, npages, read_page, set_page, step_page};
+use plasma_top::runtime::{ensure_dirs, npages_file, page_file};
 
 static ENV_GUARD: Mutex<()> = Mutex::new(());
 
@@ -39,7 +39,7 @@ impl RuntimeFixture {
             .map(|d| d.as_nanos())
             .unwrap_or(0);
         let dir =
-            std::env::temp_dir().join(format!("pirostats-rust-test-page-{label}-{pid}-{nanos}"));
+            std::env::temp_dir().join(format!("plasma-top-rust-test-page-{label}-{pid}-{nanos}"));
         std::fs::create_dir_all(&dir)?;
         // SAFETY: `ENV_GUARD` is held. Worker threads are only spawned after
         // this constructor returns (when the env is stable) and join before
@@ -50,7 +50,7 @@ impl RuntimeFixture {
     }
 
     fn state_dir(&self) -> PathBuf {
-        self.dir.join("pirostats").join("state")
+        self.dir.join("plasma-top").join("state")
     }
 }
 

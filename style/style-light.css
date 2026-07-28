@@ -1,4 +1,4 @@
-/* pirostats — stylesheet for LIGHT Plasma color schemes (dark variant:
+/* plasma-top — stylesheet for LIGHT Plasma color schemes (dark variant:
    style-dark.css). The daemon serves one or the other by the desktop's window
    background luminance, watched on kdeglobals so a Global Theme switch
    hot-reloads it. This file mirrors style-dark.css's STRUCTURE

@@ -405,7 +405,7 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(0, |d| d.subsec_nanos());
         let nonce = std::process::id() ^ nanos;
-        dir.push(format!("pirostats-fixture-loader-{nonce}"));
+        dir.push(format!("plasma-top-fixture-loader-{nonce}"));
         if let Err(error) = std::fs::create_dir_all(&dir) {
             panic!("tempdir creation failed for {}: {error}", dir.display());
         }

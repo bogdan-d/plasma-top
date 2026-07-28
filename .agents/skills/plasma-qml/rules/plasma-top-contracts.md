@@ -1,4 +1,4 @@
-# PiroStats QML boundary
+# PlasmaTop QML boundary
 
 Rust is the sole runtime implementation. QML displays published output, reports
 geometry, and owns direct interaction; it is not another sensor or polling

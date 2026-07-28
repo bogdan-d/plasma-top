@@ -35,8 +35,8 @@ pub mod page;
 
 /// Returns the per-user runtime root.
 ///
-/// `$XDG_RUNTIME_DIR/pirostats` when the env var is set and non-empty;
-/// otherwise `/tmp/pirostats-{uid}` so bare `probe` / `render` invocations
+/// `$XDG_RUNTIME_DIR/plasma-top` when the env var is set and non-empty;
+/// otherwise `/tmp/plasma-top-{uid}` so bare `probe` / `render` invocations
 /// outside a systemd/PAM session still resolve a writable root. The applet
 /// resolves the same directory independently via Qt's `RuntimeLocation`
 /// (which *is* `XDG_RUNTIME_DIR` on Linux), so the two sides agree without
@@ -44,8 +44,8 @@ pub mod page;
 #[must_use]
 pub fn runtime_dir() -> PathBuf {
     match std::env::var("XDG_RUNTIME_DIR") {
-        Ok(xdg) if !xdg.is_empty() => PathBuf::from(xdg).join("pirostats"),
-        _ => PathBuf::from(format!("/tmp/pirostats-{}", getuid())),
+        Ok(xdg) if !xdg.is_empty() => PathBuf::from(xdg).join("plasma-top"),
+        _ => PathBuf::from(format!("/tmp/plasma-top-{}", getuid())),
     }
 }
 

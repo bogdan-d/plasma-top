@@ -40,7 +40,7 @@ PlasmoidItem {
 	// Force a unique source per invocation. The executable DataSource keys its
 	// sources by the command string and silently drops connectSource() for a
 	// string that is still connected; with a no-output command like
-	// `pirostats page next` the engine can also suppress the (identical, empty)
+	// `plasma-top page next` the engine can also suppress the (identical, empty)
 	// data update, so the source never delivers newData, is never disconnected,
 	// and every later same-direction scroll is a no-op — the "wheel goes dead
 	// after a quick reverse" bug. A trailing shell comment (# n) makes each call
@@ -112,7 +112,7 @@ PlasmoidItem {
 		// plain path, the watcher needs the url.
 		readonly property string runtimeDir:
 			StandardPaths.writableLocation(StandardPaths.RuntimeLocation)
-				.toString().replace(/^file:\/\//, "") + "/pirostats"
+				.toString().replace(/^file:\/\//, "") + "/plasma-top"
 		readonly property url runtimeUrl: "file://" + runtimeDir
 		// Not knobs: these two cats and the geometry write below are the whole
 		// contract with the daemon, not commands anyone is meant to swap out.
@@ -326,8 +326,8 @@ PlasmoidItem {
 			if (isPanel || isTooltip) {
 				var formattedText = formatOutputText(stdout)
 
-				// console.log('[pirostats]', 'stdout', JSON.stringify(stdout))
-				// console.log('[pirostats]', 'format', JSON.stringify(formattedText))
+				// console.log('[plasma-top]', 'stdout', JSON.stringify(stdout))
+				// console.log('[plasma-top]', 'format', JSON.stringify(formattedText))
 
 				if (isPanel) {
 					widget.outputText = formattedText
@@ -339,7 +339,7 @@ PlasmoidItem {
 	}
 
 	function runCommand() {
-		// console.log('[pirostats]', Date.now(), 'runCommand', config.command)
+		// console.log('[plasma-top]', Date.now(), 'runCommand', config.command)
 		executable.exec(config.command)
 	}
 
@@ -522,7 +522,7 @@ PlasmoidItem {
 		readonly property bool isInPanel: isHorizontal || isVertical
 		readonly property bool isOnDesktop: !isInPanel
 
-		// pirostats: republish the geometry when the panel orientation changes.
+		// plasma-top: republish the geometry when the panel orientation changes.
 		// output.width can change (and trigger publishGeometry) BEFORE isVertical
 		// updates, leaving a stale orientation flag in the file; this guarantees a
 		// republish with the correct value once the orientation settles.
@@ -615,7 +615,7 @@ PlasmoidItem {
 			text: widget.outputText
 			textFormat: Text.RichText
 
-			// pirostats: publish the panel's real geometry (the Text's usable width
+			// plasma-top: publish the panel's real geometry (the Text's usable width
 			// in px, the real advance of one mono glyph in px, orientation) to a
 			// file the daemon reads to auto-fit the bar and width, without guessing
 			// DPI or margins. advanceWidth via TextMetrics because with font.pointSize
@@ -692,7 +692,7 @@ PlasmoidItem {
 
 	}
 
-	// pirostats: the pinned tooltip. Middle-click on the panel toggles this
+	// plasma-top: the pinned tooltip. Middle-click on the panel toggles this
 	// popup; it renders the same tooltipText as the hover tooltip but persists
 	// (Plasma keeps a full representation up until you click away or toggle it),
 	// so you can watch the graphs live. Page it by scrolling the PANEL while it's

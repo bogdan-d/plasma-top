@@ -7,22 +7,22 @@ a window: uses QQuickView.grabWindow(), which rasterizes offscreen
 synchronously (the exact same engine as the widget, unlike QTextDocument,
 which has a different CSS subset). Indispensable for pixel-level issues (where
 a glyph's ink lands inside its box, font descents, alignment) that the
-stripped HTML from `pirostats render` can't show.
+stripped HTML from `plasma-top render` can't show.
 
 Usage:
     # HTML: wrapped in a RichText Text with the Nerd Font mono
     QT_QPA_PLATFORM=offscreen python3 tools/qt_shot.py --html panel.html out.png
     # ...or piping the HTML from stdin
-    pirostats render --format html && \
-        QT_QPA_PLATFORM=offscreen python3 tools/qt_shot.py --html /tmp/pirostats_render_panel.html out.png
+    plasma-top render --format html && \
+        QT_QPA_PLATFORM=offscreen python3 tools/qt_shot.py --html /tmp/plasma-top_render_panel.html out.png
 
     # QML: renders the file as-is (useful for test benches with several variants)
     QT_QPA_PLATFORM=offscreen python3 tools/qt_shot.py --qml bench.qml out.png
 
     # Tooltip: --fit sizes the window to the content (as wide as in Plasma)
-    pirostats render --component tooltip --format html && \
+    plasma-top render --component tooltip --format html && \
         QT_QPA_PLATFORM=offscreen python3 tools/qt_shot.py \
-            --html /tmp/pirostats_render_tooltip.html out.png --fit --scale 2
+            --html /tmp/plasma-top_render_tooltip.html out.png --fit --scale 2
 
 Options: --width/--height (viewport, REAL size), --bg (#rrggbb, panel-like
 background), --font (family), --size (text size, --html), --point (interpret

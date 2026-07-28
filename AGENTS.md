@@ -1,7 +1,7 @@
 ## Working model
 
-PiroStats is a synchronous Rust daemon plus bundled Plasma applet. Rust under
-`rust/src/` is the sole runtime implementation. `./pirostats` runs the Rust
+PlasmaTop is a synchronous Rust daemon plus bundled Plasma applet. Rust under
+`rust/src/` is the sole runtime implementation. `./plasma-top` runs the Rust
 checkout with repository assets.
 
 Run commands from repository root. Development setup and full gates live in

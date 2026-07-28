@@ -75,7 +75,7 @@ mod tests {
     #[test]
     fn re_exports_are_visible_at_module_root() {
         // Compile-time check that every documented re-export is reachable
-        // from the crate root as `pirostats::test_support::*`. The actual
+        // from the crate root as `plasma_top::test_support::*`. The actual
         // behavior is exercised by the submodule test suites; this just
         // guards against accidental visibility regressions.
         fn _check(

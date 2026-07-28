@@ -53,7 +53,7 @@ impl TempTree {
             .map(|d| d.as_nanos())
             .unwrap_or(0);
         let root = std::env::temp_dir().join(format!(
-            "pirostats-collector-{}-{unique}",
+            "plasma-top-collector-{}-{unique}",
             std::process::id()
         ));
         fs::create_dir_all(&root).expect("temp root");

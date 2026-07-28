@@ -41,7 +41,7 @@ pub enum BusKind {
 /// Desktop-notification urgency.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NotificationUrgency {
-    /// Critical urgency used by every current PiroStats alert.
+    /// Critical urgency used by every current PlasmaTop alert.
     Critical,
 }
 

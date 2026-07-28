@@ -201,7 +201,7 @@ pub fn placement_for(effective: SurfaceSet) -> &'static str {
 /// Mirrors `run_list_items` in `src/daemon.py`: iterate each metric's valid
 /// forms (intrinsic shape or declared generic forms), build the token string,
 /// compute placement from [`ItemToken::effective_surfaces`], then sort by
-/// `(placement, token)`. The result matches the Python `pirostats list-items`
+/// `(placement, token)`. The result matches the Python `plasma-top list-items`
 /// output row-for-row.
 #[must_use]
 pub fn list_items() -> Vec<(String, &'static str)> {
@@ -502,9 +502,9 @@ mod tests {
         assert!(bad_tooltip.is_empty());
     }
 
-    // ── exhaustive token corpus (pirostats list-items parity) ────────────────
+    // ── exhaustive token corpus (plasma-top list-items parity) ────────────────
 
-    /// Snapshot of the Python `pirostats list-items` output captured at the
+    /// Snapshot of the Python `plasma-top list-items` output captured at the
     /// integration base (commit 9a088c2). Each tuple is `(token, placement)`.
     /// Ordering is `(placement, token)`, matching the Python `sorted` key.
     const EXPECTED_LIST_ITEMS: &[(&str, &str)] = &[

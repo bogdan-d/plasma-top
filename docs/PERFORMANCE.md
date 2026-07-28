@@ -7,12 +7,12 @@ about current Rust timings.
 
 ## Measure current Rust behavior
 
-`pirostats profiling` uses `std::time::Instant` around real config loading,
+`plasma-top profiling` uses `std::time::Instant` around real config loading,
 hardware discovery, and cold/warm collection. It prints timings and cache state
 to stdout and never writes daemon runtime files:
 
 ```bash
-./pirostats profiling --config config/config.toml
+./plasma-top profiling --config config/config.toml
 ```
 
 For process-level work, compare release binaries and record host, kernel,
@@ -88,7 +88,7 @@ after profiling proves this render contributes material work.
 
 ## Process-backed boundaries
 
-PiroStats minimizes subprocess work but is not fork-free.
+PlasmaTop minimizes subprocess work but is not fork-free.
 
 - Plasma uses `cat` after watched HTML changes.
 - D-Bus requests use timeout-bound `busctl --json=short`.

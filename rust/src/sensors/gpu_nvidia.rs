@@ -373,7 +373,7 @@ mod tests {
                 .unwrap_or(Duration::ZERO)
                 .as_nanos();
             let root = std::env::temp_dir().join(format!(
-                "pirostats-gpu-nvidia-{}-{unique}",
+                "plasma-top-gpu-nvidia-{}-{unique}",
                 std::process::id()
             ));
             if let Err(error) = fs::create_dir_all(&root) {

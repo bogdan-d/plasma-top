@@ -15,6 +15,6 @@
 - Hidden anchored siblings and lazy representation items may have zero size or
   not exist. Do not use them as unconditional geometry authorities.
 
-PiroStats publishes usable panel geometry to `<runtime>/state/geom`. Changes to
+PlasmaTop publishes usable panel geometry to `<runtime>/state/geom`. Changes to
 measurement, font sizing, wrapping, or preferred dimensions must preserve that
 daemon auto-fit contract.

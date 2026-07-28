@@ -28,8 +28,8 @@ type QueuedCommandResult = Result<CommandOutput, BoundaryError>;
 /// use std::ffi::OsString;
 /// use std::path::Path;
 ///
-/// use pirostats::domain::boundary::{CommandOutput, CommandRunner, CommandStatus};
-/// use pirostats::test_support::FakeCommandRunner;
+/// use plasma_top::domain::boundary::{CommandOutput, CommandRunner, CommandStatus};
+/// use plasma_top::test_support::FakeCommandRunner;
 ///
 /// let mut runner = FakeCommandRunner::new();
 /// runner.enqueue(

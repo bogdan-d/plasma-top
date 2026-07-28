@@ -30,14 +30,14 @@ worked. The settings dialog itself was not exercised, so user impact is unknown.
 ## Handoff
 
 1. Install or run the current checkout in a supported Plasma session.
-2. Capture a focused Plasma journal while opening PiroStats settings.
+2. Capture a focused Plasma journal while opening PlasmaTop settings.
 3. Verify every visible field loads its current value, saves, and survives a
    Plasma restart.
 4. Compare root properties and page loading with current Plasma 6 KConfig
    conventions.
-5. Determine whether warnings come from PiroStats, stale configuration schema,
+5. Determine whether warnings come from PlasmaTop, stale configuration schema,
    or upstream Plasma behavior.
-6. Fix QML integration only when reproduction proves a PiroStats defect. Do not
+6. Fix QML integration only when reproduction proves a PlasmaTop defect. Do not
    add a Rust workaround for frontend property injection.
 
 ## Done when

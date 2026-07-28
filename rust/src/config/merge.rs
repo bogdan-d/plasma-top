@@ -149,7 +149,7 @@ pub fn load_machines(config_path: Option<&Path>) -> Table {
 /// The `config.toml` loaded when the CLI gives no `--config`.
 ///
 /// Mirrors Python's `default_config_path`: the user's XDG copy
-/// (`~/.config/pirostats/config.toml`) if present, else the shipped default.
+/// (`~/.config/plasma-top/config.toml`) if present, else the shipped default.
 /// The XDG file replaces the shipped one wholesale (conky model) — the user
 /// copies the default and edits it, rather than layering on top.
 #[must_use]
@@ -161,7 +161,7 @@ pub fn default_config_path() -> PathBuf {
 /// Returns the path to a `style/` asset.
 ///
 /// Mirrors Python's `resolve_style`: the user's XDG override
-/// (`~/.config/pirostats/style/<name>`) if present, else the shipped one
+/// (`~/.config/plasma-top/style/<name>`) if present, else the shipped one
 /// under [`code_root`]. Resolved independently of the config path so it
 /// stays correct when `config.toml` itself is loaded from XDG.
 #[must_use]
@@ -176,7 +176,7 @@ pub fn resolve_style(name: &str) -> PathBuf {
 
 /// Returns the user's own `machines.toml`.
 ///
-/// Mirrors Python's `user_machines_path`: `~/.config/pirostats/machines.toml`,
+/// Mirrors Python's `user_machines_path`: `~/.config/plasma-top/machines.toml`,
 /// absent on a fresh install (nothing personal ships).
 #[must_use]
 pub fn user_machines_path() -> PathBuf {
@@ -394,7 +394,7 @@ mod tests {
     #[test]
     fn load_toml_at_returns_empty_table_for_malformed_content() {
         let tmp = std::env::temp_dir().join(format!(
-            "pirostats-merge-malformed-{}.toml",
+            "plasma-top-merge-malformed-{}.toml",
             std::process::id()
         ));
         std::fs::write(&tmp, "this is = not = valid\n").unwrap();
@@ -406,8 +406,10 @@ mod tests {
 
     #[test]
     fn load_toml_at_parses_valid_toml() {
-        let tmp =
-            std::env::temp_dir().join(format!("pirostats-merge-valid-{}.toml", std::process::id()));
+        let tmp = std::env::temp_dir().join(format!(
+            "plasma-top-merge-valid-{}.toml",
+            std::process::id()
+        ));
         std::fs::write(&tmp, "cpu_usage = \"glyph\"\n").unwrap();
         let table = load_toml_at(&tmp);
         let _ = std::fs::remove_file(&tmp);
@@ -426,7 +428,7 @@ mod tests {
 
         assert_eq!(paths.len(), 2);
         assert!(paths[0].ends_with("config/machines.toml"));
-        assert!(paths[1].ends_with(".config/pirostats/machines.toml"));
+        assert!(paths[1].ends_with(".config/plasma-top/machines.toml"));
     }
 
     #[test]

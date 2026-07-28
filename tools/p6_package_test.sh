@@ -10,68 +10,68 @@ trap 'rm -rf "$TMP"' EXIT
 export CARGO_HOME="${CARGO_HOME:-$TMP/cargo-home}"
 export CARGO_TARGET_DIR="$REPO_DIR/rust/target"
 
-mkdir -p "$HOME/.config/pirostats" "$HOME/.cache/pirostats"
-printf 'user config\n' > "$HOME/.config/pirostats/config.toml"
-printf 'cache\n' > "$HOME/.cache/pirostats/geom"
+mkdir -p "$HOME/.config/plasma-top" "$HOME/.cache/plasma-top"
+printf 'user config\n' > "$HOME/.config/plasma-top/config.toml"
+printf 'cache\n' > "$HOME/.cache/plasma-top/geom"
 
 cargo build --manifest-path "$REPO_DIR/rust/Cargo.toml" --release --locked --features nvml
-BINARY="$CARGO_TARGET_DIR/release/pirostats"
+BINARY="$CARGO_TARGET_DIR/release/plasma-top"
 
 stage_native() {
-	DESTDIR="$ROOT" HOME="$HOME" PIROSTATS_BINARY="$BINARY" "$REPO_DIR/install.sh"
+	DESTDIR="$ROOT" HOME="$HOME" PLASMA_TOP_BINARY="$BINARY" "$REPO_DIR/install.sh"
 }
 
 assert_native_layout() {
-	test -x "$ROOT/usr/bin/pirostats"
-	test ! -L "$ROOT/usr/bin/pirostats"
-	test -x "$ROOT/usr/lib/pirostats/pirostats"
-	test -f "$ROOT/usr/lib/pirostats/config/config.toml"
-	test -f "$ROOT/usr/lib/pirostats/style/style-dark.css"
-	test -f "$ROOT/usr/lib/pirostats/lang/en.toml"
-	test -f "$ROOT/usr/lib/systemd/user/pirostats.service"
-	test -f "$ROOT/usr/share/plasma/plasmoids/com.github.lucazade.pirostats/metadata.json"
-	test -f "$ROOT/usr/share/licenses/pirostats/LICENSE"
-	test -f "$ROOT/usr/share/licenses/pirostats/NOTICE"
-	test ! -e "$ROOT/usr/lib/pirostats/src"
-	PIROSTATS_CODE_ROOT="$ROOT/usr/lib/pirostats" \
-		"$ROOT/usr/lib/pirostats/pirostats" list-items >/dev/null
+	test -x "$ROOT/usr/bin/plasma-top"
+	test ! -L "$ROOT/usr/bin/plasma-top"
+	test -x "$ROOT/usr/lib/plasma-top/plasma-top"
+	test -f "$ROOT/usr/lib/plasma-top/config/config.toml"
+	test -f "$ROOT/usr/lib/plasma-top/style/style-dark.css"
+	test -f "$ROOT/usr/lib/plasma-top/lang/en.toml"
+	test -f "$ROOT/usr/lib/systemd/user/plasma-top.service"
+	test -f "$ROOT/usr/share/plasma/plasmoids/com.github.bogdan-d.plasma-top/metadata.json"
+	test -f "$ROOT/usr/share/licenses/plasma-top/LICENSE"
+	test -f "$ROOT/usr/share/licenses/plasma-top/NOTICE"
+	test ! -e "$ROOT/usr/lib/plasma-top/src"
+	PLASMA_TOP_CODE_ROOT="$ROOT/usr/lib/plasma-top" \
+		"$ROOT/usr/lib/plasma-top/plasma-top" list-items >/dev/null
 }
 
 stage_legacy_layout() {
-	rm -rf "$ROOT/usr/lib/pirostats"
-	mkdir -p "$ROOT/usr/lib/pirostats" "$ROOT/usr/bin"
-	printf 'legacy package marker\n' > "$ROOT/usr/lib/pirostats/stale-runtime"
-	ln -sfn /usr/lib/pirostats/pirostats "$ROOT/usr/bin/pirostats"
+	rm -rf "$ROOT/usr/lib/plasma-top"
+	mkdir -p "$ROOT/usr/lib/plasma-top" "$ROOT/usr/bin"
+	printf 'legacy package marker\n' > "$ROOT/usr/lib/plasma-top/stale-runtime"
+	ln -sfn /usr/lib/plasma-top/plasma-top "$ROOT/usr/bin/plasma-top"
 }
 
 stage_legacy_layout
 stage_native
 assert_native_layout
-printf 'stale upgrade file\n' > "$ROOT/usr/lib/pirostats/stale"
+printf 'stale upgrade file\n' > "$ROOT/usr/lib/plasma-top/stale"
 stage_native
 assert_native_layout
-test ! -e "$ROOT/usr/lib/pirostats/stale"
+test ! -e "$ROOT/usr/lib/plasma-top/stale"
 
 DESTDIR="$ROOT" HOME="$HOME" "$REPO_DIR/uninstall.sh"
-test ! -e "$ROOT/usr/bin/pirostats"
-test ! -e "$ROOT/usr/lib/pirostats"
-test ! -e "$ROOT/usr/lib/systemd/user/pirostats.service"
-test ! -e "$ROOT/usr/share/plasma/plasmoids/com.github.lucazade.pirostats"
-test "$(cat "$HOME/.config/pirostats/config.toml")" = "user config"
-test "$(cat "$HOME/.cache/pirostats/geom")" = "cache"
+test ! -e "$ROOT/usr/bin/plasma-top"
+test ! -e "$ROOT/usr/lib/plasma-top"
+test ! -e "$ROOT/usr/lib/systemd/user/plasma-top.service"
+test ! -e "$ROOT/usr/share/plasma/plasmoids/com.github.bogdan-d.plasma-top"
+test "$(cat "$HOME/.config/plasma-top/config.toml")" = "user config"
+test "$(cat "$HOME/.cache/plasma-top/geom")" = "cache"
 
 # Exercise the PKGBUILD package function against the same compiled candidate.
 srcdir="$TMP/aur-src"
 pkgdir="$TMP/aur-pkg"
 mkdir -p "$srcdir" "$pkgdir"
-ln -s "$REPO_DIR" "$srcdir/pirostats"
+ln -s "$REPO_DIR" "$srcdir/plasma-top"
 # shellcheck source=../packaging/aur/PKGBUILD
 source "$REPO_DIR/packaging/aur/PKGBUILD"
 package
-test -x "$pkgdir/usr/bin/pirostats"
-test -x "$pkgdir/usr/lib/pirostats/pirostats"
-test -f "$pkgdir/usr/share/licenses/pirostats-git/LICENSE"
-test -f "$pkgdir/usr/share/licenses/pirostats-git/NOTICE"
-test ! -e "$pkgdir/usr/lib/pirostats/src"
+test -x "$pkgdir/usr/bin/plasma-top"
+test -x "$pkgdir/usr/lib/plasma-top/plasma-top"
+test -f "$pkgdir/usr/share/licenses/plasma-top-git/LICENSE"
+test -f "$pkgdir/usr/share/licenses/plasma-top-git/NOTICE"
+test ! -e "$pkgdir/usr/lib/plasma-top/src"
 
 echo "P6 native package layout, legacy upgrade, repeat upgrade, and uninstall checks passed"

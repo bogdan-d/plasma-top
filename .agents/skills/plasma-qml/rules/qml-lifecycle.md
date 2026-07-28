@@ -13,6 +13,6 @@
 - Prefer signal handlers over polling when Plasma or the file watcher already
   publishes the event.
 
-PiroStats-specific lifecycle: tooltip reads happen only while hovered, expanded,
+PlasmaTop-specific lifecycle: tooltip reads happen only while hovered, expanded,
 or pinned; tooltip page generation remains daemon-side only while active. Wheel
 and click commands remain QML-owned and event-driven.

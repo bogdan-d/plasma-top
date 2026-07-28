@@ -46,7 +46,7 @@ if [[ "$MODE" == user && -n "${DESTDIR:-}" ]]; then
 	exit 2
 fi
 
-APPLET_ID="com.github.lucazade.pirostats"
+APPLET_ID="com.github.bogdan-d.plasma-top"
 
 prepare_runtime_cache() {
 	local runtime_base runtime_dir cache_base cache_dir
@@ -60,9 +60,9 @@ prepare_runtime_cache() {
 			echo "[error] XDG_RUNTIME_DIR resolves to /" >&2
 			return 1
 		}
-		runtime_dir="$runtime_base/pirostats"
+		runtime_dir="$runtime_base/plasma-top"
 	else
-		runtime_dir="/tmp/pirostats-$(id -u)"
+		runtime_dir="/tmp/plasma-top-$(id -u)"
 	fi
 	if [[ -n "${XDG_CACHE_HOME:-}" ]]; then
 		cache_base="$XDG_CACHE_HOME"
@@ -82,7 +82,7 @@ prepare_runtime_cache() {
 		echo "[error] cache root resolves to /" >&2
 		return 1
 	}
-	cache_dir="$cache_base/pirostats"
+	cache_dir="$cache_base/plasma-top"
 	RUNTIME_REMOVE="$runtime_dir"
 	CACHE_REMOVE="$cache_dir"
 }
@@ -94,26 +94,26 @@ remove_runtime_cache() {
 print_user_dry_run() {
 	printf 'Dry run only; no system changes will be made.\n'
 	printf 'Mode: user\nInstall tree: %s\nOwnership marker: %s\n' \
-		"$LIBDIR" "$LIBDIR/.pirostats-install"
+		"$LIBDIR" "$LIBDIR/.plasma-top-install"
 	printf 'Launcher: %s\nSystemd unit: %s\nIcon: %s\nLicenses: %s\n' \
-		"$HOME/.local/bin/pirostats" "$DATA_HOME/systemd/user/pirostats.service" \
-		"$DATA_HOME/icons/hicolor/scalable/apps/pirostats.svg" "$DATA_HOME/licenses/pirostats"
-	printf 'Preserved config: %s\n' "${XDG_CONFIG_HOME:-$HOME/.config}/pirostats"
-	if [[ ! -f "$LIBDIR/.pirostats-install" ]]; then
+		"$HOME/.local/bin/plasma-top" "$DATA_HOME/systemd/user/plasma-top.service" \
+		"$DATA_HOME/icons/hicolor/scalable/apps/plasma-top.svg" "$DATA_HOME/licenses/plasma-top"
+	printf 'Preserved config: %s\n' "${XDG_CONFIG_HOME:-$HOME/.config}/plasma-top"
+	if [[ ! -f "$LIBDIR/.plasma-top-install" ]]; then
 		printf '\nNo uninstall commands would run: owned-install marker not found.\n'
 		return
 	fi
 	printf 'Runtime data: %s\nCache: %s\n' "$RUNTIME_REMOVE" "$CACHE_REMOVE"
 	printf '\n1. Stop service and remove applet\n'
-	print_command systemctl --user disable --now pirostats
+	print_command systemctl --user disable --now plasma-top
 	printf '  If kpackagetool6 is available:\n'
 	print_command kpackagetool6 --type Plasma/Applet --remove "$APPLET_ID"
 	printf '\n2. Remove user-local files\n'
-	print_command rm -f -- "$HOME/.local/bin/pirostats"
+	print_command rm -f -- "$HOME/.local/bin/plasma-top"
 	print_command rm -rf -- "$LIBDIR"
-	print_command rm -f -- "$DATA_HOME/systemd/user/pirostats.service"
-	print_command rm -f -- "$DATA_HOME/icons/hicolor/scalable/apps/pirostats.svg"
-	print_command rm -rf -- "$DATA_HOME/licenses/pirostats"
+	print_command rm -f -- "$DATA_HOME/systemd/user/plasma-top.service"
+	print_command rm -f -- "$DATA_HOME/icons/hicolor/scalable/apps/plasma-top.svg"
+	print_command rm -rf -- "$DATA_HOME/licenses/plasma-top"
 	printf '\n3. Reload service manager and remove runtime/cache data\n'
 	print_command systemctl --user daemon-reload
 	print_command rm -rf -- "$RUNTIME_REMOVE" "$CACHE_REMOVE"
@@ -122,24 +122,24 @@ print_user_dry_run() {
 print_system_dry_run() {
 	printf 'Dry run only; no system changes will be made.\n'
 	printf 'Mode: system\nInstall tree: %s\nLauncher: %s\nSystemd unit: %s\n' \
-		"$ROOT/usr/lib/pirostats" "$ROOT/usr/bin/pirostats" \
-		"$ROOT/usr/lib/systemd/user/pirostats.service"
+		"$ROOT/usr/lib/plasma-top" "$ROOT/usr/bin/plasma-top" \
+		"$ROOT/usr/lib/systemd/user/plasma-top.service"
 	printf 'Icon: %s\nLicenses: %s\nApplet: %s\n' \
-		"$ROOT/usr/share/icons/hicolor/scalable/apps/pirostats.svg" \
-		"$ROOT/usr/share/licenses/pirostats" \
+		"$ROOT/usr/share/icons/hicolor/scalable/apps/plasma-top.svg" \
+		"$ROOT/usr/share/licenses/plasma-top" \
 		"$ROOT/usr/share/plasma/plasmoids/$APPLET_ID"
 	if [[ -z "$ROOT" ]]; then
 		printf 'Runtime data: %s\nCache: %s\nPreserved config: %s\n' \
-			"$RUNTIME_REMOVE" "$CACHE_REMOVE" "${XDG_CONFIG_HOME:-${HOME:-~}/.config}/pirostats"
+			"$RUNTIME_REMOVE" "$CACHE_REMOVE" "${XDG_CONFIG_HOME:-${HOME:-~}/.config}/plasma-top"
 		printf '\n1. Stop user service\n'
-		print_command systemctl --user disable --now pirostats
+		print_command systemctl --user disable --now plasma-top
 	fi
 	printf '\n2. Remove installed files\n'
-	print_command ${SUDO:+$SUDO} rm -f -- "$ROOT/usr/lib/systemd/user/pirostats.service"
-	print_command ${SUDO:+$SUDO} rm -f -- "$ROOT/usr/bin/pirostats"
-	print_command ${SUDO:+$SUDO} rm -rf -- "$ROOT/usr/lib/pirostats"
-	print_command ${SUDO:+$SUDO} rm -f -- "$ROOT/usr/share/icons/hicolor/scalable/apps/pirostats.svg"
-	print_command ${SUDO:+$SUDO} rm -rf -- "$ROOT/usr/share/licenses/pirostats"
+	print_command ${SUDO:+$SUDO} rm -f -- "$ROOT/usr/lib/systemd/user/plasma-top.service"
+	print_command ${SUDO:+$SUDO} rm -f -- "$ROOT/usr/bin/plasma-top"
+	print_command ${SUDO:+$SUDO} rm -rf -- "$ROOT/usr/lib/plasma-top"
+	print_command ${SUDO:+$SUDO} rm -f -- "$ROOT/usr/share/icons/hicolor/scalable/apps/plasma-top.svg"
+	print_command ${SUDO:+$SUDO} rm -rf -- "$ROOT/usr/share/licenses/plasma-top"
 	if [[ -n "$ROOT" ]]; then
 		print_command rm -rf -- "$ROOT/usr/share/plasma/plasmoids/$APPLET_ID"
 		printf '\nDESTDIR staging only; no service or live Plasma commands would run.\n'
@@ -170,16 +170,16 @@ if [[ "$MODE" == user ]]; then
 		echo "[error] refusing unsafe XDG_DATA_HOME: $DATA_HOME" >&2
 		exit 2
 	}
-	LIBDIR="$DATA_HOME/pirostats"
+	LIBDIR="$DATA_HOME/plasma-top"
 	if [[ -L "$LIBDIR" ]]; then
 		echo "[error] refusing symlinked install root: $LIBDIR" >&2
 		exit 1
 	fi
-	if [[ ! -f "$LIBDIR/.pirostats-install" ]]; then
+	if [[ ! -f "$LIBDIR/.plasma-top-install" ]]; then
 		if [[ "$DRY_RUN" == true ]]; then
 			print_user_dry_run
 		else
-			echo "No owned user-local PiroStats install found under $DATA_HOME."
+			echo "No owned user-local PlasmaTop install found under $DATA_HOME."
 		fi
 		exit 0
 	fi
@@ -189,19 +189,19 @@ if [[ "$MODE" == user ]]; then
 		exit 0
 	fi
 
-	systemctl --user disable --now pirostats 2>/dev/null || true
+	systemctl --user disable --now plasma-top 2>/dev/null || true
 	if command -v kpackagetool6 >/dev/null; then
 		kpackagetool6 --type Plasma/Applet --remove "$APPLET_ID" 2>/dev/null || true
 	fi
-	rm -f -- "$HOME/.local/bin/pirostats"
+	rm -f -- "$HOME/.local/bin/plasma-top"
 	rm -rf -- "$LIBDIR"
-	rm -f -- "$DATA_HOME/systemd/user/pirostats.service"
-	rm -f -- "$DATA_HOME/icons/hicolor/scalable/apps/pirostats.svg"
-	rm -rf -- "$DATA_HOME/licenses/pirostats"
+	rm -f -- "$DATA_HOME/systemd/user/plasma-top.service"
+	rm -f -- "$DATA_HOME/icons/hicolor/scalable/apps/plasma-top.svg"
+	rm -rf -- "$DATA_HOME/licenses/plasma-top"
 	systemctl --user daemon-reload 2>/dev/null || true
 	remove_runtime_cache
-	echo "PiroStats user-local install removed."
-	echo "Your config in ${XDG_CONFIG_HOME:-$HOME/.config}/pirostats was kept."
+	echo "PlasmaTop user-local install removed."
+	echo "Your config in ${XDG_CONFIG_HOME:-$HOME/.config}/plasma-top was kept."
 	exit 0
 fi
 
@@ -222,7 +222,7 @@ if [[ -z "$ROOT" ]]; then
 		print_system_dry_run
 		exit 0
 	fi
-	systemctl --user disable --now pirostats 2>/dev/null || true
+	systemctl --user disable --now plasma-top 2>/dev/null || true
 fi
 
 if [[ "$DRY_RUN" == true ]]; then
@@ -230,15 +230,15 @@ if [[ "$DRY_RUN" == true ]]; then
 	exit 0
 fi
 
-$SUDO rm -f -- "$ROOT/usr/lib/systemd/user/pirostats.service"
-$SUDO rm -f -- "$ROOT/usr/bin/pirostats"
-$SUDO rm -rf -- "$ROOT/usr/lib/pirostats"
-$SUDO rm -f -- "$ROOT/usr/share/icons/hicolor/scalable/apps/pirostats.svg"
-$SUDO rm -rf -- "$ROOT/usr/share/licenses/pirostats"
+$SUDO rm -f -- "$ROOT/usr/lib/systemd/user/plasma-top.service"
+$SUDO rm -f -- "$ROOT/usr/bin/plasma-top"
+$SUDO rm -rf -- "$ROOT/usr/lib/plasma-top"
+$SUDO rm -f -- "$ROOT/usr/share/icons/hicolor/scalable/apps/plasma-top.svg"
+$SUDO rm -rf -- "$ROOT/usr/share/licenses/plasma-top"
 
 if [[ -n "$ROOT" ]]; then
 	$SUDO rm -rf -- "$ROOT/usr/share/plasma/plasmoids/$APPLET_ID"
-	echo "PiroStats removed from $ROOT"
+	echo "PlasmaTop removed from $ROOT"
 	exit 0
 fi
 
@@ -247,5 +247,5 @@ if command -v kpackagetool6 >/dev/null; then
 fi
 systemctl --user daemon-reload 2>/dev/null || true
 remove_runtime_cache
-echo "PiroStats uninstalled. (Remove the widget from your panel if it is still there.)"
-echo "Your config in ~/.config/pirostats was kept; delete it by hand if wanted."
+echo "PlasmaTop uninstalled. (Remove the widget from your panel if it is still there.)"
+echo "Your config in ~/.config/plasma-top was kept; delete it by hand if wanted."

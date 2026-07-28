@@ -12,6 +12,6 @@
 - Do not move pinning into daemon polling. `Plasmoid.hideOnWindowDeactivate`,
   expansion, and popup interaction remain QML/Plasma concerns.
 
-For PiroStats, compact display, hover tooltip, pinned popup, and desktop display
+For PlasmaTop, compact display, hover tooltip, pinned popup, and desktop display
 share daemon output but have distinct ownership and geometry. Validate every
 surface touched by a change; application-form smoke cannot prove panel behavior.

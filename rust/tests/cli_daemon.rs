@@ -5,11 +5,11 @@ use std::path::PathBuf;
 use std::process::Command;
 
 fn binary() -> PathBuf {
-    PathBuf::from(env!("CARGO_BIN_EXE_pirostats"))
+    PathBuf::from(env!("CARGO_BIN_EXE_plasma-top"))
 }
 
 fn temp_root(label: &str) -> PathBuf {
-    std::env::temp_dir().join(format!("pirostats-cli-{label}-{}", std::process::id()))
+    std::env::temp_dir().join(format!("plasma-top-cli-{label}-{}", std::process::id()))
 }
 
 #[test]
@@ -43,14 +43,14 @@ fn invalid_command_is_stderr_and_failure() {
     assert!(output.stdout.is_empty());
     assert_eq!(
         String::from_utf8(output.stderr).expect("utf8 error"),
-        "usage: pirostats [-h] <command> ...\npirostats: error: argument <command>: invalid choice: 'unknown' (choose from 'daemon', 'render', 'probe', 'profiling', 'list-items', 'page', 'click')\n"
+        "usage: plasma-top [-h] <command> ...\nplasma-top: error: argument <command>: invalid choice: 'unknown' (choose from 'daemon', 'render', 'probe', 'profiling', 'list-items', 'page', 'click')\n"
     );
 }
 
 #[test]
 fn page_command_only_touches_isolated_state_subtree() {
     let root = temp_root("page");
-    let state = root.join("pirostats/state");
+    let state = root.join("plasma-top/state");
     fs::create_dir_all(&state).expect("state fixture");
     fs::write(state.join("npages"), "3").expect("npages fixture");
     fs::write(state.join("page"), "0").expect("page fixture");
@@ -66,7 +66,7 @@ fn page_command_only_touches_isolated_state_subtree() {
         fs::read_to_string(state.join("page")).expect("read page"),
         "1"
     );
-    let root_entries = fs::read_dir(root.join("pirostats"))
+    let root_entries = fs::read_dir(root.join("plasma-top"))
         .expect("runtime root")
         .map(|entry| entry.expect("runtime entry").file_name())
         .collect::<Vec<_>>();

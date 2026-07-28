@@ -12,7 +12,7 @@ use crate::domain::boundary::{
 use crate::domain::readings::{BatteryState, HardwareSnapshot, ReadingsSnapshot};
 use crate::domain::state::{NotificationLatch, NotificationState};
 
-const TITLE: &str = "PiroStats";
+const TITLE: &str = "PlasmaTop";
 const ERROR_ICON: &str = "dialog-error";
 const WARNING_ICON: &str = "dialog-warning";
 const BATTERY_ICON: &str = "battery-caution";
@@ -388,7 +388,7 @@ mod tests {
 
     fn expected(body: &str, icon: &str) -> NotificationPayload {
         NotificationPayload {
-            title: "PiroStats".to_owned(),
+            title: "PlasmaTop".to_owned(),
             body: body.to_owned(),
             icon: icon.to_owned(),
             urgency: NotificationUrgency::Critical,

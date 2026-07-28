@@ -148,7 +148,7 @@ pub struct Block {
 }
 
 /// Returns the on-screen character width after removing tags and decoding
-/// entities emitted by PiroStats renderers.
+/// entities emitted by PlasmaTop renderers.
 #[must_use]
 pub fn visible_width(text: &str) -> usize {
     let without_tags = strip_tags(text);

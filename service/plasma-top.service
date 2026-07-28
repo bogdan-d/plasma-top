@@ -1,12 +1,12 @@
 [Unit]
-Description=PiroStats system stats daemon
-Documentation=https://github.com/lucazade/pirostats
+Description=PlasmaTop system stats daemon
+Documentation=https://github.com/bogdan-d/plasma-top
 After=graphical-session.target
 PartOf=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=%h/.local/bin/pirostats daemon
+ExecStart=/usr/bin/plasma-top daemon
 Restart=on-failure
 RestartSec=3
 

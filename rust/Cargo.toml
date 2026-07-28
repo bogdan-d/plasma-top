@@ -1,5 +1,5 @@
 [package]
-name = "pirostats"
+name = "plasma-top"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
@@ -11,7 +11,7 @@ description = "KDE Plasma panel and tooltip system statistics"
 path = "src/lib.rs"
 
 [[bin]]
-name = "pirostats"
+name = "plasma-top"
 path = "src/main.rs"
 
 [features]
@@ -47,7 +47,7 @@ toml = "1"
 # and re-uses `serde_core` already vendored. See `rust/DEPENDENCIES.md`.
 serde = { version = "1", features = ["derive"] }
 # Pure-Rust DEFLATE/zlib used by `render::chart` to encode deterministic PNG
-# bytes for the graphs page. Chosen over the `png` crate because PiroStats
+# bytes for the graphs page. Chosen over the `png` crate because PlasmaTop
 # already rasterizes pixels itself and needs only compression/decompression,
 # and over `flate2`/system zlib to avoid native build/runtime dependencies.
 # License: MIT OR Zlib OR Apache-2.0. GPL-2.0-or-later compatible. No build

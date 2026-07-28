@@ -2,7 +2,7 @@ import QtQuick
 
 import org.kde.plasma.configuration
 
-// PiroStats wires the commands and mouse actions to the daemon (see main.xml
+// PlasmaTop wires the commands and mouse actions to the daemon (see main.xml
 // defaults), so the upstream "Command" and "Actions" pages are gone — only the
 // visual settings remain.
 ConfigModel {

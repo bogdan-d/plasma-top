@@ -15,10 +15,10 @@ an Arch Plasma installation.
 ## Relevant files
 
 - `packaging/aur/PKGBUILD`
-- `packaging/aur/pirostats.install`
-- `packaging/pirostats-launcher`
-- `service/pirostats.service`
-- `service/pirostats-user.service`
+- `packaging/aur/plasma-top.install`
+- `packaging/plasma-top-launcher`
+- `service/plasma-top.service`
+- `service/plasma-top-user.service`
 - `install.sh`
 - `uninstall.sh`
 - `tools/p6_package_test.sh`

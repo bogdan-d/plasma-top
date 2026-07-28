@@ -49,7 +49,7 @@ jobs:
         run: |
           tools/repository_gate.sh
           bash -n install.sh uninstall.sh packaging/aur/PKGBUILD \
-            packaging/aur/pirostats.install pirostats tools/*.sh scripts/*.sh
+            packaging/aur/plasma-top.install plasma-top tools/*.sh scripts/*.sh
 
       - name: User-local install lifecycle
         run: tools/user_install_test.sh

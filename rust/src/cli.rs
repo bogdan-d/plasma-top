@@ -257,19 +257,19 @@ impl Display for CliError {
             ),
             Self::UnknownCommand { command } => write!(
                 formatter,
-                "usage: pirostats [-h] <command> ...\npirostats: error: argument <command>: invalid choice: '{command}' (choose from 'daemon', 'render', 'probe', 'profiling', 'list-items', 'page', 'click')"
+                "usage: plasma-top [-h] <command> ...\nplasma-top: error: argument <command>: invalid choice: '{command}' (choose from 'daemon', 'render', 'probe', 'profiling', 'list-items', 'page', 'click')"
             ),
             Self::UnknownArgument { command, argument } => {
                 write!(
                     formatter,
-                    "{}\npirostats {command}: error: unrecognized arguments: {argument}",
+                    "{}\nplasma-top {command}: error: unrecognized arguments: {argument}",
                     usage_text(command)
                 )
             }
             Self::MissingValue { command, flag } => {
                 write!(
                     formatter,
-                    "{}\npirostats {command}: error: argument {flag}: expected one argument",
+                    "{}\nplasma-top {command}: error: argument {flag}: expected one argument",
                     usage_text(command)
                 )
             }
@@ -290,7 +290,7 @@ impl Display for CliError {
                 };
                 write!(
                     formatter,
-                    "{}\npirostats {command}: error: argument {flag}: invalid choice: '{value}' (choose from {choices})",
+                    "{}\nplasma-top {command}: error: argument {flag}: invalid choice: '{value}' (choose from {choices})",
                     usage_text(command)
                 )
             }
@@ -301,15 +301,15 @@ impl Display for CliError {
 fn usage_text(command: &str) -> &'static str {
     match command {
         "render" => {
-            "usage: pirostats render [-h] [--config PATH]\n                        [--component {panel,tooltip,both}]\n                        [--format {text,html}]\n                        [--layout {auto,horizontal,vertical}]\n                        [--page {full,processes,connections,fastfetch,cpu_cores,graphs}]"
+            "usage: plasma-top render [-h] [--config PATH]\n                        [--component {panel,tooltip,both}]\n                        [--format {text,html}]\n                        [--layout {auto,horizontal,vertical}]\n                        [--page {full,processes,connections,fastfetch,cpu_cores,graphs}]"
         }
-        "daemon" => "usage: pirostats daemon [-h] [--config PATH]",
-        "probe" => "usage: pirostats probe [-h] [--config PATH]",
-        "profiling" => "usage: pirostats profiling [-h] [--config PATH]",
-        "list-items" => "usage: pirostats list-items [-h]",
-        "page" => "usage: pirostats page [-h] {next,prev}",
-        "click" => "usage: pirostats click [-h]",
-        _ => "usage: pirostats [-h] <command> ...",
+        "daemon" => "usage: plasma-top daemon [-h] [--config PATH]",
+        "probe" => "usage: plasma-top probe [-h] [--config PATH]",
+        "profiling" => "usage: plasma-top profiling [-h] [--config PATH]",
+        "list-items" => "usage: plasma-top list-items [-h]",
+        "page" => "usage: plasma-top page [-h] {next,prev}",
+        "click" => "usage: plasma-top click [-h]",
+        _ => "usage: plasma-top [-h] <command> ...",
     }
 }
 
@@ -318,10 +318,10 @@ impl StdError for CliError {}
 pub(crate) fn help_text() -> &'static str {
     #[cfg(any())]
     concat!(
-        "pirostats\n\n",
+        "plasma-top\n\n",
         "KDE Plasma panel and tooltip system statistics.\n\n",
         "USAGE:\n",
-        "    pirostats <command> [options]\n\n",
+        "    plasma-top <command> [options]\n\n",
         "COMMANDS:\n",
         "    daemon [--config PATH]\n",
         "    render [--config PATH] [--component panel|tooltip|both] [--format text|html] \\\n",
@@ -334,31 +334,31 @@ pub(crate) fn help_text() -> &'static str {
         "    --help\n",
         "    --version\n",
     );
-    "usage: pirostats [-h] <command> ...\n\npositional arguments:\n  <command>\n    daemon      Production loop: renders continuously and writes the files the\n                widget reads\n    render      One-shot render of panel/tooltip, then exits\n    probe       One-shot: probe the hardware and print the raw readings (no\n                render)\n    profiling   One-shot timing report (cold/warm cache, per-section/item)\n    list-items  Lists the available items and where they can go, then exits\n    page        Switch the tooltip page (bind to the widget's mouse-wheel\n                commands)\n    click       Run the current page's click action (bind to the widget's\n                click command)\n\noptions:\n  -h, --help    show this help message and exit"
+    "usage: plasma-top [-h] <command> ...\n\npositional arguments:\n  <command>\n    daemon      Production loop: renders continuously and writes the files the\n                widget reads\n    render      One-shot render of panel/tooltip, then exits\n    probe       One-shot: probe the hardware and print the raw readings (no\n                render)\n    profiling   One-shot timing report (cold/warm cache, per-section/item)\n    list-items  Lists the available items and where they can go, then exits\n    page        Switch the tooltip page (bind to the widget's mouse-wheel\n                commands)\n    click       Run the current page's click action (bind to the widget's\n                click command)\n\noptions:\n  -h, --help    show this help message and exit"
 }
 
 pub(crate) fn subcommand_help(command: &str) -> &'static str {
     match command {
         "daemon" => {
-            "usage: pirostats daemon [-h] [--config PATH]\n\noptions:\n  -h, --help     show this help message and exit\n  --config PATH  Path to the TOML (default: ~/.config/pirostats/config.toml,\n                 else the shipped config)"
+            "usage: plasma-top daemon [-h] [--config PATH]\n\noptions:\n  -h, --help     show this help message and exit\n  --config PATH  Path to the TOML (default: ~/.config/plasma-top/config.toml,\n                 else the shipped config)"
         }
         "probe" => {
-            "usage: pirostats probe [-h] [--config PATH]\n\noptions:\n  -h, --help     show this help message and exit\n  --config PATH  Path to the TOML (default: ~/.config/pirostats/config.toml,\n                 else the shipped config)"
+            "usage: plasma-top probe [-h] [--config PATH]\n\noptions:\n  -h, --help     show this help message and exit\n  --config PATH  Path to the TOML (default: ~/.config/plasma-top/config.toml,\n                 else the shipped config)"
         }
         "profiling" => {
-            "usage: pirostats profiling [-h] [--config PATH]\n\noptions:\n  -h, --help     show this help message and exit\n  --config PATH  Path to the TOML (default: ~/.config/pirostats/config.toml,\n                 else the shipped config)"
+            "usage: plasma-top profiling [-h] [--config PATH]\n\noptions:\n  -h, --help     show this help message and exit\n  --config PATH  Path to the TOML (default: ~/.config/plasma-top/config.toml,\n                 else the shipped config)"
         }
         "list-items" => {
-            "usage: pirostats list-items [-h]\n\noptions:\n  -h, --help  show this help message and exit"
+            "usage: plasma-top list-items [-h]\n\noptions:\n  -h, --help  show this help message and exit"
         }
         "click" => {
-            "usage: pirostats click [-h]\n\noptions:\n  -h, --help  show this help message and exit"
+            "usage: plasma-top click [-h]\n\noptions:\n  -h, --help  show this help message and exit"
         }
         "page" => {
-            "usage: pirostats page [-h] {next,prev}\n\npositional arguments:\n  {next,prev}  Move to the next/previous page (wraps around)\n\noptions:\n  -h, --help   show this help message and exit"
+            "usage: plasma-top page [-h] {next,prev}\n\npositional arguments:\n  {next,prev}  Move to the next/previous page (wraps around)\n\noptions:\n  -h, --help   show this help message and exit"
         }
         "render" => {
-            "usage: pirostats render [-h] [--config PATH]\n                        [--component {panel,tooltip,both}]\n                        [--format {text,html}]\n                        [--layout {auto,horizontal,vertical}]\n                        [--page {full,processes,connections,fastfetch,cpu_cores,graphs}]\n\noptions:\n  -h, --help            show this help message and exit\n  --config PATH         Path to the TOML (default:\n                        ~/.config/pirostats/config.toml, else the shipped\n                        config)\n  --component {panel,tooltip,both}\n                        What to render (default: both)\n  --format {text,html}  text = stripped to stdout; html =\n                        /tmp/pirostats_render_* files (default: text)\n  --layout {auto,horizontal,vertical}\n                        Forces the panel orientation (horizontal = column,\n                        vertical = inline bar); auto = detection like the\n                        daemon (default)\n  --page {full,processes,connections,fastfetch,cpu_cores,graphs}\n                        Render a tooltip deep-dive page (any page, even one\n                        not in pages.order) instead of the full view; implies\n                        --component tooltip. Image pages (graphs) show only\n                        their legends in text format"
+            "usage: plasma-top render [-h] [--config PATH]\n                        [--component {panel,tooltip,both}]\n                        [--format {text,html}]\n                        [--layout {auto,horizontal,vertical}]\n                        [--page {full,processes,connections,fastfetch,cpu_cores,graphs}]\n\noptions:\n  -h, --help            show this help message and exit\n  --config PATH         Path to the TOML (default:\n                        ~/.config/plasma-top/config.toml, else the shipped\n                        config)\n  --component {panel,tooltip,both}\n                        What to render (default: both)\n  --format {text,html}  text = stripped to stdout; html =\n                        /tmp/plasma-top_render_* files (default: text)\n  --layout {auto,horizontal,vertical}\n                        Forces the panel orientation (horizontal = column,\n                        vertical = inline bar); auto = detection like the\n                        daemon (default)\n  --page {full,processes,connections,fastfetch,cpu_cores,graphs}\n                        Render a tooltip deep-dive page (any page, even one\n                        not in pages.order) instead of the full view; implies\n                        --component tooltip. Image pages (graphs) show only\n                        their legends in text format"
         }
         _ => "",
     }
@@ -587,7 +587,7 @@ mod tests {
 
     #[test]
     fn defaults_to_help_without_subcommand() {
-        let cli = parse(&["pirostats"]);
+        let cli = parse(&["plasma-top"]);
 
         assert!(matches!(
             cli,
@@ -599,7 +599,7 @@ mod tests {
 
     #[test]
     fn parses_render_defaults() {
-        let cli = parse(&["pirostats", "render"]);
+        let cli = parse(&["plasma-top", "render"]);
 
         assert_eq!(
             cli,
@@ -612,7 +612,7 @@ mod tests {
     #[test]
     fn parses_render_overrides() {
         let cli = parse(&[
-            "pirostats",
+            "plasma-top",
             "render",
             "--component",
             "tooltip",
@@ -640,7 +640,7 @@ mod tests {
 
     #[test]
     fn parses_page_direction() {
-        let cli = parse(&["pirostats", "page", "prev"]);
+        let cli = parse(&["plasma-top", "page", "prev"]);
 
         assert_eq!(
             cli,
@@ -655,8 +655,8 @@ mod tests {
     #[test]
     fn page_fast_path_treats_missing_and_unknown_as_previous() {
         for arguments in [
-            &["pirostats", "page"][..],
-            &["pirostats", "page", "unknown", "ignored"][..],
+            &["plasma-top", "page"][..],
+            &["plasma-top", "page", "unknown", "ignored"][..],
         ] {
             assert!(matches!(
                 parse(arguments),
@@ -671,7 +671,7 @@ mod tests {
 
     #[test]
     fn subcommand_help_resolves_to_its_own_help() {
-        let cli = parse(&["pirostats", "render", "--help"]);
+        let cli = parse(&["plasma-top", "render", "--help"]);
 
         assert!(matches!(
             cli,
@@ -683,7 +683,7 @@ mod tests {
 
     #[test]
     fn rejects_unknown_render_choice() {
-        let cli = parse(&["pirostats", "render", "--format", "json"]);
+        let cli = parse(&["plasma-top", "render", "--format", "json"]);
 
         assert_eq!(
             cli,
@@ -697,7 +697,7 @@ mod tests {
 
     #[test]
     fn rejects_out_of_scope_list_items_flags() {
-        let cli = parse(&["pirostats", "list-items", "--config", "config.toml"]);
+        let cli = parse(&["plasma-top", "list-items", "--config", "config.toml"]);
 
         assert_eq!(
             cli,
@@ -712,7 +712,7 @@ mod tests {
     fn repeated_render_flags_keep_last_value_like_argparse() {
         assert_eq!(
             parse(&[
-                "pirostats",
+                "plasma-top",
                 "render",
                 "--component",
                 "both",

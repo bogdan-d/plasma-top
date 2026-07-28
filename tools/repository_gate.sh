@@ -9,14 +9,19 @@ fail() {
 	exit 1
 }
 
+legacy_pattern='p''iro|plasma[-_ ]?stats'
+if git grep -IniE "$legacy_pattern" || git ls-files | grep -Ei "$legacy_pattern"; then
+	fail "legacy product identity remains in tracked content or paths"
+fi
+
 required=(
 	rust/Cargo.toml rust/Cargo.lock rust/src/main.rs rust/src/lib.rs
 	rust/tests/golden/panel_h.html rust/tests/golden/panel_v.html
 	rust/tests/golden/tooltip.html
 	rust/tests/fixtures/oracle/oracle_render_full.toml
-	pirostats install.sh uninstall.sh packaging/pirostats-launcher
-	service/pirostats.service service/pirostats-user.service
-	packaging/aur/PKGBUILD packaging/aur/pirostats.install
+	plasma-top install.sh uninstall.sh packaging/plasma-top-launcher
+	service/plasma-top.service service/plasma-top-user.service
+	packaging/aur/PKGBUILD packaging/aur/plasma-top.install
 )
 for path in "${required[@]}"; do
 	[[ -f "$path" ]] || fail "missing required product/evidence file: $path"
@@ -34,17 +39,17 @@ expected_python='tools/qt_shot.py'
 	exit 1
 }
 
-production_surfaces=(pirostats install.sh uninstall.sh packaging service plasmoid .github)
+production_surfaces=(plasma-top install.sh uninstall.sh packaging service plasmoid .github)
 if rg -n '(python[0-9]*|src/[^ ]*\.py|python_oracle|parity_runner)' \
 	"${production_surfaces[@]}"; then
 	fail "Python runtime path remains on a production surface"
 fi
 
-grep -Fqx 'ExecStart=/usr/bin/pirostats daemon' service/pirostats.service \
+grep -Fqx 'ExecStart=/usr/bin/plasma-top daemon' service/plasma-top.service \
 	|| fail "system service launcher drift"
-grep -Fqx 'ExecStart=%h/.local/bin/pirostats daemon' service/pirostats-user.service \
+grep -Fqx 'ExecStart=%h/.local/bin/plasma-top daemon' service/plasma-top-user.service \
 	|| fail "user service launcher drift"
-grep -Fq 'exec /usr/lib/pirostats/pirostats "$@"' packaging/pirostats-launcher \
+grep -Fq 'exec /usr/lib/plasma-top/plasma-top "$@"' packaging/plasma-top-launcher \
 	|| fail "package launcher drift"
 grep -Fq "makedepends=('cargo' 'git')" packaging/aur/PKGBUILD \
 	|| fail "AUR Rust build dependencies drift"

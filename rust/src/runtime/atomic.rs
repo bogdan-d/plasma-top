@@ -4,7 +4,7 @@
 //! `std::fs::rename` is atomic on the same filesystem (POSIX rename(2)
 //! guarantee), so a reader sees either the previous file or the new one,
 //! never a torn write. The tmp name embeds the PID so overlapping writers —
-//! concurrent `pirostats page next` processes fired by a fast scroll — never
+//! concurrent `plasma-top page next` processes fired by a fast scroll — never
 //! clobber a shared tmp mid-rename.
 
 use std::io;
@@ -57,7 +57,7 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_nanos())
             .unwrap_or(0);
-        std::env::temp_dir().join(format!("pirostats-runtime-atomic-{label}-{pid}-{nanos}"))
+        std::env::temp_dir().join(format!("plasma-top-runtime-atomic-{label}-{pid}-{nanos}"))
     }
 
     #[test]

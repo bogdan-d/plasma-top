@@ -1,4 +1,4 @@
-PiroStats
+PlasmaTop
 Copyright (C) 2026 Luca Forina
 
 This program is free software: you can redistribute it and/or modify it under
@@ -12,7 +12,7 @@ Third-party / derived work
 
 The Plasma applet under plasmoid/ is derived from "Command Output" by
 Chris Holland (Zren) — https://github.com/Zren/plasma-applet-commandoutput —
-licensed GPL-2.0-or-later. It has been substantially modified for PiroStats
+licensed GPL-2.0-or-later. It has been substantially modified for PlasmaTop
 (inline HTML/CSS rendering, live panel geometry publishing, mouse-wheel paging,
 the pinned popup, and hardcoded commands). The original author's copyright is
 retained; see plasmoid/LICENSE.

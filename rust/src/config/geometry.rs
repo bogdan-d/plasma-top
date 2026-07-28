@@ -35,7 +35,7 @@ pub fn plasma_appletsrc_path() -> PathBuf {
 /// the first paint after a cold start is already width-fitted.
 #[must_use]
 pub fn geom_cache_path() -> PathBuf {
-    home_dir().join(".cache").join("pirostats").join("geom")
+    home_dir().join(".cache").join("plasma-top").join("geom")
 }
 
 /// Panel facts used at load time.
@@ -105,7 +105,7 @@ pub fn parse_kde_ini(text: &str) -> BTreeMap<String, BTreeMap<String, String>> {
     sections
 }
 
-/// Returns the containment number when `header` matches the pirostats applet
+/// Returns the containment number when `header` matches the plasma-top applet
 /// root pattern: `[Containments][<num>]` followed by one or more
 /// `[Applets][<num>]` and nothing else.
 ///
@@ -151,9 +151,9 @@ pub fn detect_vertical_from_appletsrc_text(text: &str) -> bool {
     let sections = parse_kde_ini(text);
     for (header, kv) in &sections {
         if let Some(containment) = applet_root_containment(header) {
-            let is_pirostats =
-                kv.get("plugin").map(String::as_str) == Some("com.github.lucazade.pirostats");
-            if is_pirostats {
+            let is_target_applet =
+                kv.get("plugin").map(String::as_str) == Some("com.github.bogdan-d.plasma-top");
+            if is_target_applet {
                 let containment_header = format!("[Containments][{containment}]");
                 let location = sections
                     .get(&containment_header)
@@ -604,7 +604,7 @@ mod tests {
     }
 
     #[test]
-    fn applet_root_matches_pirostats_applet_levels() {
+    fn applet_root_matches_target_applet_levels() {
         assert_eq!(
             applet_root_containment("[Containments][2][Applets][25]"),
             Some("2")
@@ -645,7 +645,7 @@ mod tests {
     #[test]
     fn detect_vertical_from_appletsrc_text_reads_panel_edge_horizontal() {
         let text = "[Containments][2]\nlocation=4\n\
-                    [Containments][2][Applets][7]\nplugin=com.github.lucazade.pirostats\n";
+                    [Containments][2][Applets][7]\nplugin=com.github.bogdan-d.plasma-top\n";
 
         assert!(!detect_vertical_from_appletsrc_text(text));
     }
@@ -653,7 +653,7 @@ mod tests {
     #[test]
     fn detect_vertical_from_appletsrc_text_reads_panel_edge_vertical() {
         let text = "[Containments][2]\nlocation=5\n\
-                    [Containments][2][Applets][7]\nplugin=com.github.lucazade.pirostats\n";
+                    [Containments][2][Applets][7]\nplugin=com.github.bogdan-d.plasma-top\n";
 
         assert!(detect_vertical_from_appletsrc_text(text));
     }
@@ -661,7 +661,7 @@ mod tests {
     #[test]
     fn detect_vertical_from_appletsrc_text_unknown_location_defaults_vertical() {
         let text = "[Containments][2]\nlocation=99\n\
-                    [Containments][2][Applets][7]\nplugin=com.github.lucazade.pirostats\n";
+                    [Containments][2][Applets][7]\nplugin=com.github.bogdan-d.plasma-top\n";
 
         assert!(detect_vertical_from_appletsrc_text(text));
     }
@@ -701,7 +701,7 @@ mod tests {
 
     fn write_tmp(name: &str, contents: &str) -> PathBuf {
         let path =
-            std::env::temp_dir().join(format!("pirostats-geom-{name}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("plasma-top-geom-{name}-{}", std::process::id()));
         std::fs::write(&path, contents).unwrap();
         path
     }
@@ -710,7 +710,7 @@ mod tests {
     fn read_geom_falls_back_to_cache_when_live_absent() {
         let cache = write_tmp("cache-1", "42 6.59375 1\n");
         let live =
-            std::env::temp_dir().join(format!("pirostats-geom-absent-1-{}", std::process::id()));
+            std::env::temp_dir().join(format!("plasma-top-geom-absent-1-{}", std::process::id()));
 
         let geo = read_geom_file_at(&live, &cache).unwrap();
 
@@ -734,9 +734,9 @@ mod tests {
     #[test]
     fn read_geom_none_when_live_absent_and_no_cache() {
         let live =
-            std::env::temp_dir().join(format!("pirostats-geom-absent-2-{}", std::process::id()));
+            std::env::temp_dir().join(format!("plasma-top-geom-absent-2-{}", std::process::id()));
         let cache =
-            std::env::temp_dir().join(format!("pirostats-geom-absent-3-{}", std::process::id()));
+            std::env::temp_dir().join(format!("plasma-top-geom-absent-3-{}", std::process::id()));
 
         assert!(read_geom_file_at(&live, &cache).is_none());
     }
@@ -745,7 +745,7 @@ mod tests {
     fn cache_live_geom_persists_valid_live() {
         let live = write_tmp("live-3", "100 5 1\n");
         let cache_parent =
-            std::env::temp_dir().join(format!("pirostats-geom-cache-sub-{}", std::process::id()));
+            std::env::temp_dir().join(format!("plasma-top-geom-cache-sub-{}", std::process::id()));
         let cache = cache_parent.join("geom_cache");
 
         cache_live_geom_at(&live, &cache);
@@ -758,7 +758,7 @@ mod tests {
     #[test]
     fn cache_live_geom_ignores_degenerate_and_absent() {
         let cache = std::env::temp_dir().join(format!(
-            "pirostats-geom-cache-degenerate-{}",
+            "plasma-top-geom-cache-degenerate-{}",
             std::process::id()
         ));
         let live = write_tmp("live-4", "0 0 1\n");
@@ -770,7 +770,7 @@ mod tests {
         );
 
         let absent =
-            std::env::temp_dir().join(format!("pirostats-geom-absent-4-{}", std::process::id()));
+            std::env::temp_dir().join(format!("plasma-top-geom-absent-4-{}", std::process::id()));
         cache_live_geom_at(&absent, &cache);
         assert!(!cache.exists(), "absent live geom must not create a cache");
 
@@ -783,7 +783,7 @@ mod tests {
     fn appletsrc(location: u32) -> String {
         format!(
             "[Containments][2]\nlocation={location}\n\
-             [Containments][2][Applets][25]\nplugin=com.github.lucazade.pirostats\n"
+             [Containments][2][Applets][25]\nplugin=com.github.bogdan-d.plasma-top\n"
         )
     }
 
@@ -792,7 +792,7 @@ mod tests {
         let appletsrc_path = write_tmp("appletsrc-v", &appletsrc(5));
         let geom_path = write_tmp("geom-v", "42 6.59375 1\n");
         let cache_path = std::env::temp_dir().join(format!(
-            "pirostats-geom-cache-absent-{}",
+            "plasma-top-geom-cache-absent-{}",
             std::process::id()
         ));
 
@@ -809,9 +809,9 @@ mod tests {
     fn detect_panel_geometry_falls_back_to_appletsrc_orientation() {
         let appletsrc_path = write_tmp("appletsrc-nogeo", &appletsrc(5));
         let geom_path =
-            std::env::temp_dir().join(format!("pirostats-geom-nogeo-{}", std::process::id()));
+            std::env::temp_dir().join(format!("plasma-top-geom-nogeo-{}", std::process::id()));
         let cache_path =
-            std::env::temp_dir().join(format!("pirostats-geom-nocache-{}", std::process::id()));
+            std::env::temp_dir().join(format!("plasma-top-geom-nocache-{}", std::process::id()));
 
         let geo = detect_panel_geometry_at(&appletsrc_path, &geom_path, &cache_path);
 
@@ -827,7 +827,7 @@ mod tests {
         let geom_zero = write_tmp("geom-zero", "0 0 1\n");
         let geom_garbage = write_tmp("geom-garbage", "garbage\n");
         let cache_absent = std::env::temp_dir().join(format!(
-            "pirostats-geom-cache-absent2-{}",
+            "plasma-top-geom-cache-absent2-{}",
             std::process::id()
         ));
 
@@ -851,8 +851,10 @@ mod tests {
         // appletsrc's; the measurements for the wrong axis are ignored.
         let appletsrc_path = write_tmp("appletsrc-stale", &appletsrc(5));
         let geom_path = write_tmp("geom-stale", "42 6.59375 0\n");
-        let cache_path =
-            std::env::temp_dir().join(format!("pirostats-geom-cache-stale-{}", std::process::id()));
+        let cache_path = std::env::temp_dir().join(format!(
+            "plasma-top-geom-cache-stale-{}",
+            std::process::id()
+        ));
 
         let geo = detect_panel_geometry_at(&appletsrc_path, &geom_path, &cache_path);
 
@@ -870,7 +872,7 @@ mod tests {
         let appletsrc_path = write_tmp("appletsrc-tip", &appletsrc(5));
         let geom_path = write_tmp("geom-tip", "42 6.59375 0 8.0\n");
         let cache_path =
-            std::env::temp_dir().join(format!("pirostats-geom-cache-tip-{}", std::process::id()));
+            std::env::temp_dir().join(format!("plasma-top-geom-cache-tip-{}", std::process::id()));
 
         let geo = detect_panel_geometry_at(&appletsrc_path, &geom_path, &cache_path);
 
@@ -883,12 +885,14 @@ mod tests {
 
     #[test]
     fn detect_panel_geometry_defaults_when_unreadable() {
-        let appletsrc_absent =
-            std::env::temp_dir().join(format!("pirostats-appletsrc-absent-{}", std::process::id()));
+        let appletsrc_absent = std::env::temp_dir().join(format!(
+            "plasma-top-appletsrc-absent-{}",
+            std::process::id()
+        ));
         let geom_absent =
-            std::env::temp_dir().join(format!("pirostats-geom-absent-5-{}", std::process::id()));
+            std::env::temp_dir().join(format!("plasma-top-geom-absent-5-{}", std::process::id()));
         let cache_absent =
-            std::env::temp_dir().join(format!("pirostats-cache-absent-5-{}", std::process::id()));
+            std::env::temp_dir().join(format!("plasma-top-cache-absent-5-{}", std::process::id()));
 
         let geo = detect_panel_geometry_at(&appletsrc_absent, &geom_absent, &cache_absent);
 

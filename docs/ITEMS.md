@@ -6,7 +6,7 @@ should never need to decode a name — find the thing you want here and copy the
 token.
 
 The authoritative, always-current list of tokens (and where each one is allowed)
-is `pirostats list-items`. This file adds the descriptions and examples.
+is `plasma-top list-items`. This file adds the descriptions and examples.
 
 **How to read the examples.** Values are illustrative, not live. In the
 **tooltip** a row is `label: value` (the label carries a glyph in front of the
@@ -15,7 +15,7 @@ its value, to stay compact. Sparklines/bars are shown here with unicode blocks
 (`▁▂▃▅▇█`, `⣀⣤⣶⣿`) standing in for the real Nerd Font drawing.
 
 A token is **bare** when the metric has one intrinsic rendering. Generic forms
-use a `:suffix`; `pirostats list-items` is the authoritative token list.
+use a `:suffix`; `plasma-top list-items` is the authoritative token list.
 
 ---
 

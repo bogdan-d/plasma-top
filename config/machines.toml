@@ -8,7 +8,7 @@
 # matching block just runs the plain config.
 #
 # This shipped file has no machines — only the how-to below. Put YOURS in
-# ~/.config/pirostats/machines.toml, merged on top of this file, so your hardware
+# ~/.config/plasma-top/machines.toml, merged on top of this file, so your hardware
 # stays on your machine.
 #
 # ── How to describe a machine ────────────────────────────────────────────────
@@ -28,7 +28,7 @@
 #       items_remove= [...]   drop items
 #     and [<name>.panel] / [<name>.tooltip]: order_add = [...]  add sections.
 #
-# Example (copy into ~/.config/pirostats/machines.toml and adjust):
+# Example (copy into ~/.config/plasma-top/machines.toml and adjust):
 #
 #   [example.detect]
 #   product_contains = "XPS 13"          # match product_name (or board_contains / board_startswith)
@@ -39,4 +39,4 @@
 #   [example.tooltip.io]
 #   items_remove = ["wifi_ssid_signal"]  # e.g. a desktop with no Wi-Fi
 #
-# Run `pirostats list-items` for the valid item names.
+# Run `plasma-top list-items` for the valid item names.

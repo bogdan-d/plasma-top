@@ -69,8 +69,8 @@ impl FixtureRoot {
 
     /// Returns the `run/` subtree (the runtime-equivalent fixture directory).
     ///
-    /// Production code reads its runtime files from `$XDG_RUNTIME_DIR/pirostats`;
-    /// tests stage the same layout under `<fixture_root>/run/pirostats` and
+    /// Production code reads its runtime files from `$XDG_RUNTIME_DIR/plasma-top`;
+    /// tests stage the same layout under `<fixture_root>/run/plasma-top` and
     /// point the runtime lane at this path.
     #[must_use]
     pub fn run(&self) -> PathBuf {

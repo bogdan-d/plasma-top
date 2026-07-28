@@ -1,4 +1,4 @@
-/* pirostats — inspection overlay, distinct backgrounds per role (label/val/
+/* plasma-top — inspection overlay, distinct backgrounds per role (label/val/
    extra) to spot cell gaps/overlaps in panel and tooltip layout.
 
    THEME-AGNOSTIC: loaded ON TOP of whichever base is active (style-dark.css or

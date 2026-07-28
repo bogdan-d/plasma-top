@@ -768,7 +768,7 @@ mod tests {
             .expect("time")
             .as_nanos();
         let path = std::env::temp_dir().join(format!(
-            "pirostats-page-tests-{label}-{}-{unique}",
+            "plasma-top-page-tests-{label}-{}-{unique}",
             process::id()
         ));
         fs::create_dir_all(&path).expect("create temp dir");

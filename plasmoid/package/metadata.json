@@ -10,13 +10,13 @@
 			}
 		],
 		"Category": "System Information",
-		"Description": "System stats in the panel and a paginated tooltip, rendered by the PiroStats daemon.",
-		"Icon": "pirostats",
-		"Id": "com.github.lucazade.pirostats",
+		"Description": "System stats in the panel and a paginated tooltip, rendered by the PlasmaTop daemon.",
+		"Icon": "plasma-top",
+		"Id": "com.github.bogdan-d.plasma-top",
 		"License": "GPL-2.0-or-later",
-		"Name": "PiroStats",
+		"Name": "PlasmaTop",
 		"Version": "1",
-		"Website": "https://github.com/lucazade/pirostats"
+		"Website": "https://github.com/bogdan-d/plasma-top"
 	},
 	"X-Plasma-API-Minimum-Version": "6.0"
 }

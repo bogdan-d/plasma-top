@@ -1,0 +1,4 @@
+#!/bin/sh
+PLASMA_TOP_CODE_ROOT=/usr/lib/plasma-top
+export PLASMA_TOP_CODE_ROOT
+exec /usr/lib/plasma-top/plasma-top "$@"

@@ -1,8 +1,8 @@
-# PiroStats design
+# PlasmaTop design
 
 ## Problem and goal
 
-PiroStats replaced a shell script that repeatedly started processes for every
+PlasmaTop replaced a shell script that repeatedly started processes for every
 sensor and render. That design cost roughly 2 W on the original machine. The
 current system keeps discovery, readings, history, formatting, and cache state in
 one synchronous Rust daemon. Plasma receives ready-to-display HTML rather than
@@ -39,7 +39,7 @@ deterministic fakes under `test_support/`.
 ## Runtime protocol
 
 The daemon and applet independently derive `<runtime>` as
-`$XDG_RUNTIME_DIR/pirostats`, falling back to `/tmp/pirostats-$UID`.
+`$XDG_RUNTIME_DIR/plasma-top`, falling back to `/tmp/plasma-top-$UID`.
 
 ```text
 <runtime>/
@@ -145,7 +145,7 @@ Page zero is the full tooltip. Configured deep pages are `processes`,
 is built. Commands, process scans, and chart rasterization therefore cost
 nothing while their page is inactive.
 
-Wheel and click actions run `pirostats page next|prev` and `pirostats click`.
+Wheel and click actions run `plasma-top page next|prev` and `plasma-top click`.
 The daemon checks page state in 100 ms sleep steps and republishes only the
 tooltip on a page change, without running a full sensor poll. Middle-click
 pinning remains QML-owned.

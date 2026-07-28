@@ -991,7 +991,7 @@ mod tests {
                 .map(|d| d.as_nanos())
                 .unwrap_or(0);
             let root = std::env::temp_dir()
-                .join(format!("pirostats-power-{}-{unique}", std::process::id(),));
+                .join(format!("plasma-top-power-{}-{unique}", std::process::id(),));
             fs::create_dir_all(&root).expect("temp root");
             Self { root }
         }

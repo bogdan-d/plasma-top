@@ -13,7 +13,7 @@ Review every direct dependency here before updating `Cargo.lock`.
 | [`signal-hook`](https://github.com/vorner/signal-hook) | 0.3 | MIT OR Apache-2.0 | Safe SIGINT/SIGTERM flag registration. Uses `signal-hook-registry` and `libc`; no native build step. |
 | [`serde_json`](https://github.com/serde-rs/json) | 1 | MIT OR Apache-2.0 | Decode `busctl --json=short` replies without native D-Bus bindings. Pure Rust; uses `itoa`, `memchr`, and `zmij`. |
 
-PiroStats is GPL-2.0-or-later. Dependencies with incompatible licenses, such as
+PlasmaTop is GPL-2.0-or-later. Dependencies with incompatible licenses, such as
 GPLv3-only, AGPL, or proprietary terms, are blocked.
 
 ## Review checklist

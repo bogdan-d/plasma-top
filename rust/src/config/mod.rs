@@ -673,7 +673,7 @@ mod typed {
     }
 }
 
-/// The fully resolved PiroStats configuration.
+/// The fully resolved PlasmaTop configuration.
 ///
 /// Mirrors the `Config` dataclass in `src/config.py`. Built by
 /// [`load_config`] after the machine/orientation merge has produced the
@@ -761,7 +761,7 @@ impl Default for Config {
 
 // ── load_config ─────────────────────────────────────────────────────────────
 
-/// Loads and fully resolves a PiroStats config.
+/// Loads and fully resolves a PlasmaTop config.
 ///
 /// Mirrors `src/config.py::load_config` (lines 772–848). The resolution
 /// pipeline, applied in order, matches Python exactly:
@@ -1439,7 +1439,7 @@ mod tests {
 
     fn temp_dir(tag: &str) -> PathBuf {
         let dir =
-            std::env::temp_dir().join(format!("pirostats-config-{tag}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("plasma-top-config-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir

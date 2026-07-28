@@ -47,7 +47,7 @@ mod tests {
 
     fn payload(body: &str) -> NotificationPayload {
         NotificationPayload {
-            title: "PiroStats".to_owned(),
+            title: "PlasmaTop".to_owned(),
             body: body.to_owned(),
             icon: "dialog-error".to_owned(),
             urgency: NotificationUrgency::Critical,

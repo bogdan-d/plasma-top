@@ -23,10 +23,10 @@ while (($#)); do
 done
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-binary="$repo_dir/rust/target/release/pirostats"
+binary="$repo_dir/rust/target/release/plasma-top"
 python="${PYTHON:-python3}"
 artifact_root="$repo_dir/.test-artifacts/p6/qt"
-tmp_root="$(mktemp -d /tmp/pirostats-p6-qt.XXXXXX)"
+tmp_root="$(mktemp -d /tmp/plasma-top-p6-qt.XXXXXX)"
 trap 'rm -rf "$tmp_root"' EXIT
 
 "$python" -c 'import PyQt6.QtGui' >/dev/null 2>&1 || {
@@ -71,11 +71,11 @@ for cell in "${cells[@]}"; do
         [[ "$variant" == light ]] && bg="#eeeeee"
 
         case "$cell" in
-            panel-h) args=(render --config "$env_dir/config.toml" --component panel --layout horizontal --format html); source=/tmp/pirostats_render_panel.html; qt=(--width 1400 --height 96 --point --size 8 --scale 2) ;;
-            panel-v) args=(render --config "$env_dir/config.toml" --component panel --layout vertical --format html); source=/tmp/pirostats_render_panel.html; qt=(--width 80 --height 1200 --point --size 8 --scale 2) ;;
-            tooltip) args=(render --config "$env_dir/config.toml" --component tooltip --format html); source=/tmp/pirostats_render_tooltip.html; qt=(--fit --point --size 11 --lineheight 1.05 --scale 2) ;;
-            fastfetch) args=(render --config "$env_dir/config.toml" --page "$cell" --format html); source=/tmp/pirostats_render_tooltip.html; qt=(--fit --point --size 11 --lineheight 1.05 --scale 2 --plasmoid-output) ;;
-            *) args=(render --config "$env_dir/config.toml" --page "$cell" --format html); source=/tmp/pirostats_render_tooltip.html; qt=(--fit --point --size 11 --lineheight 1.05 --scale 2) ;;
+            panel-h) args=(render --config "$env_dir/config.toml" --component panel --layout horizontal --format html); source=/tmp/plasma-top_render_panel.html; qt=(--width 1400 --height 96 --point --size 8 --scale 2) ;;
+            panel-v) args=(render --config "$env_dir/config.toml" --component panel --layout vertical --format html); source=/tmp/plasma-top_render_panel.html; qt=(--width 80 --height 1200 --point --size 8 --scale 2) ;;
+            tooltip) args=(render --config "$env_dir/config.toml" --component tooltip --format html); source=/tmp/plasma-top_render_tooltip.html; qt=(--fit --point --size 11 --lineheight 1.05 --scale 2) ;;
+            fastfetch) args=(render --config "$env_dir/config.toml" --page "$cell" --format html); source=/tmp/plasma-top_render_tooltip.html; qt=(--fit --point --size 11 --lineheight 1.05 --scale 2 --plasmoid-output) ;;
+            *) args=(render --config "$env_dir/config.toml" --page "$cell" --format html); source=/tmp/plasma-top_render_tooltip.html; qt=(--fit --point --size 11 --lineheight 1.05 --scale 2) ;;
         esac
 
         HOME="$env_dir/home" "$binary" "${args[@]}" >"$render_log" 2>&1

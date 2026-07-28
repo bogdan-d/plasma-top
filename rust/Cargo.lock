@@ -178,7 +178,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "pirostats"
+name = "plasma-top"
 version = "0.1.0"
 dependencies = [
  "miniz_oxide",

@@ -34,14 +34,14 @@ while (($#)); do
 done
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-binary="$repo_dir/rust/target/release/pirostats"
+binary="$repo_dir/rust/target/release/plasma-top"
 artifact_root="$repo_dir/.test-artifacts/p6/live"
 original_runtime="${XDG_RUNTIME_DIR:-}"
 original_home="$HOME"
 original_config="${XDG_CONFIG_HOME:-$HOME/.config}"
 original_cache="${XDG_CACHE_HOME:-$HOME/.cache}"
 original_data="${XDG_DATA_HOME:-$HOME/.local/share}"
-viewer_container="pirostats-plasma-sdk"
+viewer_container="plasma-top-plasma-sdk"
 viewer=""
 daemon_pid=""
 viewer_pid=""
@@ -100,7 +100,7 @@ fi
 rm -rf "$artifact_root"
 mkdir -p "$artifact_root"
 test_root="$(mktemp -d "$artifact_root/run.XXXXXX")"
-mkdir -p "$test_root"/{runtime,config/pirostats,cache,data,home,package,bin,logs}
+mkdir -p "$test_root"/{runtime,config/plasma-top,cache,data,home,package,bin,logs}
 chmod 700 "$test_root/runtime"
 
 if [[ -n "${WAYLAND_DISPLAY:-}" && -n "$original_runtime" \
@@ -113,8 +113,8 @@ export XDG_CONFIG_HOME="$test_root/config"
 export XDG_CACHE_HOME="$test_root/cache"
 export XDG_DATA_HOME="$test_root/data"
 export HOME="$test_root/home"
-export PIROSTATS_CODE_ROOT="$repo_dir"
-export PIROSTATS_QML_TRACE="$test_root/commands.tsv"
+export PLASMA_TOP_CODE_ROOT="$repo_dir"
+export PLASMA_TOP_QML_TRACE="$test_root/commands.tsv"
 export PATH="$test_root/bin:$PATH"
 
 # Wayland does not honor plasmoidviewer's requested x/y coordinates. Move the
@@ -133,34 +133,34 @@ else
     exit 1
 fi
 
-cp "$repo_dir/config/config.toml" "$XDG_CONFIG_HOME/pirostats/config.toml"
-cp "$repo_dir/config/machines.toml" "$XDG_CONFIG_HOME/pirostats/machines.toml"
+cp "$repo_dir/config/config.toml" "$XDG_CONFIG_HOME/plasma-top/config.toml"
+cp "$repo_dir/config/machines.toml" "$XDG_CONFIG_HOME/plasma-top/machines.toml"
 cp -a "$repo_dir/plasmoid/package/." "$test_root/package/"
 
 # Trace QML's shell-backed reads/actions without changing applet code.
 cat >"$test_root/bin/cat" <<'EOF'
 #!/usr/bin/env bash
-printf '%s\tcat\t%s\n' "$(date +%s.%N)" "$*" >>"$PIROSTATS_QML_TRACE"
+printf '%s\tcat\t%s\n' "$(date +%s.%N)" "$*" >>"$PLASMA_TOP_QML_TRACE"
 exec /usr/bin/cat "$@"
 EOF
 cat >"$test_root/bin/backend" <<EOF
 #!/usr/bin/env bash
 exec "$binary" "\$@"
 EOF
-cat >"$test_root/bin/pirostats" <<EOF
+cat >"$test_root/bin/plasma-top" <<EOF
 #!/usr/bin/env bash
-printf '%s\\tpirostats\\t%s\\n' "\$(date +%s.%N)" "\$*" >>"\$PIROSTATS_QML_TRACE"
+printf '%s\\tplasma-top\\t%s\\n' "\$(date +%s.%N)" "\$*" >>"\$PLASMA_TOP_QML_TRACE"
 exec "$test_root/bin/backend" "\$@"
 EOF
-chmod +x "$test_root/bin/backend" "$test_root/bin/cat" "$test_root/bin/pirostats"
+chmod +x "$test_root/bin/backend" "$test_root/bin/cat" "$test_root/bin/plasma-top"
 
-python3 - "$test_root/package/contents/config/main.xml" "$test_root/bin/pirostats" <<'PY'
+python3 - "$test_root/package/contents/config/main.xml" "$test_root/bin/plasma-top" <<'PY'
 from pathlib import Path
 import sys
 
 path = Path(sys.argv[1])
 text = path.read_text(encoding="utf-8")
-old = "/usr/bin/pirostats"
+old = "/usr/bin/plasma-top"
 if old not in text:
     raise SystemExit(f"expected action path missing from {path}")
 path.write_text(text.replace(old, sys.argv[2]), encoding="utf-8")
@@ -197,7 +197,7 @@ wait_for_file() {
     return 1
 }
 
-runtime_root="$XDG_RUNTIME_DIR/pirostats"
+runtime_root="$XDG_RUNTIME_DIR/plasma-top"
 state_root="$runtime_root/state"
 wait_for_file "$runtime_root/panel.html"
 wait_for_file "$runtime_root/tooltip.html"
@@ -206,7 +206,7 @@ start_viewer() {
     local formfactor="$1" location="$2" size="$3" log="$4"
     # Keep automatic windows away from usual pointer/top-panel positions so an
     # accidental hover cannot invalidate the lazy-tooltip assertion.
-    local args=(-a com.github.lucazade.pirostats -f "$formfactor" -l "$location" -s "$size" -x 1000 -y 1000)
+    local args=(-a com.github.bogdan-d.plasma-top -f "$formfactor" -l "$location" -s "$size" -x 1000 -y 1000)
     if [[ "$viewer" == host ]]; then
         plasmoidviewer "${args[@]}" >"$log" 2>&1 &
     else
@@ -223,8 +223,8 @@ start_viewer() {
             XDG_CACHE_HOME="$XDG_CACHE_HOME" \
             XDG_DATA_HOME="$XDG_DATA_HOME" \
             HOME="$HOME" \
-            PIROSTATS_CODE_ROOT="$PIROSTATS_CODE_ROOT" \
-            PIROSTATS_QML_TRACE="$PIROSTATS_QML_TRACE" \
+            PLASMA_TOP_CODE_ROOT="$PLASMA_TOP_CODE_ROOT" \
+            PLASMA_TOP_QML_TRACE="$PLASMA_TOP_QML_TRACE" \
             PATH="$test_root/bin:/usr/local/bin:/usr/bin:/bin" \
             plasmoidviewer "${args[@]}" >"$log" 2>&1 &
     fi
@@ -240,14 +240,14 @@ stop_viewer() {
 
 count_reads() {
     local name="$1"
-    awk -F '\t' -v suffix="/$name" '$2 == "cat" && $3 ~ suffix "$" {n++} END {print n+0}' "$PIROSTATS_QML_TRACE"
+    awk -F '\t' -v suffix="/$name" '$2 == "cat" && $3 ~ suffix "$" {n++} END {print n+0}' "$PLASMA_TOP_QML_TRACE"
 }
 
 verify_compact_case() {
     local formfactor="$1" location="$2" size="$3" expected_vertical="$4"
     local log="$test_root/logs/$formfactor.log"
     rm -f "$state_root/geom"
-    : >"$PIROSTATS_QML_TRACE"
+    : >"$PLASMA_TOP_QML_TRACE"
     YDOTOOL_SOCKET="$ydotool_socket" ydotool mousemove --absolute -x 4000 -y 1700
     start_viewer "$formfactor" "$location" "$size" "$log"
     sleep 0.5
@@ -261,7 +261,7 @@ verify_compact_case() {
     [[ -s "$state_root/geom" ]] || {
         echo "$formfactor QML did not publish state/geom" >&2
         cp "$log" "$artifact_root/$formfactor-failed.log"
-        cp "$PIROSTATS_QML_TRACE" "$artifact_root/commands-$formfactor-failed.tsv"
+        cp "$PLASMA_TOP_QML_TRACE" "$artifact_root/commands-$formfactor-failed.tsv"
         find "$runtime_root" -maxdepth 2 -printf '%y %p\n' >"$artifact_root/runtime-$formfactor-failed.txt"
         cat "$log" >&2
         return 1
@@ -297,11 +297,11 @@ verify_compact_case() {
     }
     [[ "$tooltip_after" == "$tooltip_before" ]] || {
         echo "$formfactor tooltip read while neither hovered nor pinned" >&2
-        cp "$PIROSTATS_QML_TRACE" "$artifact_root/commands-$formfactor-failed.tsv"
+        cp "$PLASMA_TOP_QML_TRACE" "$artifact_root/commands-$formfactor-failed.tsv"
         return 1
     }
 
-    cp "$PIROSTATS_QML_TRACE" "$artifact_root/commands-$formfactor.tsv"
+    cp "$PLASMA_TOP_QML_TRACE" "$artifact_root/commands-$formfactor.tsv"
     cp "$state_root/geom" "$artifact_root/geom-$formfactor"
     cp "$log" "$artifact_root/$formfactor.log"
     printf 'PASS %s geometry=%s panel_reads=%s->%s tooltip_reads=%s->%s\n' \
@@ -331,7 +331,7 @@ if [[ "$interactive" == false && "$planar" == false ]]; then
 fi
 
 rm -f "$state_root/geom"
-: >"$PIROSTATS_QML_TRACE"
+: >"$PLASMA_TOP_QML_TRACE"
 if [[ "$planar" == true ]]; then
     start_viewer planar desktop 900x900 "$test_root/logs/interactive.log"
     sleep 2
@@ -345,7 +345,7 @@ Automatic horizontal+vertical matrix passed. Planar desktop window remains open.
 Manual desktop checklist:
   1. Hide viewer toolbar with its far-right slashed-eye button.
   2. Confirm transparent desktop text is readable on the wallpaper.
-  3. Right-click stats → Configure PiroStats → Appearance. Toggle background,
+  3. Right-click stats → Configure PlasmaTop → Appearance. Toggle background,
      desktop outline, and font size; each applies cleanly without clipping.
   4. Wheel paging changes one page per gesture and content remains aligned.
   5. Inspect .test-artifacts/p6/qt/contact-sheet.png for dark/light/overlay pages.
@@ -371,5 +371,5 @@ EOF
 fi
 wait "$viewer_pid"
 viewer_pid=""
-cp "$PIROSTATS_QML_TRACE" "$artifact_root/commands-interactive.tsv"
+cp "$PLASMA_TOP_QML_TRACE" "$artifact_root/commands-interactive.tsv"
 cp "$test_root/logs/interactive.log" "$artifact_root/interactive.log"

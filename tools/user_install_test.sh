@@ -10,15 +10,15 @@ export XDG_DATA_HOME="$TMP/data with spaces"
 export XDG_CONFIG_HOME="$TMP/config"
 export XDG_CACHE_HOME="$TMP/cache"
 export XDG_RUNTIME_DIR="$TMP/runtime"
-export PIROSTATS_BINARY="$REPO_DIR/rust/target/release/pirostats"
+export PLASMA_TOP_BINARY="$REPO_DIR/rust/target/release/plasma-top"
 export FAKE_LOG="$TMP/commands.log"
 export FAKE_APPLET="$TMP/installed-applet"
 export FAKE_APPLET_STATE="$TMP/applet-installed"
 FAKE_BIN="$TMP/fake-bin"
-mkdir -p "$HOME" "$XDG_CONFIG_HOME/pirostats" "$XDG_CACHE_HOME/pirostats" \
+mkdir -p "$HOME" "$XDG_CONFIG_HOME/plasma-top" "$XDG_CACHE_HOME/plasma-top" \
 	"$XDG_RUNTIME_DIR" "$FAKE_BIN"
-printf 'user config\n' > "$XDG_CONFIG_HOME/pirostats/config.toml"
-printf 'cache\n' > "$XDG_CACHE_HOME/pirostats/geom"
+printf 'user config\n' > "$XDG_CONFIG_HOME/plasma-top/config.toml"
+printf 'cache\n' > "$XDG_CACHE_HOME/plasma-top/geom"
 
 cat > "$FAKE_BIN/systemctl" <<'EOF'
 #!/usr/bin/env bash
@@ -55,7 +55,7 @@ EOF
 chmod +x "$FAKE_BIN"/*
 export PATH="$FAKE_BIN:$PATH"
 
-[[ -x "$PIROSTATS_BINARY" ]] || {
+[[ -x "$PLASMA_TOP_BINARY" ]] || {
 	cargo build --manifest-path "$REPO_DIR/rust/Cargo.toml" --release --locked --features nvml
 }
 
@@ -67,63 +67,63 @@ if DESTDIR=/ "$REPO_DIR/uninstall.sh" >/dev/null 2>&1; then exit 1; fi
 if XDG_DATA_HOME=relative "$REPO_DIR/install.sh" --user >/dev/null 2>&1; then exit 1; fi
 if XDG_DATA_HOME=/usr/local/share "$REPO_DIR/install.sh" --user >/dev/null 2>&1; then exit 1; fi
 if XDG_DATA_HOME=/tmp/../usr/local/share "$REPO_DIR/install.sh" --user >/dev/null 2>&1; then exit 1; fi
-[[ ! -e "$XDG_DATA_HOME/pirostats" ]]
+[[ ! -e "$XDG_DATA_HOME/plasma-top" ]]
 
 # Both dry-run spellings resolve paths without invoking install dependencies or writing files.
 : > "$FAKE_LOG"
 "$REPO_DIR/install.sh" --user --dry-run > "$TMP/dry-run.log"
 "$REPO_DIR/install.sh" --dry --user > "$TMP/dry.log"
-[[ ! -s "$FAKE_LOG" && ! -e "$XDG_DATA_HOME/pirostats" ]]
-grep -Fq "Install tree: $XDG_DATA_HOME/pirostats" "$TMP/dry-run.log"
-grep -Fq "Launcher: $HOME/.local/bin/pirostats" "$TMP/dry-run.log"
-grep -Fq 'systemctl --user restart pirostats' "$TMP/dry-run.log"
+[[ ! -s "$FAKE_LOG" && ! -e "$XDG_DATA_HOME/plasma-top" ]]
+grep -Fq "Install tree: $XDG_DATA_HOME/plasma-top" "$TMP/dry-run.log"
+grep -Fq "Launcher: $HOME/.local/bin/plasma-top" "$TMP/dry-run.log"
+grep -Fq 'systemctl --user restart plasma-top' "$TMP/dry-run.log"
 grep -Fq 'Dry run only; no system changes will be made.' "$TMP/dry.log"
 
 # Uninstall and install refuse same-named paths without ownership marker.
-mkdir -p "$XDG_DATA_HOME/pirostats" "$HOME/.local/bin"
-printf 'keep data\n' > "$XDG_DATA_HOME/pirostats/unrelated"
-printf 'keep launcher\n' > "$HOME/.local/bin/pirostats"
+mkdir -p "$XDG_DATA_HOME/plasma-top" "$HOME/.local/bin"
+printf 'keep data\n' > "$XDG_DATA_HOME/plasma-top/unrelated"
+printf 'keep launcher\n' > "$HOME/.local/bin/plasma-top"
 "$REPO_DIR/uninstall.sh" --user >/dev/null
-[[ "$(cat "$XDG_DATA_HOME/pirostats/unrelated")" == "keep data" ]]
-[[ "$(cat "$HOME/.local/bin/pirostats")" == "keep launcher" ]]
+[[ "$(cat "$XDG_DATA_HOME/plasma-top/unrelated")" == "keep data" ]]
+[[ "$(cat "$HOME/.local/bin/plasma-top")" == "keep launcher" ]]
 if "$REPO_DIR/install.sh" --user >/dev/null 2>&1; then exit 1; fi
-rm -rf -- "$XDG_DATA_HOME/pirostats"
-rm -f -- "$HOME/.local/bin/pirostats"
+rm -rf -- "$XDG_DATA_HOME/plasma-top"
+rm -f -- "$HOME/.local/bin/plasma-top"
 
 mkdir -p "$TMP/symlink-target"
-ln -s "$TMP/symlink-target" "$XDG_DATA_HOME/pirostats"
+ln -s "$TMP/symlink-target" "$XDG_DATA_HOME/plasma-top"
 if "$REPO_DIR/install.sh" --user >/dev/null 2>&1; then exit 1; fi
-rm -f -- "$XDG_DATA_HOME/pirostats"
+rm -f -- "$XDG_DATA_HOME/plasma-top"
 
 "$REPO_DIR/install.sh" --user
-USER_ROOT="$XDG_DATA_HOME/pirostats"
-LAUNCHER="$HOME/.local/bin/pirostats"
-UNIT="$XDG_DATA_HOME/systemd/user/pirostats.service"
-[[ -x "$USER_ROOT/pirostats" && -x "$LAUNCHER" && -f "$UNIT" ]]
-[[ -f "$XDG_DATA_HOME/icons/hicolor/scalable/apps/pirostats.svg" ]]
-[[ -f "$XDG_DATA_HOME/licenses/pirostats/LICENSE" ]]
-grep -Fq 'ExecStart=%h/.local/bin/pirostats daemon' "$UNIT"
+USER_ROOT="$XDG_DATA_HOME/plasma-top"
+LAUNCHER="$HOME/.local/bin/plasma-top"
+UNIT="$XDG_DATA_HOME/systemd/user/plasma-top.service"
+[[ -x "$USER_ROOT/plasma-top" && -x "$LAUNCHER" && -f "$UNIT" ]]
+[[ -f "$XDG_DATA_HOME/icons/hicolor/scalable/apps/plasma-top.svg" ]]
+[[ -f "$XDG_DATA_HOME/licenses/plasma-top/LICENSE" ]]
+grep -Fq 'ExecStart=%h/.local/bin/plasma-top daemon' "$UNIT"
 grep -Fq "&quot;$LAUNCHER&quot; click" "$FAKE_APPLET/contents/config/main.xml"
 grep -Fq "&quot;$LAUNCHER&quot; page prev" "$FAKE_APPLET/contents/config/main.xml"
 grep -Fq "&quot;$LAUNCHER&quot; page next" "$FAKE_APPLET/contents/config/main.xml"
 ! grep -q -- '--global' "$FAKE_LOG"
 ! grep -q '^sudo ' "$FAKE_LOG"
 "$LAUNCHER" list-items >/dev/null
-[[ ! -L "$USER_ROOT/pirostats" ]]
+[[ ! -L "$USER_ROOT/plasma-top" ]]
 ! grep -Fq "$REPO_DIR" "$LAUNCHER"
 
 # Uninstall dry runs report every removal target without stopping or deleting anything.
 : > "$FAKE_LOG"
 "$REPO_DIR/uninstall.sh" --user --dry-run > "$TMP/uninstall-dry-run.log"
 "$REPO_DIR/uninstall.sh" --dry --user > "$TMP/uninstall-dry.log"
-[[ ! -s "$FAKE_LOG" && -x "$USER_ROOT/pirostats" && -x "$LAUNCHER" ]]
+[[ ! -s "$FAKE_LOG" && -x "$USER_ROOT/plasma-top" && -x "$LAUNCHER" ]]
 grep -Fq "Install tree: $USER_ROOT" "$TMP/uninstall-dry-run.log"
-grep -Fq "Runtime data: $XDG_RUNTIME_DIR/pirostats" "$TMP/uninstall-dry-run.log"
-grep -Fq 'systemctl --user disable --now pirostats' "$TMP/uninstall-dry-run.log"
+grep -Fq "Runtime data: $XDG_RUNTIME_DIR/plasma-top" "$TMP/uninstall-dry-run.log"
+grep -Fq 'systemctl --user disable --now plasma-top' "$TMP/uninstall-dry-run.log"
 grep -Fq 'Dry run only; no system changes will be made.' "$TMP/uninstall-dry.log"
 
 printf 'keep\n' > "$USER_ROOT/keep"
-if PIROSTATS_BINARY="$TMP/missing" "$REPO_DIR/install.sh" --user >/dev/null 2>&1; then
+if PLASMA_TOP_BINARY="$TMP/missing" "$REPO_DIR/install.sh" --user >/dev/null 2>&1; then
 	exit 1
 fi
 [[ "$(cat "$USER_ROOT/keep")" == keep ]]
@@ -131,8 +131,8 @@ rm "$USER_ROOT/keep"
 
 # Units differ only at ExecStart.
 diff -u \
-	<(sed 's|^ExecStart=.*|ExecStart=<launcher> daemon|' "$REPO_DIR/service/pirostats.service") \
-	<(sed 's|^ExecStart=.*|ExecStart=<launcher> daemon|' "$REPO_DIR/service/pirostats-user.service")
+	<(sed 's|^ExecStart=.*|ExecStart=<launcher> daemon|' "$REPO_DIR/service/plasma-top.service") \
+	<(sed 's|^ExecStart=.*|ExecStart=<launcher> daemon|' "$REPO_DIR/service/plasma-top-user.service")
 
 printf 'stale\n' > "$USER_ROOT/stale"
 "$REPO_DIR/install.sh" --user
@@ -142,19 +142,19 @@ grep -q -- '--upgrade' "$FAKE_LOG"
 # Unsafe state roots fail before owned files are touched.
 if XDG_CACHE_HOME=/ "$REPO_DIR/uninstall.sh" --user >/dev/null 2>&1; then exit 1; fi
 if XDG_RUNTIME_DIR=/ "$REPO_DIR/uninstall.sh" --user >/dev/null 2>&1; then exit 1; fi
-[[ -x "$USER_ROOT/pirostats" && -x "$LAUNCHER" ]]
+[[ -x "$USER_ROOT/plasma-top" && -x "$LAUNCHER" ]]
 
 if FAIL_SERVICE=1 "$REPO_DIR/install.sh" --user >"$TMP/activation-failure.log" 2>&1; then
 	exit 1
 fi
-grep -Fq 'journalctl --user -u pirostats -n 100' "$TMP/activation-failure.log"
+grep -Fq 'journalctl --user -u plasma-top -n 100' "$TMP/activation-failure.log"
 "$LAUNCHER" list-items >/dev/null
 
 "$REPO_DIR/uninstall.sh" --user
 "$REPO_DIR/uninstall.sh" --user
 [[ ! -e "$USER_ROOT" && ! -e "$LAUNCHER" && ! -e "$UNIT" ]]
-[[ "$(cat "$XDG_CONFIG_HOME/pirostats/config.toml")" == "user config" ]]
-[[ ! -e "$XDG_CACHE_HOME/pirostats" ]]
+[[ "$(cat "$XDG_CONFIG_HOME/plasma-top/config.toml")" == "user config" ]]
+[[ ! -e "$XDG_CACHE_HOME/plasma-top" ]]
 ! grep -q -- '--global' "$FAKE_LOG"
 ! grep -q '^sudo ' "$FAKE_LOG"
 

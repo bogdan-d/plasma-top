@@ -297,7 +297,7 @@ mod tests {
         fn new() -> Self {
             let id = NEXT_TEMP.fetch_add(1, Ordering::Relaxed);
             let path =
-                std::env::temp_dir().join(format!("pirostats-hid-{}-{id}", std::process::id()));
+                std::env::temp_dir().join(format!("plasma-top-hid-{}-{id}", std::process::id()));
             fs::create_dir_all(&path).expect("create temp dir");
             Self(path)
         }

@@ -1,0 +1,40 @@
+# pacman scriptlet. The daemon is a systemd --user service, so it can't be
+# enabled from these root-run hooks — they only print what the user must do.
+
+post_install() {
+	cat <<'EOF'
+==> PlasmaTop is installed. Start it (per-user, NOT as root):
+      systemctl --user enable --now plasma-top
+==> Then add the widget: right-click a panel -> Add Widgets -> "PlasmaTop".
+
+==> The shipped config in /usr/lib/plasma-top is read-only. To customize, copy a
+    default into your XDG dir and edit that (first-that-exists wins):
+      mkdir -p ~/.config/plasma-top
+      cp /usr/lib/plasma-top/config/config.toml ~/.config/plasma-top/
+    Note: the config path is resolved at daemon startup, so the FIRST time you
+    create ~/.config/plasma-top/config.toml, restart to pick it up:
+      systemctl --user restart plasma-top
+    Editing an already-present XDG config/style hot-reloads, no restart needed.
+
+==> Optional tools provide NVIDIA, network/Wi-Fi, and fastfetch data — see
+    `pacman -Qi plasma-top-git`.
+EOF
+}
+
+post_upgrade() {
+	cat <<'EOF'
+==> PlasmaTop upgraded. Reload the running daemon to pick up new code:
+      systemctl --user restart plasma-top
+==> If the applet changed and the panel looks stale, restart the shell:
+      systemctl --user restart plasma-plasmashell   # or: kquitapp6 plasmashell && kstart plasmashell
+EOF
+}
+
+pre_remove() {
+	cat <<'EOF'
+==> Stop and disable the PlasmaTop daemon before removal (per-user):
+      systemctl --user disable --now plasma-top
+==> Remove the widget from your panel if it's still there. Your config in
+    ~/.config/plasma-top is left untouched; delete it by hand if you want it gone.
+EOF
+}

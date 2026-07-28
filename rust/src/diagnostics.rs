@@ -20,8 +20,8 @@ use crate::sensors::hid::BoltHidFacade;
 use crate::sensors::process::read_top_process_page;
 use crate::sensors::{CollectCtx, CollectorState, Timings, collect, discover_hardware};
 
-const RENDER_PANEL_FILE: &str = "/tmp/pirostats_render_panel.html";
-const RENDER_TOOLTIP_FILE: &str = "/tmp/pirostats_render_tooltip.html";
+const RENDER_PANEL_FILE: &str = "/tmp/plasma-top_render_panel.html";
+const RENDER_TOOLTIP_FILE: &str = "/tmp/plasma-top_render_tooltip.html";
 
 struct OneShot {
     cfg: Config,

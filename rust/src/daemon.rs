@@ -828,7 +828,7 @@ mod tests {
 
     #[test]
     fn css_comments_and_whitespace_are_stripped() {
-        let dir = std::env::temp_dir().join(format!("pirostats-css-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("plasma-top-css-{}", std::process::id()));
         let _ = fs::create_dir_all(&dir);
         let path = dir.join("style.css");
         fs::write(&path, "/* note */\n.a {\n color: red;\n}").expect("write fixture");
@@ -932,7 +932,7 @@ mod tests {
 
     fn integration_tree() -> (PathBuf, FilesystemRoots, DaemonPaths, PathBuf) {
         let root = std::env::temp_dir().join(format!(
-            "pirostats-daemon-{}-{:?}",
+            "plasma-top-daemon-{}-{:?}",
             std::process::id(),
             thread::current().id()
         ));
@@ -946,7 +946,7 @@ mod tests {
             "MemTotal: 1024000 kB\nMemAvailable: 512000 kB\nSwapTotal: 0 kB\nSwapFree: 0 kB\n",
         )
         .expect("meminfo");
-        let runtime = root.join("run/pirostats");
+        let runtime = root.join("run/plasma-top");
         let state = runtime.join("state");
         let paths = DaemonPaths {
             runtime: runtime.clone(),

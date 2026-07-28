@@ -16,14 +16,14 @@
     clippy::unimplemented
 )]
 
-//! PiroStats process entry point.
+//! PlasmaTop process entry point.
 
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
-    match pirostats::run(std::env::args_os()) {
+    match plasma_top::run(std::env::args_os()) {
         Ok(()) => ExitCode::SUCCESS,
-        Err(pirostats::Error::Cli(error)) => {
+        Err(plasma_top::Error::Cli(error)) => {
             eprintln!("{error}");
             ExitCode::from(2)
         }

@@ -1,6 +1,6 @@
-# config.toml — PiroStats behavior and data: thresholds, glyphs, item order,
+# config.toml — PlasmaTop behavior and data: thresholds, glyphs, item order,
 # hardware. Colors, spacing and fonts live in the style CSS, not here.
-# To customize: copy to ~/.config/pirostats/config.toml and edit (hot-reloaded).
+# To customize: copy to ~/.config/plasma-top/config.toml and edit (hot-reloaded).
 # Per-machine tweaks auto-detect from the DMI name — see machines.toml.
 
 
@@ -23,7 +23,7 @@ overlay          = false
 # shows only if listed AND its hardware is present, so lists can be generous. A
 # section with no visible item collapses entirely.
 #
-# Item names: `pirostats list-items`. Glyph in style/icons.toml, label in
+# Item names: `plasma-top list-items`. Glyph in style/icons.toml, label in
 # lang/<language>.toml, threshold in [thresholds]. Machine blocks override per
 # section via items / items_add / items_remove (+ order_add).
 
@@ -232,7 +232,7 @@ smart_interval_hdd = 21600    # spinning HDDs: 6h
 # Path written by an external checker (e.g. `checkupdates | wc -l > FILE` on a
 # systemd --user timer). The daemon only reads it. Empty = disabled.
 [system_updates]
-file = ""   # e.g. "/run/user/1000/pirostats_updates"
+file = ""   # e.g. "/run/user/1000/plasma-top_updates"
 
 
 # ── Server check ──────────────────────────────────────────────────────────────
@@ -240,4 +240,4 @@ file = ""   # e.g. "/run/user/1000/pirostats_updates"
 # Path written by an external ping checker ("1" = reachable, "0" = not). The
 # daemon only reads it. Empty = disabled.
 [server_check]
-file = ""   # e.g. "/run/user/1000/pirostats_server"
+file = ""   # e.g. "/run/user/1000/plasma-top_server"

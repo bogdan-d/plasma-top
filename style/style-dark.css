@@ -1,5 +1,5 @@
-/* pirostats — stylesheet for panel (vertical/horizontal) and tooltip.
-   Hot-reloaded by the daemon (edit + save, no restart) like pirostats.toml.
+/* plasma-top — stylesheet for panel (vertical/horizontal) and tooltip.
+   Hot-reloaded by the daemon (edit + save, no restart) like config.toml.
    Injected as a <style> block into HTML rendered by Qt's RichText engine
    (Text.RichText) — a smaller CSS subset than QTextDocument:
 

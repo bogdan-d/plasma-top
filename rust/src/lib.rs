@@ -16,7 +16,7 @@
     clippy::unimplemented
 )]
 
-//! Native PiroStats backend.
+//! Native PlasmaTop backend.
 
 pub mod adapters;
 pub mod cli;
@@ -78,7 +78,7 @@ mod tests {
 
     #[test]
     fn run_accepts_help_without_runtime() {
-        let args = [OsString::from("pirostats"), OsString::from("--help")];
+        let args = [OsString::from("plasma-top"), OsString::from("--help")];
 
         let result = run(args);
 

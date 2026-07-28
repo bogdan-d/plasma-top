@@ -4,9 +4,9 @@
 //! adapted for the Rust binary model. Python resolves paths relative to
 //! `__file__`; a compiled Rust binary has no `__file__`, so the shipped tree
 //! is found via `CARGO_MANIFEST_DIR/..` baked in at compile time, plus a
-//! `PIROSTATS_CODE_ROOT` env override for packaged installs where the binary
+//! `PLASMA_TOP_CODE_ROOT` env override for packaged installs where the binary
 //! and the read-only assets live under different `/usr/...` prefixes (e.g.
-//! `/usr/bin/pirostats` reading from `/usr/lib/pirostats`).
+//! `/usr/bin/plasma-top` reading from `/usr/lib/plasma-top`).
 //!
 //! Pure cores ([`compute_code_root`], [`compute_xdg_dir`]) take their inputs
 //! explicitly so tests exercise the choice without touching the host
@@ -17,27 +17,27 @@ use std::path::{Path, PathBuf};
 
 /// Compile-time path of the crate manifest dir (`rust/`) joined with `..`,
 /// yielding the repo root in dev. Overridden at runtime by
-/// `PIROSTATS_CODE_ROOT` for packaged installs.
+/// `PLASMA_TOP_CODE_ROOT` for packaged installs.
 const COMPILE_TIME_CODE_ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/..");
 
 /// Env var name that overrides the shipped-tree root for packaged installs.
 ///
 /// Packaging and the checkout launcher set this same name before config loads.
-pub const PIROSTATS_CODE_ROOT_ENV: &str = "PIROSTATS_CODE_ROOT";
+pub const PLASMA_TOP_CODE_ROOT_ENV: &str = "PLASMA_TOP_CODE_ROOT";
 
 /// Returns the path to the shipped asset tree.
 ///
 /// Dev: `<repo>` (the parent of `rust/`). Packaged: whatever the installer
-/// wrote into the `PIROSTATS_CODE_ROOT` env (e.g. `/usr/lib/pirostats`).
+/// wrote into the `PLASMA_TOP_CODE_ROOT` env (e.g. `/usr/lib/plasma-top`).
 #[must_use]
 pub fn code_root() -> PathBuf {
-    compute_code_root(env::var(PIROSTATS_CODE_ROOT_ENV).ok().as_deref())
+    compute_code_root(env::var(PLASMA_TOP_CODE_ROOT_ENV).ok().as_deref())
 }
 
 /// Pure core of [`code_root`] for tests.
 ///
 /// `custom` mirrors the value [`env::var`] would have returned for
-/// [`PIROSTATS_CODE_ROOT_ENV`]: `None` when unset, `Some("")` when set to
+/// [`PLASMA_TOP_CODE_ROOT_ENV`]: `None` when unset, `Some("")` when set to
 /// the empty string (treated as unset, matching Python's truthiness on
 /// `os.environ.get`).
 #[must_use]
@@ -69,10 +69,10 @@ pub fn compute_home_dir(home_env: Option<&str>) -> PathBuf {
     }
 }
 
-/// Returns the user's writable PiroStats config directory.
+/// Returns the user's writable PlasmaTop config directory.
 ///
-/// `$XDG_CONFIG_HOME/pirostats` when the env is set and non-empty;
-/// otherwise `~/.config/pirostats`. A packaged install ships read-only
+/// `$XDG_CONFIG_HOME/plasma-top` when the env is set and non-empty;
+/// otherwise `~/.config/plasma-top`. A packaged install ships read-only
 /// defaults under [`code_root`]; the user drops overrides here (the conky
 /// model — see the user-facing `config.toml` header).
 #[must_use]
@@ -90,7 +90,7 @@ pub fn compute_xdg_dir(xdg_config_home: Option<&str>, home_env: Option<&str>) ->
         Some(value) => PathBuf::from(value),
         None => compute_home_dir(home_env).join(".config"),
     };
-    base.join("pirostats")
+    base.join("plasma-top")
 }
 
 /// Returns the shipped default `config.toml`.
@@ -131,9 +131,9 @@ mod tests {
 
     #[test]
     fn compute_code_root_uses_override_when_set() {
-        let resolved = compute_code_root(Some("/usr/lib/pirostats"));
+        let resolved = compute_code_root(Some("/usr/lib/plasma-top"));
 
-        assert_eq!(resolved, PathBuf::from("/usr/lib/pirostats"));
+        assert_eq!(resolved, PathBuf::from("/usr/lib/plasma-top"));
     }
 
     #[test]
@@ -173,21 +173,21 @@ mod tests {
     fn compute_xdg_dir_honors_xdg_config_home() {
         let resolved = compute_xdg_dir(Some("/custom/xdg"), Some("/home/test"));
 
-        assert_eq!(resolved, PathBuf::from("/custom/xdg/pirostats"));
+        assert_eq!(resolved, PathBuf::from("/custom/xdg/plasma-top"));
     }
 
     #[test]
     fn compute_xdg_dir_falls_back_to_home_config() {
         let resolved = compute_xdg_dir(None, Some("/home/test"));
 
-        assert_eq!(resolved, PathBuf::from("/home/test/.config/pirostats"));
+        assert_eq!(resolved, PathBuf::from("/home/test/.config/plasma-top"));
     }
 
     #[test]
     fn compute_xdg_dir_treats_empty_xdg_as_unset() {
         let resolved = compute_xdg_dir(Some(""), Some("/home/test"));
 
-        assert_eq!(resolved, PathBuf::from("/home/test/.config/pirostats"));
+        assert_eq!(resolved, PathBuf::from("/home/test/.config/plasma-top"));
     }
 
     #[test]

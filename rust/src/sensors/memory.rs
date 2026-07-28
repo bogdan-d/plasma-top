@@ -373,7 +373,7 @@ mod tests {
                 .unwrap_or(Duration::ZERO)
                 .as_nanos();
             let root = std::env::temp_dir()
-                .join(format!("pirostats-memory-{}-{unique}", std::process::id()));
+                .join(format!("plasma-top-memory-{}-{unique}", std::process::id()));
             if let Err(error) = fs::create_dir_all(&root) {
                 panic!("failed to create temp root {}: {error}", root.display());
             }

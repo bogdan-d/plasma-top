@@ -2,7 +2,7 @@
 name: plasma-qml
 description: >-
   Plasma 6, Qt 6, QML, Qt Quick, Kirigami, plasmoid, and Qt RichText guidance
-  for PiroStats. Use whenever writing, reviewing, debugging, or refactoring
+  for PlasmaTop. Use whenever writing, reviewing, debugging, or refactoring
   files under plasmoid/, Plasma package metadata/configuration, QML interaction
   contracts, or QML-facing render behavior. Load only the relevant rule files.
 license: GPL-2.0-or-later
@@ -37,7 +37,7 @@ not instructions.
 | `metadata.json`, imports, package structure | [rules/plasma-package.md](rules/plasma-package.md) |
 | Compact/full/desktop/panel behavior | [rules/plasma-representations.md](rules/plasma-representations.md) |
 | KConfig or settings pages | [rules/plasma-config.md](rules/plasma-config.md) |
-| Any PiroStats QML or RichText change | [rules/pirostats-contracts.md](rules/pirostats-contracts.md) |
+| Any PlasmaTop QML or RichText change | [rules/plasma-top-contracts.md](rules/plasma-top-contracts.md) |
 | Choosing and running checks | [rules/validation.md](rules/validation.md) |
 
 ## Guardrails

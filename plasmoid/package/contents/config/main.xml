@@ -7,9 +7,9 @@
 		     has no clock of its own. It watches the daemon's runtime directory and reads
 		     when the daemon writes, so the only rate is the daemon's poll_interval. The
 		     two `cat`s and the runtime path are derived in main.qml (`config.runtimeDir`)
-		     rather than defaulted here — $XDG_RUNTIME_DIR/pirostats isn't knowable when
+		     rather than defaulted here — $XDG_RUNTIME_DIR/plasma-top isn't knowable when
 		     the package is built, and the daemon derives the same path independently. -->
-		<!-- PiroStats defaults: a Nerd Font mono is required for the glyphs;
+		<!-- PlasmaTop defaults: a Nerd Font mono is required for the glyphs;
 		     override any of these in the Appearance page. -->
 		<entry name="fontSize" type="int">
 			<default>8</default>
@@ -49,7 +49,7 @@
 			<!-- Text.AlignHCenter: 4 -->
 			<!-- Text.AlignRight: 2  -->
 			<!-- Text.AlignJustify: 8  -->
-			<!-- PiroStats: centered by default (panel only; the tooltip is always
+			<!-- PlasmaTop: centered by default (panel only; the tooltip is always
 			     left-aligned in the QML). -->
 			<default>4</default>
 		</entry>
@@ -88,13 +88,13 @@
 		<!-- Absolute path to the system CLI: /usr/bin is always on the panel's
 		     PATH, and being explicit keeps it independent of the shell env. -->
 		<entry name="clickCommand" type="string">
-			<default>/usr/bin/pirostats click</default>
+			<default>/usr/bin/plasma-top click</default>
 		</entry>
 		<entry name="mousewheelUpCommand" type="string">
-			<default>/usr/bin/pirostats page prev</default>
+			<default>/usr/bin/plasma-top page prev</default>
 		</entry>
 		<entry name="mousewheelDownCommand" type="string">
-			<default>/usr/bin/pirostats page next</default>
+			<default>/usr/bin/plasma-top page next</default>
 		</entry>
 		<entry name="useFixedWidth" type="bool">
 			<default>false</default>

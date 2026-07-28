@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run the Rust daemon and Plasma applet against disposable per-run XDG roots.
-# Nothing is installed under /usr or written to the production PiroStats runtime.
+# Nothing is installed under /usr or written to the production PlasmaTop runtime.
 set -euo pipefail
 
 usage() {
@@ -10,7 +10,7 @@ Usage: tools/qml_verify.sh [--smoke] [--no-build]
 Launch an isolated Plasma applet backed by the Rust daemon.
 
   --smoke     Run a short non-interactive load check, then exit.
-  --no-build  Reuse rust/target/release/pirostats.
+  --no-build  Reuse rust/target/release/plasma-top.
 
 Without --smoke, close the plasmawindowed window to finish an Application-form
 inspection. `plasmawindowed` cannot emulate panel form factors; use
@@ -31,9 +31,9 @@ for arg in "$@"; do
 done
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-binary="$repo_dir/rust/target/release/pirostats"
+binary="$repo_dir/rust/target/release/plasma-top"
 original_runtime="${XDG_RUNTIME_DIR:-}"
-test_root="$(mktemp -d /tmp/pirostats-qml-verify.XXXXXX)"
+test_root="$(mktemp -d /tmp/plasma-top-qml-verify.XXXXXX)"
 daemon_pid=""
 qml_pid=""
 
@@ -70,7 +70,7 @@ fi
 
 mkdir -p "$test_root"/{runtime,config,cache,data,home,package,bin}
 chmod 700 "$test_root/runtime"
-ln -s "$binary" "$test_root/bin/pirostats"
+ln -s "$binary" "$test_root/bin/plasma-top"
 
 # A Wayland display name is relative to XDG_RUNTIME_DIR. Expose only that socket
 # inside the disposable root; X11 sessions need no equivalent setup.
@@ -84,19 +84,19 @@ export XDG_CONFIG_HOME="$test_root/config"
 export XDG_CACHE_HOME="$test_root/cache"
 export XDG_DATA_HOME="$test_root/data"
 export HOME="$test_root/home"
-export PIROSTATS_CODE_ROOT="$repo_dir"
+export PLASMA_TOP_CODE_ROOT="$repo_dir"
 
 cp -a "$repo_dir/plasmoid/package/." "$test_root/package/"
 
-# Installed defaults intentionally use /usr/bin/pirostats. Change only the
+# Installed defaults intentionally use /usr/bin/plasma-top. Change only the
 # disposable package copy so wheel/click commands target this test binary.
-python3 - "$test_root/package/contents/config/main.xml" "$test_root/bin/pirostats" <<'PY'
+python3 - "$test_root/package/contents/config/main.xml" "$test_root/bin/plasma-top" <<'PY'
 from pathlib import Path
 import sys
 
 path = Path(sys.argv[1])
 path.write_text(
-    path.read_text(encoding="utf-8").replace("/usr/bin/pirostats", sys.argv[2]),
+    path.read_text(encoding="utf-8").replace("/usr/bin/plasma-top", sys.argv[2]),
     encoding="utf-8",
 )
 PY
@@ -118,7 +118,7 @@ wait_for_file() {
     return 1
 }
 
-runtime_root="$XDG_RUNTIME_DIR/pirostats"
+runtime_root="$XDG_RUNTIME_DIR/plasma-top"
 wait_for_file "$runtime_root/panel.html"
 wait_for_file "$runtime_root/tooltip.html"
 
@@ -135,7 +135,7 @@ if [[ "$actual_entries" != "$expected_entries" ]]; then
     exit 1
 fi
 
-plasmawindowed com.github.lucazade.pirostats >"$test_root/qml.log" 2>&1 &
+plasmawindowed com.github.bogdan-d.plasma-top >"$test_root/qml.log" 2>&1 &
 qml_pid=$!
 
 if [[ "$smoke" == true ]]; then
