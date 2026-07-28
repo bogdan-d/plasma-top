@@ -13,7 +13,7 @@ import sys
 _REPO = Path(__file__).resolve().parent.parent
 _REPORTER = _REPO / "tools" / "inventory_ast_reporter.py"
 _INVENTORY = _REPO / "plans" / "INVENTORY.md"
-_SCAN_TARGETS = ("src", "tests", "tools", "pirostats")
+_SCAN_TARGETS = ("src", "tests", "tools")
 _CALL_EDGE_HEADING = "## Call-edge accounting gate"
 _CALL_EDGE_ROW = re.compile(
     r"^\| `(?P<path>[^`]+)` \| (?P<calls>\d+) \| (?P<unique>\d+) \|$"
@@ -100,7 +100,7 @@ def test_inventory_ast_reporter_workspace_smoke():
         "src/mono_render.py",
         "tests/test_config.py",
         "tools/qt_shot.py",
-        "pirostats",
+        "tools/python_oracle.py",
     ):
         assert required_path in files
 
@@ -119,7 +119,12 @@ def test_inventory_ast_reporter_workspace_smoke():
     assert "main" in _names(files["src/daemon.py"])
     assert "render_blocks_monospace" in _names(files["src/mono_render.py"])
 
-    for busy_path in ("src/config.py", "src/sensors.py", "src/daemon.py", "pirostats"):
+    for busy_path in (
+        "src/config.py",
+        "src/sensors.py",
+        "src/daemon.py",
+        "tools/python_oracle.py",
+    ):
         assert files[busy_path]["total_call_sites"] > 0
 
     assert files["src/sensors.py"]["unique_syntactic_callee_count"] > 10

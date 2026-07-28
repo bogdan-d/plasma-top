@@ -27,7 +27,7 @@ from typing import Any, Iterable
 
 
 SCHEMA_VERSION = 1
-DEFAULT_SCAN_PATHS = ("src", "tests", "tools", "pirostats")
+DEFAULT_SCAN_PATHS = ("src", "tests", "tools")
 LIMITATIONS = [
     "Syntactic AST only: call targets come from ast.Call.func text, not runtime resolution.",
     "Dynamic dispatch via getattr()/setattr(), monkeypatching, decorators that replace callables, and import alias indirection are not fully resolved.",

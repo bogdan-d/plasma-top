@@ -246,7 +246,7 @@ busy-loop/runtime-root churn. Record absolute numbers and methodology.
 ```bash
 python3 -m pytest tests/ -v
 ruff check .
-vulture src/ tests/ pirostats tests/vulture_whitelist.py --min-confidence 60
+vulture src/ tests/ tools/python_oracle.py tests/vulture_whitelist.py --min-confidence 60
 
 cargo fmt --manifest-path rust/Cargo.toml -- --check
 cargo check --manifest-path rust/Cargo.toml --all-targets

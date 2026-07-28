@@ -1,24 +1,6 @@
-#!/usr/bin/env python3
-"""Entry point for pirostats. Installed as /usr/bin/pirostats (a symlink into
-/usr/lib/pirostats); also runnable in-place from the repo root as ./pirostats."""
-import sys
-from pathlib import Path
-
-# Allow running from repo root (e.g. ./pirostats daemon) without install
-_src = Path(__file__).resolve().parent / "src"
-if _src.is_dir() and str(_src) not in sys.path:
-    sys.path.insert(0, str(_src))
-
-# Fast path for the wheel's paging command: it fires once per mouse-wheel notch,
-# so it must start fast and race-free. Handle it with the stdlib-only pagestate
-# module, before importing the heavy daemon module (sensors/psutil/formatter/…) —
-# a fast scroll spawns one process per notch, and paying that import each time
-# piled up and lagged the shell.
-if sys.argv[1:2] == ["page"]:
-    from pagestate import step_page
-    raise SystemExit(step_page(sys.argv[2] if len(sys.argv) > 2 else ""))
-
-from daemon import main
-
-if __name__ == "__main__":
-    main()
+#!/bin/sh
+# Checkout launcher. Packaged installs use packaging/pirostats-launcher instead.
+REPO_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+export PIROSTATS_CODE_ROOT="$REPO_DIR"
+exec cargo run --quiet --locked --manifest-path "$REPO_DIR/rust/Cargo.toml" \
+	--features nvml -- "$@"

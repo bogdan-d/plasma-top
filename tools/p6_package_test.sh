@@ -42,7 +42,7 @@ stage_python_rollback() {
 	mkdir -p "$ROOT/usr/lib/pirostats" "$ROOT/usr/bin"
 	cp -r "$REPO_DIR/src" "$REPO_DIR/style" "$REPO_DIR/lang" "$REPO_DIR/config" \
 		"$ROOT/usr/lib/pirostats/"
-	install -m755 "$REPO_DIR/pirostats" "$ROOT/usr/lib/pirostats/pirostats"
+	install -m755 "$REPO_DIR/tools/python_oracle.py" "$ROOT/usr/lib/pirostats/pirostats"
 	ln -sfn /usr/lib/pirostats/pirostats "$ROOT/usr/bin/pirostats"
 }
 

@@ -14,19 +14,19 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [ ] | `CLAUDE.md` | update after cutover | `CUTOVER` | link/content audit |
 | [x] | `LICENSE` | preserve | `PACKAGING` | staged manual/AUR manifests include GPL license |
 | [x] | `NOTICE` | preserve | `PACKAGING` | staged manual/AUR manifests include applet attribution |
-| [ ] | `README.md` | update after cutover | `CUTOVER` | link/content audit |
+| [x] | `README.md` | update for native runtime | `CUTOVER` | P8.1 runtime/dependency/architecture audit |
 | [ ] | `config/config.toml` | preserve | `CONFIG/QML-VERIFY` | byte/key/selector parity |
 | [ ] | `config/machines.toml` | preserve | `CONFIG/QML-VERIFY` | byte/key/selector parity |
 | [ ] | `docs/DESIGN.md` | update after cutover | `CUTOVER` | link/content audit |
 | [ ] | `docs/ITEMS.md` | update after cutover | `CUTOVER` | link/content audit |
 | [ ] | `docs/LAYOUT.md` | update after cutover | `CUTOVER` | link/content audit |
 | [ ] | `docs/PERFORMANCE.md` | update after cutover | `CUTOVER` | link/content audit |
-| [x] | `install.sh` | modify for native binary | `PACKAGING` | locked native build + disposable DESTDIR install/upgrade/rollback/uninstall scenario |
+| [x] | `install.sh` | native system + user-local install | `PACKAGING/CUTOVER` | locked build; disposable system and user install/upgrade/failure/path tests |
 | [ ] | `lang/en.toml` | preserve | `CONFIG/QML-VERIFY` | byte/key/selector parity |
 | [x] | `packaging/aur/PKGBUILD` | modify for native binary | `PACKAGING` | locked x86_64 Rust build + staged package-function manifest audit |
 | [x] | `packaging/aur/pirostats.install` | modify for native binary | `PACKAGING` | native dependency/help text + shell syntax |
 | [x] | `packaging/pirostats-launcher` | add packaged asset-root launcher | `PACKAGING` | staged executable sets `/usr/lib/pirostats` and execs sole Rust binary |
-| [ ] | `pirostats` | replace | `DAEMON-CLI` | CLI process matrix |
+| [x] | `pirostats` | replace with Rust checkout launcher | `CUTOVER` | P8.1 Rust CLI smoke + explicit Python oracle separation |
 | [x] | `plasmoid/.gitignore` | update only for generated Rust artifacts | `SCAFFOLD/QML-VERIFY` | Gate 6 ignore audit; no generated applet paths needed |
 | [ ] | `plasmoid/LICENSE` | preserve/review | `INTEGRATION` | file-specific inspection |
 | [x] | `plasmoid/package/contents/config/config.qml` | preserve; edit only if approved | `QML-VERIFY` | T6 package/config-page pass; unchanged |
@@ -111,6 +111,7 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [ ] | `screenshots/panel-vertical.png` | preserve reference | `QML-VERIFY` | visual comparison; regenerate only approved |
 | [ ] | `screenshots/process.png` | preserve reference | `QML-VERIFY` | visual comparison; regenerate only approved |
 | [x] | `service/pirostats.service` | preserve for native binary | `PACKAGING` | staged manifest retains `ExecStart=/usr/bin/pirostats daemon` |
+| [x] | `service/pirostats-user.service` | add user-local path variant | `CUTOVER` | normalized unit parity + `%h/.local/bin/pirostats` assertion |
 | [ ] | `src/__init__.py` | port then remove | `CUTOVER` | symbol + differential parity |
 | [x] | `src/bolt_battery.py` | port then remove | `HID` | all seven symbols mapped to `rust/src/sensors/hid.rs`; fixed Rust packet assertions match Python-oracle packet bytes; discovery/error/name/battery branches covered by 16 focused tests |
 | [x] | `src/chart.py` | port then remove | `CHART` | symbol + differential parity via Rust chart pixel corpus |
@@ -155,13 +156,15 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [ ] | `tools/demo_shot.py` | preserve/update invocation | `BASE/QML-VERIFY` | tool smoke + target parity |
 | [ ] | `tools/inventory_ast_reporter.py` | preserve/update invocation | `BASE/INTEGRATION` | tool smoke + exact inventory gate |
 | [ ] | `tools/manual_tooltip_preview.py` | preserve/update invocation | `BASE/QML-VERIFY` | tool smoke + target parity |
+| [x] | `tools/python_oracle.py` | retain Python CLI as explicit stabilization oracle | `CUTOVER` | P8.1 oracle CLI smoke; never installed |
 | [x] | `tools/p6_live_matrix.sh` | add isolated horizontal/vertical/planar applet gate | `QML-VERIFY` | geometry/orientation/watcher/lazy/action traces + human interaction evidence |
 | [x] | `tools/p6_png_diff.py` | add strict fixed-image comparator | `QML-VERIFY` | dimension/mean/max/fraction synthetic threshold check |
 | [x] | `tools/p6_qt_matrix.sh` | add fixed-host all-page/theme Qt matrix | `QML-VERIFY` | 24 valid screenshots + table-free/golden pre-gates + environment manifest |
 | [x] | `tools/p6_package_test.sh` | add disposable native package gate | `PACKAGING` | repo/`/tmp`-only install, upgrade, Python rollback, uninstall, user-file, AUR manifest checks |
 | [x] | `tools/qml_verify.sh` | add isolated Rust-daemon/applet launcher | `QML-VERIFY` | bash syntax + correct-id Application smoke; disposable XDG/runtime roots; no system paths |
 | [x] | `tools/qt_shot.py` | preserve/update invocation | `BASE/QML-VERIFY` | all-page dark/light/overlay matrix + plasmoid ANSI path |
-| [x] | `uninstall.sh` | modify for native binary | `PACKAGING` | DESTDIR uninstall removes package files while preserving user config/cache |
+| [x] | `tools/user_install_test.sh` | add disposable user-local lifecycle gate | `CUTOVER` | no sudo/global calls; spaced paths; install/upgrade/repeat uninstall/config preservation |
+| [x] | `uninstall.sh` | native system + user-local uninstall | `PACKAGING/CUTOVER` | exact owned paths removed; config preserved; repeated user uninstall harmless |
 
 ## Production Python callable inventory
 
@@ -592,9 +595,9 @@ Every top-level function/class and class method under `src/`, plus the root entr
 
 - [ ] No declared callable: verify module constants/import/entry behavior and final disposition.
 
-### `pirostats`
+### `tools/python_oracle.py`
 
-- [ ] No declared callable: verify module constants/import/entry behavior and final disposition.
+- [x] No declared callable: retained entry behavior is explicit oracle-only and excluded from production packaging.
 
 ## Existing test/tool callable inventory
 
@@ -1530,7 +1533,7 @@ legend as the rest of this file (U/D/F/I/L/P + E0–E5).
 
 ## Call-edge accounting gate
 
-Phase 0 must generate a machine-readable AST call-edge report for every Python code file. `tests/test_inventory.py` runs `tools/inventory_ast_reporter.py` across `src`, `tests`, `tools`, and `pirostats`, and this table must match the reporter's per-file `Call sites` and `Unique syntactic callees` counts. Dynamic calls/closures are assigned to enclosing symbol and tested by ordered dependency traces. At planning time, the checked static call totals are:
+Phase 0 must generate a machine-readable AST call-edge report for every Python code file. `tests/test_inventory.py` runs `tools/inventory_ast_reporter.py` across `src`, `tests`, and `tools`, and this table must match the reporter's per-file `Call sites` and `Unique syntactic callees` counts. Dynamic calls/closures are assigned to enclosing symbol and tested by ordered dependency traces. The checked static call totals are:
 
 | File | Call sites | Unique syntactic callees |
 |---|---:|---:|
@@ -1571,8 +1574,8 @@ Phase 0 must generate a machine-readable AST call-edge report for every Python c
 | `tools/demo_shot.py` | 38 | 29 |
 | `tools/inventory_ast_reporter.py` | 132 | 70 |
 | `tools/manual_tooltip_preview.py` | 51 | 16 |
+| `tools/python_oracle.py` | 9 | 8 |
 | `tools/p6_png_diff.py` | 53 | 34 |
 | `tools/qt_shot.py` | 88 | 59 |
-| `pirostats` | 10 | 9 |
 
 Closure requires each current call site/callee family to be marked one of: ported and directly asserted; covered by enclosing differential call trace; preserved QML/tool behavior; intentionally removed with proof of no observable behavior. No unclassified dynamic call remains.

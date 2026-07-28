@@ -1,7 +1,7 @@
 # PiroStats
 
 System stats in your **KDE Plasma** panel, plus a rich, paginated tooltip — driven
-by a lightweight Python daemon.
+by a lightweight Rust daemon.
 
 <table>
   <tr>
@@ -47,37 +47,52 @@ there are **zero process forks in the hot path**.
 ## Requirements
 
 - **KDE Plasma 6**
-- **Python 3.11+**
-- **Base runtime dependencies**
-  - `psutil` — required today; `src/sensors.py` imports it unconditionally.
-  - `PyGObject` / `python-gobject` — packaged base dependency for full notifications + UPower/UDisks behavior; without it those integrations degrade gracefully.
+- **Rust 1.85+ and Cargo** to build from source; neither is needed after install.
 - A **Nerd Font** for the glyphs (the applet defaults to *NotoSansM Nerd Font Mono*).
   Pick it in the widget's *Appearance* page.
 - **Optional feature dependencies**
-  - `python-nvidia-ml-py` (preferred) or `nvidia-utils` / `nvidia-smi` for NVIDIA GPU metrics.
+  - `nvidia-utils` for NVIDIA metrics through NVML or `nvidia-smi`.
   - `iproute2` for the connections page (`ss`).
+  - `iw` for Wi-Fi SSID and signal.
   - `fastfetch` for the system info page.
-  - `hidapi` for Logitech Bolt/Unifying peripheral battery reads.
 
 ## Install
+
+User-local install is recommended on immutable/Atomic systems and anywhere you
+do not want root-owned files:
 
 ```bash
 git clone https://github.com/lucazade/pirostats.git
 cd pirostats
+./install.sh --user
+```
+
+This installs below `$HOME/.local` and `$XDG_DATA_HOME` (default
+`$HOME/.local/share`), activates the user service, and never uses sudo or writes
+under `/usr`. Add `$HOME/.local/bin` to your interactive shell `PATH` if needed;
+the service and applet use explicit paths. To build elsewhere, pass an absolute
+host-compatible binary as `PIROSTATS_BINARY=/path/to/pirostats`.
+
+Traditional system-wide install remains available:
+
+```bash
 ./install.sh
 ```
 
-install.sh installs system-wide: the code tree under /usr/lib/pirostats, the
-pirostats CLI in /usr/bin, the applet and icon, and the systemd --user service.
-The file steps use sudo; enabling the service runs as you. Your settings live in
+Both modes build the locked Rust binary, install matching assets, applet, icon,
+and user service, then activate it. System mode uses `/usr/lib/pirostats` and
+`/usr/bin/pirostats` plus sudo for file installation. Your settings live in
 ~/.config/pirostats and are never touched — see [Configuration](#configuration).
 For checkout-based development, use [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
 instead of the system-wide installer.
 
 Then add the widget: **right-click a panel → Add Widgets → search "PiroStats"**.
 
-Re-run install.sh to upgrade (it restarts plasmashell to reload the applet).
-Remove everything with uninstall.sh.
+Re-run the same install command to upgrade. Remove a user install with
+`./uninstall.sh --user`, or a system install with `./uninstall.sh`. Configuration
+survives either command. If an existing widget keeps old system action paths
+after migration, remove and re-add that widget; the installer never rewrites
+Plasma's configuration database.
 
 ## Configuration
 
@@ -118,10 +133,10 @@ systemctl --user status pirostats   # the live daemon
 
 ## How it works
 
-The daemon's pipeline (in src/: sensors → formatter → render_model → mono_render)
-renders the stats as monospace-aligned HTML; the applet in plasmoid/ displays it
-and publishes the live panel geometry back to the daemon, which auto-fits the bars
-and sparks to it. See [docs/](docs/) for the design (DESIGN.md), layout
+The daemon's pipeline (in `rust/src/`: sensors, formatter, render model, mono
+renderer) renders stats as monospace-aligned HTML; the applet in `plasmoid/`
+displays it and publishes live panel geometry back to the daemon, which auto-fits
+bars and sparks to it. See [docs/](docs/) for the design (DESIGN.md), layout
 (LAYOUT.md), item catalogue (ITEMS.md) and performance (PERFORMANCE.md) notes.
 
 ## License & credits

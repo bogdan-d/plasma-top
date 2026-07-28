@@ -1,6 +1,5 @@
-# Ruff config. The repo ships no build/lint step and is not pip-installable
-# (`./pirostats` just prepends src/ to sys.path), so this is a standalone
-# ruff.toml rather than a pyproject.toml that would imply a package.
+# Ruff config for the retained Python oracle. It is not pip-installable, so this
+# stays standalone rather than implying a Python package with pyproject.toml.
 #
 # The point of running ruff here is the F rules (Pyflakes: dead imports, unused
 # variables, undefined/redefined names) — real bugs vulture's dead-code gate
@@ -33,4 +32,4 @@ ignore = [
 [lint.per-file-ignores]
 # The `page` fast-path (fired once per mouse-wheel notch) runs and exits BEFORE
 # importing daemon, so its heavy import sits below that guard by design.
-"pirostats" = ["E402"]
+"tools/python_oracle.py" = ["E402"]

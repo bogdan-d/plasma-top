@@ -2,8 +2,8 @@
 
 ## Status
 
-Proposed. This plan adds a supported installation path for immutable/Atomic
-desktops such as Bazzite without changing native distro-package installation.
+Implemented on 2026-07-28. Disposable install/upgrade/uninstall and native
+packaging gates pass. Live Plasma activation remains part of P8.2 stabilization.
 
 ## Goal
 

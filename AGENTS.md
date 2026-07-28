@@ -17,7 +17,7 @@ UPDATE_GOLDEN=1 python3 -m pytest tests/test_golden_render.py
 # (goldens live in tests/golden/{panel_h,panel_v,tooltip}.html)
 
 # Dead code: the same sweep test_deadcode.py gates, run by hand for the report
-vulture src/ tests/ pirostats tests/vulture_whitelist.py --min-confidence 60
+vulture src/ tests/ tools/python_oracle.py tests/vulture_whitelist.py --min-confidence 60
 
 # Lint: the same check test_lint.py gates (config in ruff.toml), run by hand
 ruff check .

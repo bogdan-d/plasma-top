@@ -5,7 +5,7 @@ on:
   pull_request:
 
 jobs:
-  python-baseline:
+  python-oracle:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -19,13 +19,10 @@ jobs:
       - name: Install dev requirements
         run: python3 -m pip install -r requirements-dev.txt
 
-      - name: Run baseline pytest suite
+      - name: Run Python oracle suite
         run: python3 -m pytest tests/ -v
 
-  rust-scaffold:
-    # Phase 1 (P1.5): Rust joins aggregate validation while Python stays the
-    # primary oracle. The crate is currently std-only and remains a scaffold,
-    # so this job mirrors ARCHITECTURE.md's baseline gate verbatim.
+  rust:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -64,3 +61,6 @@ jobs:
 
       - name: cargo doc
         run: cargo doc --manifest-path rust/Cargo.toml --no-deps
+
+      - name: User-local install lifecycle
+        run: tools/user_install_test.sh

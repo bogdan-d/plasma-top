@@ -369,7 +369,7 @@ capture_deep_dive_page_renders() {
         capture_optional_render_html "render tooltip page ${page_name} html" \
             "$live_dir/render-page-${page_name}.log" \
             "$tmp_tooltip_html" "$live_dir/page-${page_name}.html" \
-            "$python_bin" ./pirostats render --page "$page_name" --format html
+            "$python_bin" tools/python_oracle.py render --page "$page_name" --format html
     done
 }
 
@@ -408,7 +408,7 @@ fi
 
 if [[ -n "$vulture_bin" ]]; then
     record_command 'vulture dead-code sweep' "$baseline_dir/vulture.log" \
-        "$vulture_bin" src/ tests/ pirostats tests/vulture_whitelist.py --min-confidence 60
+        "$vulture_bin" src/ tests/ tools/python_oracle.py tests/vulture_whitelist.py --min-confidence 60
 else
     write_skip "$baseline_dir/vulture.log" 'Skipped: vulture not found in .venv/bin or PATH.'
 fi
@@ -417,24 +417,24 @@ record_command 'bash -n shell syntax sweep' "$baseline_dir/bash-n.log" \
     bash -n install.sh uninstall.sh scripts/update-skills.sh scripts/capture-baseline.sh
 
 record_command 'pirostats render smoke' "$baseline_dir/cli-render.txt" \
-    "$python_bin" ./pirostats render
+    "$python_bin" tools/python_oracle.py render
 record_command 'pirostats probe smoke' "$baseline_dir/cli-probe.txt" \
-    "$python_bin" ./pirostats probe --config config/config.toml
+    "$python_bin" tools/python_oracle.py probe --config config/config.toml
 record_command 'pirostats list-items smoke' "$baseline_dir/cli-list-items.txt" \
-    "$python_bin" ./pirostats list-items
+    "$python_bin" tools/python_oracle.py list-items
 
 record_command 'pirostats profiling' "$live_dir/profiling.txt" \
-    "$python_bin" ./pirostats profiling --config config/config.toml
+    "$python_bin" tools/python_oracle.py profiling --config config/config.toml
 
 capture_render_html 'render tooltip html' "$live_dir/render-tooltip.log" \
     "$tmp_tooltip_html" "$live_dir/tooltip.html" \
-    "$python_bin" ./pirostats render --component tooltip --format html
+    "$python_bin" tools/python_oracle.py render --component tooltip --format html
 capture_render_html 'render panel horizontal html' "$live_dir/render-panel-horizontal.log" \
     "$tmp_panel_html" "$live_dir/panel-horizontal.html" \
-    "$python_bin" ./pirostats render --component panel --layout horizontal --format html
+    "$python_bin" tools/python_oracle.py render --component panel --layout horizontal --format html
 capture_render_html 'render panel vertical html' "$live_dir/render-panel-vertical.log" \
     "$tmp_panel_html" "$live_dir/panel-vertical.html" \
-    "$python_bin" ./pirostats render --component panel --layout vertical --format html
+    "$python_bin" tools/python_oracle.py render --component panel --layout vertical --format html
 capture_deep_dive_page_renders
 
 if "$python_bin" -c 'import importlib.util, sys; sys.exit(0 if importlib.util.find_spec("PyQt6") else 1)' >/dev/null 2>&1; then

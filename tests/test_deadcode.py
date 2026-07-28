@@ -23,7 +23,8 @@ MIN_CONFIDENCE = 60
 
 def test_no_dead_code():
     v = vulture.Vulture()
-    v.scavenge([str(_REPO / "src"), str(_REPO / "tests"), str(_REPO / "pirostats"),
+    v.scavenge([str(_REPO / "src"), str(_REPO / "tests"),
+                str(_REPO / "tools" / "python_oracle.py"),
                 str(_WHITELIST)])
     dead = [f"{pathlib.Path(i.filename).relative_to(_REPO)}:{i.first_lineno}: "
             f"unused {i.typ} {i.name!r}"
