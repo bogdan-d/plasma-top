@@ -579,6 +579,9 @@ mod tests {
     #[test]
     fn every_notification_type_emits_exact_ordered_payloads() {
         let mut cfg = Config::default();
+        cfg.notifications.cpu_temp = true;
+        cfg.notifications.gpu_nvidia_temp = true;
+        cfg.notifications.load_avg = true;
         cfg.notifications.server_check = true;
         cfg.notify_thresholds.temp_sustain_seconds = 0;
         cfg.notify_thresholds.load_avg_minutes = 0;
