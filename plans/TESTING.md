@@ -1,5 +1,9 @@
 # Parity and test plan
 
+> Historical migration policy. P8.5 retired Python-runtime gates and promoted
+> useful fixed evidence under `rust/tests/`. Current commands live in
+> `docs/DEVELOPMENT.md`.
+
 ## Testing interpretation
 
 “Test every function call, every file” means complete accountable coverage, not
@@ -244,17 +248,20 @@ busy-loop/runtime-root churn. Record absolute numbers and methodology.
 ## Aggregate commands at final cutover
 
 ```bash
-python3 -m pytest tests/ -v
-ruff check .
-vulture src/ tests/ tools/python_oracle.py tests/vulture_whitelist.py --min-confidence 60
-
+cargo fetch --locked --manifest-path rust/Cargo.toml
+git diff --exit-code -- rust/Cargo.lock
 cargo fmt --manifest-path rust/Cargo.toml -- --check
-cargo check --manifest-path rust/Cargo.toml --all-targets
+cargo check --manifest-path rust/Cargo.toml --all-targets --all-features
 cargo clippy --manifest-path rust/Cargo.toml --all-targets --all-features -- -D warnings
-cargo test --manifest-path rust/Cargo.toml --all-targets
+cargo test --manifest-path rust/Cargo.toml --all-targets --all-features
 cargo doc --manifest-path rust/Cargo.toml --no-deps
-
-bash -n install.sh uninstall.sh packaging/aur/PKGBUILD packaging/aur/pirostats.install
+tools/repository_gate.sh
+bash -n install.sh uninstall.sh packaging/aur/PKGBUILD \
+  packaging/aur/pirostats.install pirostats tools/*.sh scripts/*.sh
+tools/user_install_test.sh
+tools/p6_package_test.sh
+tools/p6_qt_matrix.sh --no-build
 ```
 
-Python commands disappear only in Phase 8 after inventory closure.
+Python runtime commands were retired after inventory closure. Python remains
+only for source-independent Qt developer tools.

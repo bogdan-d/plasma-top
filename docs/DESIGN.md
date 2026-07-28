@@ -28,7 +28,7 @@ rust/src/
 plasmoid/                    unchanged Plasma display/interaction boundary
 config/, style/, lang/       shipped data and presentation assets
 service/, packaging/         native Rust runtime installation
-tests/                       retained migration evidence and Rust integration tests
+rust/tests/                  integration tests, fixtures, and fixed snapshots
 ```
 
 `lib.rs` is the process composition root. `daemon.rs` owns the runtime loop;
@@ -175,6 +175,6 @@ NVML support is feature-gated and falls back non-fatally to `nvidia-smi`.
 
 Rust tests cover domain rules, config, rendering, sensors, adapter traces,
 runtime concurrency, daemon lifecycle, CLI processes, packaging, and applet
-integration. Fixed compatibility corpora remain migration evidence. Full commands live in
-[DEVELOPMENT.md](DEVELOPMENT.md); migration state lives in
-[`plans/STATUS.md`](../plans/STATUS.md).
+integration. Fixed compatibility corpora live with those tests. Full commands
+live in [DEVELOPMENT.md](DEVELOPMENT.md). Historical rewrite evidence lives in
+[`plans/`](../plans/README.md).

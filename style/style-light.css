@@ -1,13 +1,13 @@
 /* pirostats — stylesheet for LIGHT Plasma color schemes (dark variant:
-   style.css). The daemon serves one or the other by the desktop's window
-   background luminance (daemon.py _plasma_is_light), watched on kdeglobals so a
-   Global Theme switch hot-reloads it. This file mirrors style.css's STRUCTURE
+   style-dark.css). The daemon serves one or the other by the desktop's window
+   background luminance, watched on kdeglobals so a Global Theme switch
+   hot-reloads it. This file mirrors style-dark.css's STRUCTURE
    1:1 — same selectors, same layout mechanics — and only the color /
    background-color values differ (dark inks instead of near-white, light-grey
    tracks, saturated hues darkened to read on a light page). Keep the two in
-   sync: a layout/selector change here must be mirrored in style.css.
+   sync: a layout/selector change here must be mirrored in style-dark.css.
 
-   Same Qt RichText caveats as style.css apply — see that file's header for the
+   Same Qt RichText caveats as style-dark.css apply — see that file's header for the
    CSS subset, the &nbsp;-padding column model, and the DANGER note about stray
    comment delimiters and newlines killing the whole <style> block. */
 

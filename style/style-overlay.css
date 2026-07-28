@@ -5,7 +5,7 @@
    style-light.css), only when the inspection overlay is on (`overlay = true`
    under [display]). Always active in THIS file (no comments
    to toggle) — toggling the overlay means loading/not loading this file at all
-   (see daemon.py _read_css), never editing it.
+   (see rust/src/daemon.rs), never editing it.
 
    This file only sets background-color, never color: the text keeps the base
    sheet's own colours (the widget's themed default + good/warn/crit states),

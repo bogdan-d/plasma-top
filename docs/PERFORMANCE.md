@@ -1,8 +1,9 @@
 # Performance
 
 Read this before changing daemon polling, sensor caching, command boundaries, or
-HTML layout. Current Rust behavior and historical measurements are separated;
-old Python numbers are useful baselines, not claims about current Rust timings.
+HTML layout. The runtime is Rust-only. Current behavior and historical
+pre-cutover measurements are separated; old numbers are baselines, not claims
+about current Rust timings.
 
 ## Measure current Rust behavior
 
@@ -126,7 +127,8 @@ Before the rewrite, the normal tooltip reached 15–20% CPU, roughly 300 ms ever
 
 Do not reintroduce `<table>` on any render path. Keep the 8 px inset in the
 plasmoid text padding, not a layout table. Validate rendered changes with the
-real Qt path.
+real Qt path. Rust unit tests enforce table-free output for mono layouts, pages,
+and render models; `tools/p6_qt_matrix.sh` covers the Qt RichText path.
 
 `pidstat -h` reports `%CPU` in field 8; `$(NF-1)` is the CPU/core id, not the
 percentage.

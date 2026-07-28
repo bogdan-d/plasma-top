@@ -14,14 +14,14 @@
                 insets are done with &nbsp; padding in mono_render, not CSS
 
    DANGER: any comment delimiter mid-file kills the ENTIRE <style> block
-   silently (daemon.py strips comments before injection, but a stray
+   silently (the Rust daemon strips comments before injection, but a stray
    delimiter inside comment prose ends it early). The daemon also collapses
    this file to one line first — a raw \n here would become a literal <br>
    otherwise (the plasmoid's \n->br conversion applies to everything, not
    just visible text).
 
    label/val/extra/title/separator-rule-* are single classes in code
-   (formatter.py/render_model.py) — panel vs tooltip is decided entirely
+   (rust/src/render/formatter.rs and model.rs) — panel vs tooltip is decided entirely
    here, by scoping under each root wrapper ("panel panel-v"/"panel
    panel-h" for the panel, "tooltip" for the tooltip). font-size set on a
    wrapper is inherited by children that don't override it. */
@@ -182,7 +182,7 @@
 /* Per-item-type overrides: cpu/mem usage bars (.form-bar) and sparks (.form-spark)
    each get their own palette, independent of context (panel vs tooltip —
    tooltip's bar+spark combo rows reuse the same .item-cpu_usage.form-bar /
-   .form-spark classes, see formatter.py _bar_spark_row). Same colors as the
+   .form-spark classes, see render/formatter.rs). Same colors as the
    fallback above by default — tune independently here. */
 .item-cpu_usage.form-bar .bar-good { color: #65ff65; background-color: #65ff65; }
 .item-cpu_usage.form-bar .bar-warn { color: #ffff65; background-color: #ffff65; }
@@ -204,7 +204,7 @@
 /* Per-item-type overrides: cpu/mem usage bars (.form-bar) and sparks (.form-spark)
    each get their own palette, independent of context (panel vs tooltip —
    tooltip's bar+spark combo rows reuse the same .item-cpu_usage.form-bar /
-   .form-spark classes, see formatter.py _bar_spark_row). Same colors as the
+   .form-spark classes, see render/formatter.rs). Same colors as the
    fallback above by default — tune independently here. */
 .item-cpu_usage.form-spark .bar-good { color: #65ff65; }
 .item-cpu_usage.form-spark .bar-warn { color: #ffff65; }
@@ -232,7 +232,7 @@
    tooltip's cpu_usage:bar_braille/mem_usage:bar_braille second cell):
    8-grade continuous gradient per prefix, NOT tied to good/warn/crit
    thresholds — picked once per character (the more "critical" of its 2
-   packed samples, see formatter.py _render_braille). cpu: green
+   packed samples, see render/traces.rs). cpu: green
    plateau -> yellow -> orange -> red. mem: light blue plateau -> white ->
    orange — hues spread far apart on purpose (unlike mem_usage's bar/spark
    all-purple shades above): single-hue lightness steps were too close to

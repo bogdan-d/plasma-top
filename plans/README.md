@@ -1,8 +1,13 @@
-# PiroStats Rust migration program
+# PiroStats Rust migration program (historical)
 
-This directory is the execution source of truth for replacing the Python backend
-with Rust while preserving the Plasma applet's observable behavior. The work is
-a compatibility rewrite, not a redesign.
+P8.5 and the final migration gate completed on 2026-07-29. This directory is
+retained as rollback, parity, and decision evidence; it no longer directs
+normal development. Current architecture and gates live in `AGENTS.md`,
+`docs/`, and `.github/workflows/baseline.yml`.
+
+This directory was the execution source of truth for replacing the Python
+backend with Rust while preserving the Plasma applet's observable behavior. The
+work was a compatibility rewrite, not a redesign.
 
 ## Goal
 
@@ -16,8 +21,8 @@ keeping these assets and contracts compatible:
 - rendered panel/tooltip appearance and interaction
 - supported sensors, graceful degradation, caching, and notifications
 
-Python remains the behavioral oracle until final cutover. No Python/Rust FFI and
-no production split-brain daemon.
+Python remained the behavioral oracle until final cutover. No Python/Rust FFI or
+production split-brain daemon was introduced.
 
 ## Read order
 

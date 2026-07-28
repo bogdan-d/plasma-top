@@ -43,5 +43,5 @@ Run commands from repository root. Development setup and full gates live in
 Use the full Rust fmt/check/clippy/test/doc gates from `docs/DEVELOPMENT.md`.
 Never weaken parity evidence, lint, dead-code, or inventory accounting.
 
-Read `docs/ITEMS.md` for item behavior, `docs/PERFORMANCE.md` before poll/cache
-changes, and `plans/STATUS.md` before migration/cutover work.
+Read `docs/ITEMS.md` for item behavior and `docs/PERFORMANCE.md` before
+poll/cache changes. `plans/` contains historical Rust-migration evidence.

@@ -53,7 +53,7 @@ Only integration owner edits this file. Lane agents write under `handoffs/`.
 | QML-VERIFY | 6 | verified | Codex | `6ffba34` | `plans/handoffs/qml-verify-codex-20260722.md` | P6.1–P6.3 verified on Plasma 6.7.2 Wayland: correct-id Application smoke plus isolated `plasmoidviewer` horizontal/vertical/planar runs under disposable XDG/HOME/runtime roots; actual QML traces prove geometry publication/orientation, watcher refresh, lazy tooltip reads, page/click commands, and root discipline; strict Qt matrix covers panel H/V + main/five deep pages in dark/light/overlay with faithful fastfetch ANSI conversion; human pass confirms hover, pin/unpin, wheel grouping/quick reverse, resize, desktop transparent/background/outline/font/config behavior; no QML workaround or accepted deviation |
 | PACKAGING | 6 | verified | Codex | `703bae7` | `plans/handoffs/packaging-codex-20260728.md` | P6.4 native manual/AUR packaging verified: locked `x86_64` release build with runtime-loaded NVML, FHS asset-root launcher, Rust-only runtime manifest, preserved service/applet/license contracts; repo/`/tmp`-only disposable install, repeat upgrade, Python rollback, uninstall, user-file preservation, and sourced AUR `package()` checks pass; real pacman/user-systemd lifecycle waived by D005 |
 | HARDWARE-* | 7 | verified | Codex | `3bfe101` | `plans/handoffs/hardware-current-host-codex-20260728.md` | Current-host P7.1/P7.2/P7.4/P7.5 pass; unavailable live paths have mandatory fixture proof and explicit D006 acceptance; Gate P7 green |
-| CUTOVER | 8 | active | Codex | `ba9b507` | `plans/handoffs/cutover-p8.1-codex-20260728.md`; `plans/handoffs/cutover-p8.2-20260729.md`; `plans/handoffs/cutover-p8.4-20260729.md` | P8.1/P8.2 verified and accepted; P8.4 verified: Python runtime/dependency/launch/CI paths removed, production surfaces remain Rust-only, full Rust/install/package/Qt gates green; P8.5 not started |
+| CUTOVER | 8 | verified | Codex | `2154e7c` | `plans/handoffs/cutover-p8.1-codex-20260728.md`; `plans/handoffs/cutover-p8.2-20260729.md`; `plans/handoffs/cutover-p8.4-20260729.md`; `plans/handoffs/cutover-p8.5-20260729.md` | P8.1–P8.5 verified; migration-only oracle/tests/tools retired, useful corpora promoted under Rust tests, current repository gate added, inventory fully closed, docs/CI/package contracts refreshed, final gate green |
 
 ## Milestones
 
@@ -93,21 +93,32 @@ Only integration owner edits this file. Lane agents write under `handoffs/`.
   Qt matrix gates pass. Python pytest/Ruff/Vulture gates retired explicitly with
   P8.4 source removal; their final P8.2 result was 175 passed + 1 optional skip,
   Ruff/Vulture green.
+- **P8.5 migration closure complete**: fixed panel H/V/tooltip snapshots now live
+  under `rust/tests/`; the retained oracle fixture remains with Rust fixtures.
+  Obsolete Python tests/oracle/previews, AST reporter, baseline capture, and the
+  exit-77 parity stub are removed. `tools/repository_gate.sh` enforces current
+  Rust/product closure, every inventory checkbox is resolved, and migration
+  plans are marked historical.
+- **Final gate green**: locked Cargo fetch/lockfile, fmt, all-target/all-feature
+  check/Clippy/test, docs, shell syntax, repository closure, user install,
+  native package/AUR lifecycle, and 24-cell Qt matrix all pass. Rust result is
+  507 library + 26 integration tests. PM001 remains untouched and deferred.
 
-## Active Phase 8 work
+## Migration closure
 
 - **P8.2:** closed and user-accepted 2026-07-29; live evidence is in
   `plans/handoffs/cutover-p8.2-20260729.md`.
 - **P8.4:** verified 2026-07-29; removal and retired-gate evidence is in
   `plans/handoffs/cutover-p8.4-20260729.md`.
-- **Parity evidence:** fixed corpora and integration/live comparisons are green.
-  `rust/tests/parity_runner.sh` remains an explicit skip until a fixture-only
-  Rust diagnostic seam is approved or the runner is retired.
-- **Inventory:** verified implementation rows are reconciled. Unchecked rows are
-  limited to the deferred shared-fixture runner, inventory-gate strengthening,
-  oracle archival, and two preview-tool smokes.
-- **P8.5:** promote/archive oracle evidence and migration plans; decide the
-  deferred parity runner and strengthen final inventory closure.
+- **P8.5:** closed 2026-07-29; final evidence is in
+  `plans/handoffs/cutover-p8.5-20260729.md`.
+- **Parity evidence:** fixed corpora, fixture suites, integration traces, and
+  live comparisons are green. No compatibility process or skipped runner
+  remains.
+- **Inventory:** zero unchecked rows. Current closure is enforced by compiler,
+  Clippy, Rust tests, package/Qt gates, and `tools/repository_gate.sh`.
+- **Plans:** historical evidence only. Normal development follows `AGENTS.md`
+  and `docs/DEVELOPMENT.md`.
 
 ## Accepted deviations
 

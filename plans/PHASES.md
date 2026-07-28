@@ -1,5 +1,8 @@
 # Migration phases
 
+> Historical plan: all phases and the final gate completed on 2026-07-29. See
+> `STATUS.md` and `handoffs/cutover-p8.5-20260729.md` for final evidence.
+
 Each phase ends at a stable rollback point. A phase gate is verified by the
 integration owner, not accepted solely from an agent report.
 

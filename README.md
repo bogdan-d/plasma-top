@@ -89,13 +89,18 @@ and user service, then activate it. System mode uses `/usr/lib/pirostats` and
 For checkout-based development, use [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
 instead of the system-wide installer.
 
+Arch packaging metadata lives under `packaging/aur/`. It builds the locked
+native binary, installs the same applet/assets/service contracts, and has no
+Python runtime dependency. Maintainers can verify its staged manifest and
+install/upgrade/uninstall behavior with `tools/p6_package_test.sh`.
+
 Then add the widget: **right-click a panel → Add Widgets → search "PiroStats"**.
 
 Re-run the same install command to upgrade. Remove a user install with
 `./uninstall.sh --user`, or a system install with `./uninstall.sh`. Configuration
 survives either command. Preview removals with `--dry-run` or its `--dry` alias.
-If an existing widget keeps old system action paths
-after migration, remove and re-add that widget; the installer never rewrites
+If an existing widget keeps stale action paths after switching install modes,
+remove and re-add that widget; the installer never rewrites
 Plasma's configuration database.
 
 ## Configuration
