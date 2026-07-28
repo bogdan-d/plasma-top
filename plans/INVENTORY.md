@@ -114,7 +114,7 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [x] | `rust/src/test_support/fake_notification.rs` | new; deterministic notification facade with ordered payload recording and queued results | `FIXTURES/NOTIFY` | records exact payload order, including failed calls; no desktop service access in tests |
 | [x] | `rust/src/test_support/fixture_loader.rs` | `load_text`/`load_bytes`/`load_oracle_fixture` + intentionally raw `OracleFixtureRaw` view | `FIXTURES` | shared Python fixture schema remains decoupled from production typed snapshots |
 | [x] | `rust/tests/fixtures/**` | new; 8 sample fixtures (proc/sys text, oracle TOML, cmd JSON, dbus TOML) | `FIXTURES` | P2 mirrors BASE schema; consumed by loader tests |
-| [ ] | `rust/tests/parity_runner.sh` | deferred shared-fixture Python/Rust parity runner | `FIXTURES` | deferred: exits 77 because production render intentionally has no fixture-only flag; fixed corpora and integration tests carry current parity |
+| [x] | `rust/tests/parity_runner.sh` | retired in P8.5; no fixture-only production CLI seam was added | `FIXTURES/CUTOVER` | fixed byte corpora, fixture loaders, formatter goldens, adapter traces, CLI/daemon integration, and P7/P8 live comparisons provide parity; no exit-77 stub remains |
 | [x] | `screenshots/desktop-black-text.png` | preserve reference | `QML-VERIFY` | visual comparison; regenerate only approved |
 | [x] | `screenshots/desktop-white-text.png` | preserve reference | `QML-VERIFY` | visual comparison; regenerate only approved |
 | [x] | `screenshots/graphs.png` | preserve reference | `QML-VERIFY` | visual comparison; regenerate only approved |
@@ -146,29 +146,12 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [x] | `style/style-dark.css` | preserve | `CONFIG/QML-VERIFY` | byte/key/selector parity |
 | [x] | `style/style-light.css` | preserve | `CONFIG/QML-VERIFY` | byte/key/selector parity |
 | [x] | `style/style-overlay.css` | preserve | `CONFIG/QML-VERIFY` | byte/key/selector parity |
-| [x] | `tests/conftest.py` | retain then port/archive | `BASE/INTEGRATION` | existing assertion mapped to Rust |
-| [x] | `tests/golden/panel_h.html` | preserve oracle | `FORMATTER` | byte-identical Rust horizontal-panel snapshot |
-| [x] | `tests/golden/panel_v.html` | preserve oracle | `FORMATTER` | byte-identical Rust vertical-panel snapshot |
-| [x] | `tests/golden/tooltip.html` | preserve oracle | `FORMATTER` | byte-identical Rust main-tooltip snapshot |
-| [x] | `tests/fixtures/oracle_render_full.toml` | preserve full deterministic Python oracle fixture | `BASE/FIXTURES` | Python golden assertion + verbatim Rust fixture-loader corpus |
-| [ ] | `tests/oracle.py` | retain then port/archive | `BASE/INTEGRATION` | oracle fixture/render parity mapped to Rust |
-| [x] | `tests/test_config.py` | retain then port/archive | `BASE/CONFIG` | existing assertion mapped to Rust |
-| [x] | `tests/test_deadcode.py` | retain then port/archive | `BASE/INTEGRATION` | existing assertion mapped to Rust |
-| [x] | `tests/test_formatter.py` | retain oracle; mapped to Rust formatter suite | `BASE/FORMATTER` | existing assertion preserved in Python and mapped to Rust formatter coverage |
-| [x] | `tests/test_golden_render.py` | retain oracle; mapped to Rust formatter goldens | `BASE/FORMATTER` | existing assertion preserved in Python and mapped to Rust panel/tooltip golden coverage |
-| [ ] | `tests/test_inventory.py` | retain then port/archive | `BASE/INTEGRATION` | inventory gate + reporter smoke |
-| [x] | `tests/test_items.py` | retain then port/archive | `BASE/DOMAIN` | existing assertion mapped to Rust |
-| [x] | `tests/test_lint.py` | retain then port/archive | `BASE/INTEGRATION` | existing assertion mapped to Rust |
-| [x] | `tests/test_mono_render.py` | retain then port/archive | `BASE/RENDER-CORE` | existing assertion mapped to Rust |
-| [x] | `tests/test_notifier.py` | retain oracle; mapped to Rust notification suite | `BASE/NOTIFY` | all existing hold/hysteresis assertions preserved and expanded across every alert/failure path |
-| [ ] | `tests/test_oracle.py` | retain then port/archive | `BASE/INTEGRATION` | oracle fixture/render parity mapped to Rust |
-| [x] | `tests/test_render_model.py` | retain then port/archive | `BASE/RENDER-CORE` | existing assertion mapped to Rust |
-| [x] | `tests/test_sensors.py` | retain then port/archive | `BASE/SENSOR-DISK` | existing mount-resolution assertions mapped to Rust disk tests; Python baseline still runs 4/4 |
-| [x] | `tests/vulture_whitelist.py` | retain then port/archive | `BASE/INTEGRATION` | existing assertion mapped to Rust |
-| [ ] | `tools/demo_shot.py` | preserve/update invocation | `BASE/QML-VERIFY` | tool smoke + target parity |
-| [x] | `tools/inventory_ast_reporter.py` | preserve/update invocation | `BASE/INTEGRATION` | tool smoke + exact inventory gate |
-| [ ] | `tools/manual_tooltip_preview.py` | preserve/update invocation | `BASE/QML-VERIFY` | tool smoke + target parity |
-| [x] | `tools/python_oracle.py` | retain Python CLI as explicit stabilization oracle | `CUTOVER` | P8.1 oracle CLI smoke; never installed |
+| [x] | `tests/*.py` | removed in P8.5 after assertion-by-assertion Rust mapping | `BASE/*/CUTOVER` | 533-test Rust suite retains config/domain/render/sensor/notifier/runtime/CLI behavior; exact historical mapping remains below |
+| [x] | `rust/tests/golden/{panel_h,panel_v,tooltip}.html` | promoted from `tests/golden/` in P8.5 | `FORMATTER/CUTOVER` | `tooltip_and_panel_goldens_match_python_snapshots` reads all three and asserts exact bytes |
+| [x] | `rust/tests/fixtures/oracle/oracle_render_full.toml` | promoted retained deterministic compatibility fixture | `BASE/FIXTURES/CUTOVER` | byte-identical former oracle fixture; `FixtureLoader` parse/error tests preserve schema while formatter maxed-reading corpus independently renders exact snapshots |
+| [x] | `tools/{demo_shot,manual_tooltip_preview}.py` | removed in P8.5; source-coupled previews were superseded | `BASE/QML-VERIFY/CUTOVER` | source-independent `qt_shot.py`, 24-cell Qt matrix, Rust fixed goldens, and P8.2 live Plasma evidence cover E0/E4 output |
+| [x] | `tools/inventory_ast_reporter.py` | removed in P8.5 with deleted Python AST subject | `BASE/INTEGRATION/CUTOVER` | frozen Phase 0 call ledger remains below; `tools/repository_gate.sh` enforces current product/evidence paths and Rust-only surfaces |
+| [x] | `tools/python_oracle.py` | removed in P8.5 after stabilization | `CUTOVER` | fixed corpora and Rust tests preserve useful evidence; P8.1/P8.2 handoffs preserve final executable oracle results |
 | [x] | `tools/python_live_matrix.sh` | removed in P8.4 with obsolete Python live launch path | `BASE/HARDWARE` | Phase 7 comparisons preserved in hardware handoff; `tools/p6_live_matrix.sh` remains Rust-only |
 | [x] | `tools/p6_live_matrix.sh` | isolated Rust-only horizontal/vertical/planar applet gate after P8.4 | `QML-VERIFY` | geometry/orientation/watcher/lazy/action traces + human interaction evidence; obsolete `--python` launch removed |
 | [x] | `tools/p6_png_diff.py` | add strict fixed-image comparator | `QML-VERIFY` | dimension/mean/max/fraction synthetic threshold check |
@@ -176,6 +159,7 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [x] | `tools/p6_package_test.sh` | disposable native package gate | `PACKAGING` | repo/`/tmp`-only legacy-layout upgrade, repeat native upgrade, uninstall, user-file, and AUR manifest checks; rollback source remains at tag `pre-rust-cutover` |
 | [x] | `tools/qml_verify.sh` | add isolated Rust-daemon/applet launcher | `QML-VERIFY` | bash syntax + correct-id Application smoke; disposable XDG/runtime roots; no system paths |
 | [x] | `tools/qt_shot.py` | preserve/update invocation | `BASE/QML-VERIFY` | all-page dark/light/overlay matrix + plasmoid ANSI path |
+| [x] | `tools/repository_gate.sh` | focused final repository closure gate | `CUTOVER` | exact Python-tool allowlist, retired-path absence, required product/evidence files, Rust-only launch/package surfaces, and load-bearing render assertions |
 | [x] | `tools/user_install_test.sh` | add disposable user-local lifecycle gate | `CUTOVER` | no sudo/global calls; spaced paths; install/upgrade/repeat uninstall/config preservation |
 | [x] | `uninstall.sh` | native system + user-local uninstall | `PACKAGING/CUTOVER` | exact owned paths removed; config preserved; repeated user uninstall harmless |
 
@@ -618,30 +602,32 @@ frozen pre-removal ledger, not live Python source.
 
 ## Existing test/tool callable inventory
 
-Existing tests remain oracle evidence until mapped to a passing Rust test or intentionally retained integration check. Fixtures/helpers also require disposition because their assumptions define behavior.
+This section is a frozen callable ledger for Python tests/tools removed in P8.5.
+Every checked row cites retained Rust or Qt evidence; line numbers remain
+historical for rollback review.
 
 ### `tests/conftest.py`
 
-- [x] No declared callable: fixture path setup remains covered by the full Python oracle gate.
+- [x] No declared callable: removed with Python tests; Rust integration tests resolve fixtures directly.
 
 ### `tests/oracle.py`
 
 | Done | Line | Symbol | Kind | Lane | Evidence required |
 |---|---:|---|---|---|---|
-| [ ] | 33 | `OracleFixture` | class | `BASE/INTEGRATION` | D/I: preserve oracle fixture schema + render parity harness |
-| [ ] | 39 | `_runtime_symbols` | function | `BASE/INTEGRATION` | D/I: preserve deterministic oracle fixture/render harness |
-| [ ] | 62 | `_maybe_path` | function | `BASE/INTEGRATION` | D/I: preserve deterministic oracle fixture/render harness |
-| [ ] | 66 | `_path_map` | function | `BASE/INTEGRATION` | D/I: preserve deterministic oracle fixture/render harness |
-| [ ] | 70 | `_load_disk_smart_drives` | function | `BASE/INTEGRATION` | D/I: preserve deterministic oracle fixture/render harness |
-| [ ] | 77 | `_load_disk_usage` | function | `BASE/INTEGRATION` | D/I: preserve deterministic oracle fixture/render harness |
-| [ ] | 89 | `_load_battery_periph` | function | `BASE/INTEGRATION` | D/I: preserve deterministic oracle fixture/render harness |
-| [ ] | 96 | `_load_hardware` | function | `BASE/INTEGRATION` | D/I: preserve deterministic oracle fixture/render harness |
-| [ ] | 119 | `_load_readings` | function | `BASE/INTEGRATION` | D/I: preserve deterministic oracle fixture/render harness |
-| [ ] | 166 | `load_fixture` | function | `BASE/INTEGRATION` | D/I: preserve deterministic oracle fixture/render harness |
-| [ ] | 177 | `deterministic_render_env` | function | `BASE/INTEGRATION` | D/I: preserve deterministic oracle fixture/render harness |
-| [ ] | 186 | `render_component` | function | `BASE/INTEGRATION` | D/I: preserve deterministic oracle fixture/render harness |
-| [ ] | 204 | `render_fixture` | function | `BASE/INTEGRATION` | D/I: preserve deterministic oracle fixture/render harness |
-| [ ] | 208 | `main` | function | `BASE/INTEGRATION` | D/I: preserve deterministic oracle fixture/render harness |
+| [x] | 33 | `OracleFixture` | class | `BASE/INTEGRATION` | schema retained by `OracleFixtureRaw` and `oracle_render_full.toml` under `rust/tests/` |
+| [x] | 39 | `_runtime_symbols` | function | `BASE/INTEGRATION` | retired source import bridge; typed Rust snapshots replace runtime symbol loading |
+| [x] | 62 | `_maybe_path` | function | `BASE/INTEGRATION` | Rust fixture roots and typed optional paths cover absent/present cases |
+| [x] | 66 | `_path_map` | function | `BASE/INTEGRATION` | Rust per-sensor fixture suites cover mapped proc/sys paths |
+| [x] | 70 | `_load_disk_smart_drives` | function | `BASE/INTEGRATION` | POWER/disk fixture suites cover SMART shapes and failures |
+| [x] | 77 | `_load_disk_usage` | function | `BASE/INTEGRATION` | disk unit/collector tests cover usage map and rendering |
+| [x] | 89 | `_load_battery_periph` | function | `BASE/INTEGRATION` | POWER/HID fixture suites cover peripheral battery shapes |
+| [x] | 96 | `_load_hardware` | function | `BASE/INTEGRATION` | formatter `full_hw` corpus plus collector fixture matrix cover all gates |
+| [x] | 119 | `_load_readings` | function | `BASE/INTEGRATION` | formatter `full_readings` corpus renders all three exact snapshots |
+| [x] | 166 | `load_fixture` | function | `BASE/INTEGRATION` | `FixtureLoader::load_oracle_fixture` parse/missing/malformed tests retain schema |
+| [x] | 177 | `deterministic_render_env` | function | `BASE/INTEGRATION` | Rust formatter uses fixed config/orientation/time inputs |
+| [x] | 186 | `render_component` | function | `BASE/INTEGRATION` | Rust formatter exact panel H/V and tooltip snapshot loop |
+| [x] | 204 | `render_fixture` | function | `BASE/INTEGRATION` | retained fixture schema plus exact formatter corpus supersede bridge |
+| [x] | 208 | `main` | function | `BASE/INTEGRATION` | oracle CLI retired after recorded P8.1/P8.2 smoke; no product path used it |
 
 ### `tests/test_config.py`
 
@@ -793,12 +779,12 @@ Existing tests remain oracle evidence until mapped to a passing Rust test or int
 
 | Done | Line | Symbol | Kind | Lane | Evidence required |
 |---|---:|---|---|---|---|
-| [ ] | 24 | `_run_report` | function | `BASE/INTEGRATION` | P/I: preserve inventory/reporter gate + exact markdown sync |
-| [ ] | 39 | `_names` | function | `BASE/INTEGRATION` | P/I: preserve inventory/reporter gate + exact markdown sync |
-| [ ] | 43 | `_file_counts` | function | `BASE/INTEGRATION` | P/I: preserve inventory/reporter gate + exact markdown sync |
-| [ ] | 54 | `_call_edge_rows` | function | `BASE/INTEGRATION` | P/I: preserve inventory/reporter gate + exact markdown sync |
-| [ ] | 82 | `test_inventory_ast_reporter_workspace_smoke` | function | `BASE/INTEGRATION` | P/I: preserve inventory/reporter gate + exact markdown sync |
-| [ ] | 140 | `test_inventory_call_edge_table_matches_ast_reporter` | function | `BASE/INTEGRATION` | P/I: preserve inventory/reporter gate + exact markdown sync |
+| [x] | 24 | `_run_report` | function | `BASE/INTEGRATION` | retired with Python AST reporter; final report remains frozen below |
+| [x] | 39 | `_names` | function | `BASE/INTEGRATION` | retired with deleted Python callable subject |
+| [x] | 43 | `_file_counts` | function | `BASE/INTEGRATION` | retired with deleted Python file-count subject |
+| [x] | 54 | `_call_edge_rows` | function | `BASE/INTEGRATION` | frozen Phase 0/P8.2 call-edge rows remain historical evidence |
+| [x] | 82 | `test_inventory_ast_reporter_workspace_smoke` | function | `BASE/INTEGRATION` | replaced by `tools/repository_gate.sh` current-path/product-surface checks |
+| [x] | 140 | `test_inventory_call_edge_table_matches_ast_reporter` | function | `BASE/INTEGRATION` | final Python reporter match recorded before P8.4; ledger frozen, not regenerated |
 
 ### `tests/test_items.py`
 
@@ -873,7 +859,7 @@ Existing tests remain oracle evidence until mapped to a passing Rust test or int
 
 | Done | Line | Symbol | Kind | Lane | Evidence required |
 |---|---:|---|---|---|---|
-| [ ] | 15 | `test_oracle_fixture_matches_existing_goldens` | function | `BASE/INTEGRATION` | P/D: preserve oracle golden assertion; map to Rust differential |
+| [x] | 15 | `test_oracle_fixture_matches_existing_goldens` | function | `BASE/INTEGRATION` | Rust `tooltip_and_panel_goldens_match_python_snapshots` renders fixed full snapshots and compares all three promoted files byte-for-byte |
 
 ### `tests/test_render_model.py`
 
@@ -922,9 +908,9 @@ Existing tests remain oracle evidence until mapped to a passing Rust test or int
 
 | Done | Line | Symbol | Kind | Lane | Evidence required |
 |---|---:|---|---|---|---|
-| [ ] | 34 | `_demo_hw` | function | `BASE/QML-VERIFY` | I: tool smoke; E0/E4 result |
-| [ ] | 51 | `_demo_readings` | function | `BASE/QML-VERIFY` | I: tool smoke; E0/E4 result |
-| [ ] | 76 | `main` | function | `BASE/QML-VERIFY` | I: tool smoke; E0/E4 result |
+| [x] | 34 | `_demo_hw` | function | `BASE/QML-VERIFY` | superseded by Rust `full_hw` exact-golden corpus and Qt matrix |
+| [x] | 51 | `_demo_readings` | function | `BASE/QML-VERIFY` | superseded by Rust `full_readings` exact-golden corpus and Qt matrix |
+| [x] | 76 | `main` | function | `BASE/QML-VERIFY` | source-coupled preview retired; `qt_shot.py` remains supported preview path |
 
 ### `tools/inventory_ast_reporter.py`
 
@@ -960,9 +946,9 @@ Existing tests remain oracle evidence until mapped to a passing Rust test or int
 
 | Done | Line | Symbol | Kind | Lane | Evidence required |
 |---|---:|---|---|---|---|
-| [ ] | 35 | `_val` | function | `BASE/QML-VERIFY` | I: tool smoke; E0/E4 result |
-| [ ] | 40 | `build_entries` | function | `BASE/QML-VERIFY` | I: tool smoke; E0/E4 result |
-| [ ] | 75 | `main` | function | `BASE/QML-VERIFY` | I: tool smoke; E0/E4 result |
+| [x] | 35 | `_val` | function | `BASE/QML-VERIFY` | obsolete preview helper; formatter unit tests cover role/class/value HTML |
+| [x] | 40 | `build_entries` | function | `BASE/QML-VERIFY` | obsolete synthetic entries; five mono plans and formatter snapshots retain structure evidence |
+| [x] | 75 | `main` | function | `BASE/QML-VERIFY` | source-coupled preview retired; `qt_shot.py` and Qt matrix remain |
 
 ### `tools/qt_shot.py`
 
@@ -1551,7 +1537,9 @@ legend as the rest of this file (U/D/F/I/L/P + E0–E5).
 ## Call-edge accounting gate
 
 This is the frozen Phase 0/P8.2 Python ledger. Its exact reporter gate passed
-before P8.4 removal; post-removal inventory enforcement is deferred to P8.5.
+before P8.4 removal. P8.5 replaced live Python AST accounting with
+`tools/repository_gate.sh`, compiler/Clippy dead-code enforcement, Rust tests,
+package manifests, and Qt gates over current product files.
 
 Phase 0 must generate a machine-readable AST call-edge report for every Python code file. `tests/test_inventory.py` runs `tools/inventory_ast_reporter.py` across `src`, `tests`, and `tools`, and this table must match the reporter's per-file `Call sites` and `Unique syntactic callees` counts. Dynamic calls/closures are assigned to enclosing symbol and tested by ordered dependency traces. The checked static call totals are:
 

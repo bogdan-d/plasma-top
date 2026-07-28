@@ -45,5 +45,14 @@ jobs:
       - name: cargo doc
         run: cargo doc --manifest-path rust/Cargo.toml --no-deps
 
+      - name: Repository and shell contracts
+        run: |
+          tools/repository_gate.sh
+          bash -n install.sh uninstall.sh packaging/aur/PKGBUILD \
+            packaging/aur/pirostats.install pirostats tools/*.sh scripts/*.sh
+
       - name: User-local install lifecycle
         run: tools/user_install_test.sh
+
+      - name: Native package manifest lifecycle
+        run: tools/p6_package_test.sh

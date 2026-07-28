@@ -2157,7 +2157,7 @@ mod tests {
                 formatter.format_tooltip(&readings, "")
             };
             let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("../tests/golden")
+                .join("tests/golden")
                 .join(format!("{name}.html"));
             let expected = std::fs::read_to_string(path).expect("read golden");
             assert_eq!(html, expected, "golden mismatch for {name}");

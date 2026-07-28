@@ -1,5 +1,5 @@
 //! Integration test: load the shipped `config/config.toml` end-to-end and
-//! assert typed fields match the Python oracle.
+//! assert typed fields match the shipped product contract.
 //!
 //! Forces `vertical = Some(false)` so the orientation override is
 //! deterministic and does not depend on the host's Plasma state. The

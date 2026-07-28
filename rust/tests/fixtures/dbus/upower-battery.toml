@@ -7,7 +7,7 @@
 # DbusOutput directly; this file exists so reviewers can compare the fixture
 # shape against the live system output captured by the BASE lane.
 #
-# Fields mirror the Python sensors.UPowerResult / BatterySys shapes.
+# Fields cover the UPowerResult and BatterySys compatibility shapes.
 
 [native_path]
 path = "/sys/devices/LNXSYSTM:00/LNXSYBUS:00/PNP0A08:00/device:16/PNP0C09:00/ACPI0001:00/ACPI0002:00/PNP0C0A:00/power_supply/BAT0"
