@@ -53,7 +53,7 @@ Only integration owner edits this file. Lane agents write under `handoffs/`.
 | QML-VERIFY | 6 | verified | Codex | `6ffba34` | `plans/handoffs/qml-verify-codex-20260722.md` | P6.1–P6.3 verified on Plasma 6.7.2 Wayland: correct-id Application smoke plus isolated `plasmoidviewer` horizontal/vertical/planar runs under disposable XDG/HOME/runtime roots; actual QML traces prove geometry publication/orientation, watcher refresh, lazy tooltip reads, page/click commands, and root discipline; strict Qt matrix covers panel H/V + main/five deep pages in dark/light/overlay with faithful fastfetch ANSI conversion; human pass confirms hover, pin/unpin, wheel grouping/quick reverse, resize, desktop transparent/background/outline/font/config behavior; no QML workaround or accepted deviation |
 | PACKAGING | 6 | verified | Codex | `703bae7` | `plans/handoffs/packaging-codex-20260728.md` | P6.4 native manual/AUR packaging verified: locked `x86_64` release build with runtime-loaded NVML, FHS asset-root launcher, Rust-only runtime manifest, preserved service/applet/license contracts; repo/`/tmp`-only disposable install, repeat upgrade, Python rollback, uninstall, user-file preservation, and sourced AUR `package()` checks pass; real pacman/user-systemd lifecycle waived by D005 |
 | HARDWARE-* | 7 | verified | Codex | `3bfe101` | `plans/handoffs/hardware-current-host-codex-20260728.md` | Current-host P7.1/P7.2/P7.4/P7.5 pass; unavailable live paths have mandatory fixture proof and explicit D006 acceptance; Gate P7 green |
-| CUTOVER | 8 | active | Codex | `f11050c` | `plans/handoffs/cutover-p8.1-codex-20260728.md` | P8.1 verified: `pre-rust-cutover` rollback tag; system package and checkout CLI Rust-authoritative; Python launcher oracle-only; supported user-local install/uninstall implemented and disposable lifecycle gate green; P8.2 live stabilization remains |
+| CUTOVER | 8 | active | Codex | `fc65079` | `plans/handoffs/cutover-p8.1-codex-20260728.md`; `plans/handoffs/cutover-p8.2-20260729.md` | P8.1 verified; P8.2 verified and user-accepted 2026-07-29 after a live user-local Rust session on Plasma 6.7.3 Wayland covered lifecycle/publication, panel/tooltip refresh, click, bidirectional wheel paging, pin/unpin, config/style hot reload, restoration, and full Rust/Python gates; P8.4 not started |
 
 ## Milestones
 
@@ -75,13 +75,19 @@ Only integration owner edits this file. Lane agents write under `handoffs/`.
 - **Gate P6 green with D005**: user accepted disposable staged packaging evidence in place of real pacman/user-systemd lifecycle testing on this immutable non-Arch host. Phase 7 current-host shadow, soak, and performance validation is unblocked.
 - **Phase 7 current-host subset complete**: five near-simultaneous Python/Rust probe pairs plus three process-enabled pairs match within declared live tolerances; a 36.6-second disposable Rust soak covers page wakes, style/config reload, malformed last-good recovery, bounded runtime state, and clean SIGTERM; a repeated release performance matrix shows no material Rust regression; a 20-second absent-command/service run shows bounded CPU/RSS/logs and no leaks. Intel/NVIDIA/battery/HID live paths remain unavailable and fixture-backed; suspend, route switching, and disk hotplug were not induced under host-mutation constraints.
 - **Gate P7 green with D006**: user accepted fixture-backed deferral of unavailable Intel/NVIDIA/battery/HID and mutation-driven live validation until suitable hardware is available. Gaps remain documented and reopenable; cutover is unblocked.
-- **P8.1 cutover complete**: production packaging and service remain Rust-only; checkout `./pirostats` is now Rust-authoritative; Python survives only as an explicit, uninstalled oracle. Annotated tag `pre-rust-cutover` preserves the pre-cutover rollback point. User-local install/uninstall now supports immutable hosts without sudo or `/usr` writes and passes disposable lifecycle/path/failure tests. P8.2 live stabilization is next.
+- **P8.1 cutover complete**: production packaging and service remain Rust-only; checkout `./pirostats` is now Rust-authoritative; Python survives only as an explicit, uninstalled oracle. Annotated tag `pre-rust-cutover` preserves the pre-cutover rollback point. User-local install/uninstall now supports immutable hosts without sudo or `/usr` writes and passes disposable lifecycle/path/failure tests.
+- **P8.2 evidence complete**: one installed user-local Rust session on Plasma
+  6.7.3 Wayland passes clean stop/restart and publication, human-confirmed panel
+  and tooltip refresh, click, bidirectional wheel paging, pin/unpin, and
+  config/style hot reload with restoration. Daemon journal is clean; no Rust
+  defect was found. Full Rust and retained Python gates pass. User accepted P8.2
+  on 2026-07-29; P8.4 was not started.
 - **Current aggregate gate**: Rust fmt/check/clippy/test/doc pass with 507 library + 26 integration tests (533 total). Full Python oracle remains green with 175 passed + 1 optional ruff skip; ruff and vulture pass.
 
 ## Active Phase 8 work
 
-- **P8.2:** collect and approve the live installed-Plasma evidence defined in
-  `PHASES.md`; user-local activation remains the primary missing live path.
+- **P8.2:** closed and user-accepted 2026-07-29; live evidence is in
+  `plans/handoffs/cutover-p8.2-20260729.md`.
 - **Parity evidence:** fixed corpora and integration/live comparisons are green.
   `rust/tests/parity_runner.sh` remains an explicit skip until a fixture-only
   Rust diagnostic seam is approved or the runner is retired.

@@ -30,6 +30,10 @@ no production split-brain daemon.
 7. [HANDOFF.md](HANDOFF.md) — agent branch/worktree and handoff protocol
 8. [STATUS.md](STATUS.md) — integration-owner progress ledger
 
+Deferred issues found during migration live in
+[`POST_MIGRATION_ISSUES.md`](POST_MIGRATION_ISSUES.md) for investigation after
+P8.5.
+
 Agent completion reports go under [`handoffs/`](handoffs/README.md), one file per
 lane/attempt. Agents do not edit `STATUS.md`; the integration owner updates it
 after verifying a handoff.
