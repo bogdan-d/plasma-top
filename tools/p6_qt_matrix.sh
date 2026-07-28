@@ -24,13 +24,15 @@ done
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 binary="$repo_dir/rust/target/release/pirostats"
-python="$repo_dir/.venv/bin/python"
+python="${PYTHON:-python3}"
 artifact_root="$repo_dir/.test-artifacts/p6/qt"
 tmp_root="$(mktemp -d /tmp/pirostats-p6-qt.XXXXXX)"
 trap 'rm -rf "$tmp_root"' EXIT
 
-[[ -x "$python" ]] || { echo "missing PyQt venv: $python" >&2; exit 1; }
-"$python" -c 'import PyQt6.QtGui' >/dev/null
+"$python" -c 'import PyQt6.QtGui' >/dev/null 2>&1 || {
+    echo "PyQt6 unavailable through: $python (set PYTHON to another interpreter)" >&2
+    exit 1
+}
 if [[ "$build" == true ]]; then
     cargo build --manifest-path "$repo_dir/rust/Cargo.toml" --release --locked
 fi

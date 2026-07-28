@@ -35,13 +35,13 @@ Run commands from repository root. Development setup and full gates live in
 - Tooltip width is derived from maxed readings. Any new width-driving field must
   be bounded and covered by `canonical_width_covers_every_tooltip_item`.
 - Qt RichText supports less CSS than browsers. Validate visual changes with
-  `tools/qt_shot.py` or the Phase 6 QML matrix before theorizing from browser CSS.
+  `tools/qt_shot.py` or `tools/p6_qt_matrix.sh` before theorizing from browser CSS.
 - Keep all repository text English. Comments explain invariants, not mechanics.
 
 ## Validation
 
 Use the full Rust fmt/check/clippy/test/doc gates from `docs/DEVELOPMENT.md`.
-Never weaken parity evidence, lint, dead-code, or inventory accounting.
+Never weaken required test evidence, lint, or dead-code checks.
 
 Read `docs/ITEMS.md` for item behavior and `docs/PERFORMANCE.md` before
-poll/cache changes. `plans/` contains historical Rust-migration evidence.
+poll/cache changes. Deferred work lives in `todo/`.

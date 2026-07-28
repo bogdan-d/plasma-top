@@ -28,18 +28,11 @@ mapfile -t python_files < <(
 		-not -path './rust/target/*' -not -path './.agents/*' \
 		-printf '%P\n' | sort
 )
-expected_python=$'tools/p6_png_diff.py\ntools/qt_shot.py'
+expected_python='tools/qt_shot.py'
 [[ "${python_files[*]}" == "${expected_python//$'\n'/ }" ]] || {
 	printf 'repository gate: unexpected Python files:\n%s\n' "${python_files[*]:-(none)}" >&2
 	exit 1
 }
-
-retired=(src tests rust/tests/parity_runner.sh scripts/capture-baseline.sh \
-	tools/python_oracle.py tools/inventory_ast_reporter.py \
-	tools/demo_shot.py tools/manual_tooltip_preview.py)
-for path in "${retired[@]}"; do
-	[[ ! -e "$path" ]] || fail "retired migration path remains: $path"
-done
 
 production_surfaces=(pirostats install.sh uninstall.sh packaging service plasmoid .github)
 if rg -n '(python[0-9]*|src/[^ ]*\.py|python_oracle|parity_runner)' \

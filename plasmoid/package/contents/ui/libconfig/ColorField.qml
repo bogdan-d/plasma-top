@@ -7,7 +7,7 @@ import QtQuick.Window
 import org.kde.kirigami as Kirigami
 
 // https://doc.qt.io/qt-6/qtgraphicaleffects5-index.html
-import Qt5Compat.GraphicalEffects as QtGraphicalEffects // TODO Deprecated in Qt6
+import Qt5Compat.GraphicalEffects as QtGraphicalEffects
 
 
 QQC2.TextField {
@@ -144,8 +144,7 @@ QQC2.TextField {
 				dialogLoader.active = false
 			}
 			onRejected: {
-				// This event is also triggered when the user clicks outside the popup modal.
-				// TODO Find a way to only trigger when Cancel is clicked.
+				// Qt also rejects the dialog when the user clicks outside the modal.
 				colorField.text = initColor
 				dialogLoader.active = false
 			}

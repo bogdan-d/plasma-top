@@ -176,5 +176,4 @@ NVML support is feature-gated and falls back non-fatally to `nvidia-smi`.
 Rust tests cover domain rules, config, rendering, sensors, adapter traces,
 runtime concurrency, daemon lifecycle, CLI processes, packaging, and applet
 integration. Fixed compatibility corpora live with those tests. Full commands
-live in [DEVELOPMENT.md](DEVELOPMENT.md). Historical rewrite evidence lives in
-[`plans/`](../plans/README.md).
+live in [DEVELOPMENT.md](DEVELOPMENT.md). Deferred work lives in [`todo/`](../todo/).

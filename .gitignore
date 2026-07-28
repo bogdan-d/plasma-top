@@ -6,5 +6,3 @@ rust/target/
 
 # Tooling caches / agent config (not part of the shipped tool)
 .claude/
-.ruff_cache/
-.pytest_cache/
