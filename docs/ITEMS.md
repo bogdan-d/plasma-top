@@ -1,29 +1,18 @@
 # Items reference
 
-Every item you can put in `config.toml`, what it shows, and an example of the
-row it renders. This is the plain-language companion to the token naming: you
-should never need to decode a name — find the thing you want here and copy the
-token.
+Every item you can put in `config.toml`, what it shows, and an example of the row it renders. This is the plain-language companion to the token naming: you should never need to decode a name — find the thing you want here and copy the token.
 
-The authoritative, always-current list of tokens (and where each one is allowed)
-is `plasma-top list-items`. This file adds the descriptions and examples.
+The authoritative, always-current list of tokens (and where each one is allowed) is `plasma-top list-items`. This file adds the descriptions and examples.
 
-**How to read the examples.** Values are illustrative, not live. In the
-**tooltip** a row is `label: value` (the label carries a glyph in front of the
-word); in the **panel** the same item is drawn as the glyph alone followed by
-its value, to stay compact. Sparklines/bars are shown here with unicode blocks
-(`▁▂▃▅▇█`, `⣀⣤⣶⣿`) standing in for the real Nerd Font drawing.
+**How to read the examples.** Values are illustrative, not live. In the **tooltip** a row is `label: value` (the label carries a glyph in front of the word); in the **panel** the same item is drawn as the glyph alone followed by its value, to stay compact. Sparklines/bars are shown here with unicode blocks (`▁▂▃▅▇█`, `⣀⣤⣶⣿`) standing in for the real Nerd Font drawing.
 
-A token is **bare** when the metric has one intrinsic rendering. Generic forms
-use a `:suffix`; `plasma-top list-items` is the authoritative token list.
+A token is **bare** when the metric has one intrinsic rendering. Generic forms use a `:suffix`; `plasma-top list-items` is the authoritative token list.
 
 ---
 
 ## CPU & memory
 
-`cpu_usage` and `mem_usage` are the only items with a recorded history, so they
-are the only ones with a visual menu. The seven suffixed forms below exist for
-both — `mem_usage:bar`, `mem_usage:spark`, … mirror `cpu_usage` exactly.
+`cpu_usage` and `mem_usage` are the only items with a recorded history, so they are the only ones with a visual menu. The seven suffixed forms below exist for both — `mem_usage:bar`, `mem_usage:spark`, … mirror `cpu_usage` exactly.
 
 | Token | Where | What it shows | Example row |
 | --- | --- | --- | --- |

@@ -22,10 +22,6 @@ Project authorities:
 - `tools/qml_verify.sh`
 - `tools/p6_qt_matrix.sh`
 
-The Qt Company R&D `agent-skills` repository was safety-reviewed at commit
-`71d6c10da78b9a764468ae11c86ab3bc4ca4921f`. No upstream executable or skill
-was vendored. Applicable ideas were restated here because its generic Qt app,
-CMake, test-runner, and multi-agent assumptions do not match this plasmoid.
+The Qt Company R&D `agent-skills` repository was safety-reviewed at commit `71d6c10da78b9a764468ae11c86ab3bc4ca4921f`. No upstream executable or skill was vendored. Applicable ideas were restated here because its generic Qt app, CMake, test-runner, and multi-agent assumptions do not match this plasmoid.
 
-This skill contains Markdown only. It installs nothing, executes nothing, and
-does not configure network-connected tools.
+This skill contains Markdown only. It installs nothing, executes nothing, and does not configure network-connected tools.

@@ -13,8 +13,7 @@ Review every direct dependency here before updating `Cargo.lock`.
 | [`signal-hook`](https://github.com/vorner/signal-hook) | 0.3 | MIT OR Apache-2.0 | Safe SIGINT/SIGTERM flag registration. Uses `signal-hook-registry` and `libc`; no native build step. |
 | [`serde_json`](https://github.com/serde-rs/json) | 1 | MIT OR Apache-2.0 | Decode `busctl --json=short` replies without native D-Bus bindings. Pure Rust; uses `itoa`, `memchr`, and `zmij`. |
 
-PlasmaTop is GPL-2.0-or-later. Dependencies with incompatible licenses, such as
-GPLv3-only, AGPL, or proprietary terms, are blocked.
+PlasmaTop is GPL-2.0-or-later. Dependencies with incompatible licenses, such as GPLv3-only, AGPL, or proprietary terms, are blocked.
 
 ## Review checklist
 
@@ -31,5 +30,4 @@ GPLv3-only, AGPL, or proprietary terms, are blocked.
 
 - Keep `Cargo.lock` committed; do not mix dependency additions with bulk upgrades.
 - Keep optional native integrations behind Cargo features.
-- Production code remains `unsafe`-free. Prefer a reviewed safe wrapper over
-  introducing an unsafe boundary.
+- Production code remains `unsafe`-free. Prefer a reviewed safe wrapper over introducing an unsafe boundary.

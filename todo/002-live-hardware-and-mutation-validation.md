@@ -2,8 +2,7 @@
 
 ## Status
 
-Deferred until suitable hardware and permission to mutate host state exist.
-Fixture coverage is accepted; no known implementation defect exists.
+Deferred until suitable hardware and permission to mutate host state exist. Fixture coverage is accepted; no known implementation defect exists.
 
 ## Coverage still missing
 
@@ -15,10 +14,7 @@ Fixture coverage is accepted; no known implementation defect exists.
 - Default-route/interface switching.
 - Disk and device hotplug.
 
-Existing fixture tests cover success, absence, malformed data, failure,
-timeouts, clamps, caching, and reset behavior. Prior live testing used an AMD
-host without Intel/NVIDIA GPU, batteries, supported peripherals, or HID/Bolt
-devices; host mutation was intentionally forbidden.
+Existing fixture tests cover success, absence, malformed data, failure, timeouts, clamps, caching, and reset behavior. Prior live testing used an AMD host without Intel/NVIDIA GPU, batteries, supported peripherals, or HID/Bolt devices; host mutation was intentionally forbidden.
 
 ## Relevant files
 
@@ -37,8 +33,7 @@ devices; host mutation was intentionally forbidden.
 2. Run one hardware family per evidence session; do not claim unavailable paths.
 3. Compare readings with trustworthy host tools and defined sensor formulas.
 4. Exercise cache expiry, disappearance, reconnect, and recovery where safe.
-5. For mutations, verify daemon survival, bounded logs, refreshed discovery,
-   correct interface/device selection, and clean shutdown.
+5. For mutations, verify daemon survival, bounded logs, refreshed discovery, correct interface/device selection, and clean shutdown.
 6. Add focused fixtures only for defects found; do not duplicate existing cases.
 
 ## Done when
