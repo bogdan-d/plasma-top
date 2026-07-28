@@ -73,6 +73,8 @@ This installs below `$HOME/.local` and `$XDG_DATA_HOME` (default
 under `/usr`. Add `$HOME/.local/bin` to your interactive shell `PATH` if needed;
 the service and applet use explicit paths. To build elsewhere, pass an absolute
 host-compatible binary as `PIROSTATS_BINARY=/path/to/pirostats`.
+Preview resolved paths and commands without building or changing files with
+`./install.sh --user --dry-run` (`--dry` is an alias).
 
 Traditional system-wide install remains available:
 
@@ -91,7 +93,8 @@ Then add the widget: **right-click a panel → Add Widgets → search "PiroStats
 
 Re-run the same install command to upgrade. Remove a user install with
 `./uninstall.sh --user`, or a system install with `./uninstall.sh`. Configuration
-survives either command. If an existing widget keeps old system action paths
+survives either command. Preview removals with `--dry-run` or its `--dry` alias.
+If an existing widget keeps old system action paths
 after migration, remove and re-add that widget; the installer never rewrites
 Plasma's configuration database.
 

@@ -4,10 +4,107 @@ set -euo pipefail
 
 usage() {
 	cat <<'EOF'
-Usage: ./install.sh [--user]
+Usage: ./install.sh [--user] [--dry-run|--dry]
 
   --user  Install without sudo under ~/.local and XDG_DATA_HOME.
+  --dry-run, --dry  Print resolved paths and planned commands without running them.
 EOF
+}
+
+print_command() {
+	printf '  '
+	printf '%q ' "$@"
+	printf '\n'
+}
+
+print_dry_run() {
+	printf 'Dry run only; no system changes will be made.\n'
+	printf 'Mode: %s\nSource: %s\nBinary: %s\n' "$MODE" "$REPO_DIR" "$BINARY"
+	if [[ "$MODE" == user ]]; then
+		printf 'Data root: %s\nInstall tree: %s\nLauncher: %s\n' "$DATA_HOME" "$LIBDIR" "$LAUNCHER"
+		printf 'Systemd unit: %s\nIcon: %s\nLicenses: %s\n' "$UNIT" "$ICON" "$LICENSEDIR"
+	else
+		printf 'Install tree: %s\nLauncher: %s\n' "$LIBDIR" "$ROOT/usr/bin/pirostats"
+		printf 'Systemd unit: %s\nApplet: %s\n' \
+			"$ROOT/usr/lib/systemd/user/pirostats.service" \
+			"$ROOT/usr/share/plasma/plasmoids/$APPLET_ID"
+	fi
+
+	printf '\n1. Build or select binary\n'
+	if [[ -n "${PIROSTATS_BINARY:-}" ]]; then
+		printf '  Use prebuilt binary %q.\n' "$BINARY"
+	else
+		printf '  CARGO_TARGET_DIR=%q cargo build --manifest-path %q --release --locked --features nvml\n' \
+			"$REPO_DIR/rust/target" "$REPO_DIR/rust/Cargo.toml"
+	fi
+	print_command test -x "$BINARY"
+
+	if [[ "$MODE" == user ]]; then
+		printf '\n2. Stage and validate user-local files\n'
+		print_command mkdir -p "$DATA_HOME" "$BINDIR" "$UNITDIR" "$(dirname "$ICON")" "$LICENSEDIR"
+		print_command mktemp -d "$DATA_HOME/.pirostats.tmp.XXXXXX"
+		print_command mktemp -d "$TEMP_HOME/pirostats-applet.XXXXXX"
+		print_command cp -r "$REPO_DIR/style" "$REPO_DIR/lang" "$REPO_DIR/config" '$STAGE/'
+		print_command install -m755 "$BINARY" '$STAGE/pirostats'
+		printf '  Write ownership marker %q.\n' "$LIBDIR/.pirostats-install"
+		print_command '$STAGE/pirostats' list-items
+		printf '  Create launcher with PIROSTATS_CODE_ROOT=%q.\n' "$LIBDIR"
+		print_command install -m644 "$REPO_DIR/service/pirostats-user.service" "$UNIT"
+		print_command install -m644 "$REPO_DIR/plasmoid/package/contents/icons/pirostats.svg" "$ICON"
+		print_command install -m644 "$REPO_DIR/LICENSE" "$LICENSEDIR/LICENSE"
+		print_command install -m644 "$REPO_DIR/NOTICE" "$LICENSEDIR/NOTICE"
+
+		printf '\n3. Replace prior owned install atomically\n'
+		printf '  Refuse an existing install tree without %q.\n' "$LIBDIR/.pirostats-install"
+		printf '  Move prior owned tree to a temporary backup; restore it if replacement fails.\n'
+		print_command mv '$STAGE' "$LIBDIR"
+		printf '  Move launcher, unit, icon, license, and notice temporary files to paths above; remove backup.\n'
+
+		printf '\n4. Install or upgrade Plasma applet\n'
+		printf '  Copy applet to temporary staging and replace /usr/bin/pirostats actions with %q.\n' "$LAUNCHER"
+		print_command kpackagetool6 --type Plasma/Applet --show "$APPLET_ID"
+		printf '  If found:\n'
+		print_command kpackagetool6 --type Plasma/Applet --upgrade '$APPLET_STAGE'
+		printf '  If absent:\n'
+		print_command kpackagetool6 --type Plasma/Applet --install '$APPLET_STAGE'
+		print_command kbuildsycoca6
+
+		printf '\n5. Activate user service\n'
+		print_command systemctl --user daemon-reload
+		print_command systemctl --user enable pirostats
+		print_command systemctl --user restart pirostats
+		print_command systemctl --user is-active --quiet pirostats
+		printf '  On applet upgrade, restart plasmashell when kstart is available.\n'
+	else
+		printf '\n2. Replace system files\n'
+		print_command ${SUDO:+$SUDO} rm -rf "$LIBDIR"
+		print_command ${SUDO:+$SUDO} install -d "$LIBDIR"
+		print_command ${SUDO:+$SUDO} cp -r "$REPO_DIR/style" "$REPO_DIR/lang" "$REPO_DIR/config" "$LIBDIR/"
+		print_command ${SUDO:+$SUDO} install -m755 "$BINARY" "$LIBDIR/pirostats"
+		print_command ${SUDO:+$SUDO} install -Dm755 "$REPO_DIR/packaging/pirostats-launcher" "$ROOT/usr/bin/pirostats"
+		print_command ${SUDO:+$SUDO} install -Dm644 "$REPO_DIR/service/pirostats.service" "$ROOT/usr/lib/systemd/user/pirostats.service"
+		print_command ${SUDO:+$SUDO} install -Dm644 "$REPO_DIR/plasmoid/package/contents/icons/pirostats.svg" "$ROOT/usr/share/icons/hicolor/scalable/apps/pirostats.svg"
+		print_command ${SUDO:+$SUDO} install -Dm644 "$REPO_DIR/LICENSE" "$ROOT/usr/share/licenses/pirostats/LICENSE"
+		print_command ${SUDO:+$SUDO} install -Dm644 "$REPO_DIR/NOTICE" "$ROOT/usr/share/licenses/pirostats/NOTICE"
+		if [[ -n "$ROOT" ]]; then
+			printf '\n3. Stage applet in DESTDIR; service is not activated\n'
+			print_command rm -rf "$ROOT/usr/share/plasma/plasmoids/$APPLET_ID"
+			print_command install -d "$ROOT/usr/share/plasma/plasmoids/$APPLET_ID"
+			print_command cp -r "$REPO_DIR/plasmoid/package/." "$ROOT/usr/share/plasma/plasmoids/$APPLET_ID/"
+		else
+			printf '\n3. Install or upgrade global applet, then activate user service\n'
+			print_command kpackagetool6 --type Plasma/Applet --global --show "$APPLET_ID"
+			printf '  If found:\n'
+			print_command ${SUDO:+$SUDO} kpackagetool6 --type Plasma/Applet --global --upgrade "$REPO_DIR/plasmoid/package"
+			printf '  If absent:\n'
+			print_command ${SUDO:+$SUDO} kpackagetool6 --type Plasma/Applet --global --install "$REPO_DIR/plasmoid/package"
+			print_command kbuildsycoca6
+			print_command systemctl --user daemon-reload
+			print_command systemctl --user enable pirostats
+			print_command systemctl --user restart pirostats
+			printf '  On applet upgrade, restart plasmashell when kstart is available.\n'
+		fi
+	fi
 }
 
 canonical_path() {
@@ -27,13 +124,25 @@ remove_temp_tree() {
 }
 
 MODE=system
-case "${1:-}" in
-	"") ;;
-	--user) MODE=user ;;
-	-h|--help) usage; exit 0 ;;
-	*) echo "[error] unknown argument: $1" >&2; usage >&2; exit 2 ;;
-esac
-[[ $# -le 1 ]] || { echo "[error] expected at most one argument" >&2; exit 2; }
+DRY_RUN=false
+user_set=false
+dry_run_set=false
+for argument in "$@"; do
+	case "$argument" in
+		--user)
+			[[ "$user_set" == false ]] || { echo "[error] duplicate argument: $argument" >&2; exit 2; }
+			MODE=user
+			user_set=true
+			;;
+		--dry-run|--dry)
+			[[ "$dry_run_set" == false ]] || { echo "[error] duplicate dry-run argument: $argument" >&2; exit 2; }
+			DRY_RUN=true
+			dry_run_set=true
+			;;
+		-h|--help) usage; exit 0 ;;
+		*) echo "[error] unknown argument: $argument" >&2; usage >&2; exit 2 ;;
+	esac
+done
 if [[ "$MODE" == user && -n "${DESTDIR:-}" ]]; then
 	echo "[error] DESTDIR cannot be combined with --user" >&2
 	exit 2
@@ -71,12 +180,14 @@ if [[ "$MODE" == user ]]; then
 	[[ "$TEMP_HOME" != / ]] || { echo "[error] temporary directory resolves to /" >&2; exit 2; }
 	ROOT=""
 	SUDO=""
-	for command in kpackagetool6 systemctl; do
-		command -v "$command" >/dev/null || {
-			echo "[error] $command not found" >&2
-			exit 1
-		}
-	done
+	if [[ "$DRY_RUN" == false ]]; then
+		for command in kpackagetool6 systemctl; do
+			command -v "$command" >/dev/null || {
+				echo "[error] $command not found" >&2
+				exit 1
+			}
+		done
+	fi
 else
 	ROOT="${DESTDIR:-}"
 	if [[ -n "$ROOT" ]]; then
@@ -90,7 +201,7 @@ else
 	LIBDIR="$ROOT/usr/lib/pirostats"
 	SUDO=""
 	if [[ -z "$ROOT" && "$(id -u)" -ne 0 ]]; then SUDO=sudo; fi
-	if [[ -z "$ROOT" ]] && ! command -v kpackagetool6 >/dev/null; then
+	if [[ "$DRY_RUN" == false && -z "$ROOT" ]] && ! command -v kpackagetool6 >/dev/null; then
 		echo "[error] kpackagetool6 not found — Plasma 6 is required." >&2
 		exit 1
 	fi
@@ -103,13 +214,19 @@ if [[ -n "${PIROSTATS_BINARY:-}" ]]; then
 	}
 	BINARY="$PIROSTATS_BINARY"
 else
-	command -v cargo >/dev/null || {
-		echo "[error] cargo not found — Rust 1.85+ is required." >&2
-		exit 1
-	}
-	CARGO_TARGET_DIR="$REPO_DIR/rust/target" \
-		cargo build --manifest-path "$REPO_DIR/rust/Cargo.toml" --release --locked --features nvml
 	BINARY="$REPO_DIR/rust/target/release/pirostats"
+	if [[ "$DRY_RUN" == false ]]; then
+		command -v cargo >/dev/null || {
+			echo "[error] cargo not found — Rust 1.85+ is required." >&2
+			exit 1
+		}
+		CARGO_TARGET_DIR="$REPO_DIR/rust/target" \
+			cargo build --manifest-path "$REPO_DIR/rust/Cargo.toml" --release --locked --features nvml
+	fi
+fi
+if [[ "$DRY_RUN" == true ]]; then
+	print_dry_run
+	exit 0
 fi
 [[ -x "$BINARY" ]] || {
 	echo "[error] Rust binary not found or not executable: $BINARY" >&2

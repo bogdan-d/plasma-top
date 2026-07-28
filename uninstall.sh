@@ -3,7 +3,18 @@
 set -uo pipefail
 
 usage() {
-	printf 'Usage: ./uninstall.sh [--user]\n'
+	cat <<'EOF'
+Usage: ./uninstall.sh [--user] [--dry-run|--dry]
+
+  --user  Uninstall user-local files.
+  --dry-run, --dry  Print resolved paths and planned commands without changing files.
+EOF
+}
+
+print_command() {
+	printf '  '
+	printf '%q ' "$@"
+	printf '\n'
 }
 
 canonical_path() {
@@ -11,13 +22,25 @@ canonical_path() {
 }
 
 MODE=system
-case "${1:-}" in
-	"") ;;
-	--user) MODE=user ;;
-	-h|--help) usage; exit 0 ;;
-	*) echo "[error] unknown argument: $1" >&2; usage >&2; exit 2 ;;
-esac
-[[ $# -le 1 ]] || { echo "[error] expected at most one argument" >&2; exit 2; }
+DRY_RUN=false
+user_set=false
+dry_run_set=false
+for argument in "$@"; do
+	case "$argument" in
+		--user)
+			[[ "$user_set" == false ]] || { echo "[error] duplicate argument: $argument" >&2; exit 2; }
+			MODE=user
+			user_set=true
+			;;
+		--dry-run|--dry)
+			[[ "$dry_run_set" == false ]] || { echo "[error] duplicate dry-run argument: $argument" >&2; exit 2; }
+			DRY_RUN=true
+			dry_run_set=true
+			;;
+		-h|--help) usage; exit 0 ;;
+		*) echo "[error] unknown argument: $argument" >&2; usage >&2; exit 2 ;;
+	esac
+done
 if [[ "$MODE" == user && -n "${DESTDIR:-}" ]]; then
 	echo "[error] DESTDIR cannot be combined with --user" >&2
 	exit 2
@@ -68,6 +91,67 @@ remove_runtime_cache() {
 	rm -rf -- "$RUNTIME_REMOVE" "$CACHE_REMOVE" 2>/dev/null || true
 }
 
+print_user_dry_run() {
+	printf 'Dry run only; no system changes will be made.\n'
+	printf 'Mode: user\nInstall tree: %s\nOwnership marker: %s\n' \
+		"$LIBDIR" "$LIBDIR/.pirostats-install"
+	printf 'Launcher: %s\nSystemd unit: %s\nIcon: %s\nLicenses: %s\n' \
+		"$HOME/.local/bin/pirostats" "$DATA_HOME/systemd/user/pirostats.service" \
+		"$DATA_HOME/icons/hicolor/scalable/apps/pirostats.svg" "$DATA_HOME/licenses/pirostats"
+	printf 'Preserved config: %s\n' "${XDG_CONFIG_HOME:-$HOME/.config}/pirostats"
+	if [[ ! -f "$LIBDIR/.pirostats-install" ]]; then
+		printf '\nNo uninstall commands would run: owned-install marker not found.\n'
+		return
+	fi
+	printf 'Runtime data: %s\nCache: %s\n' "$RUNTIME_REMOVE" "$CACHE_REMOVE"
+	printf '\n1. Stop service and remove applet\n'
+	print_command systemctl --user disable --now pirostats
+	printf '  If kpackagetool6 is available:\n'
+	print_command kpackagetool6 --type Plasma/Applet --remove "$APPLET_ID"
+	printf '\n2. Remove user-local files\n'
+	print_command rm -f -- "$HOME/.local/bin/pirostats"
+	print_command rm -rf -- "$LIBDIR"
+	print_command rm -f -- "$DATA_HOME/systemd/user/pirostats.service"
+	print_command rm -f -- "$DATA_HOME/icons/hicolor/scalable/apps/pirostats.svg"
+	print_command rm -rf -- "$DATA_HOME/licenses/pirostats"
+	printf '\n3. Reload service manager and remove runtime/cache data\n'
+	print_command systemctl --user daemon-reload
+	print_command rm -rf -- "$RUNTIME_REMOVE" "$CACHE_REMOVE"
+}
+
+print_system_dry_run() {
+	printf 'Dry run only; no system changes will be made.\n'
+	printf 'Mode: system\nInstall tree: %s\nLauncher: %s\nSystemd unit: %s\n' \
+		"$ROOT/usr/lib/pirostats" "$ROOT/usr/bin/pirostats" \
+		"$ROOT/usr/lib/systemd/user/pirostats.service"
+	printf 'Icon: %s\nLicenses: %s\nApplet: %s\n' \
+		"$ROOT/usr/share/icons/hicolor/scalable/apps/pirostats.svg" \
+		"$ROOT/usr/share/licenses/pirostats" \
+		"$ROOT/usr/share/plasma/plasmoids/$APPLET_ID"
+	if [[ -z "$ROOT" ]]; then
+		printf 'Runtime data: %s\nCache: %s\nPreserved config: %s\n' \
+			"$RUNTIME_REMOVE" "$CACHE_REMOVE" "${XDG_CONFIG_HOME:-${HOME:-~}/.config}/pirostats"
+		printf '\n1. Stop user service\n'
+		print_command systemctl --user disable --now pirostats
+	fi
+	printf '\n2. Remove installed files\n'
+	print_command ${SUDO:+$SUDO} rm -f -- "$ROOT/usr/lib/systemd/user/pirostats.service"
+	print_command ${SUDO:+$SUDO} rm -f -- "$ROOT/usr/bin/pirostats"
+	print_command ${SUDO:+$SUDO} rm -rf -- "$ROOT/usr/lib/pirostats"
+	print_command ${SUDO:+$SUDO} rm -f -- "$ROOT/usr/share/icons/hicolor/scalable/apps/pirostats.svg"
+	print_command ${SUDO:+$SUDO} rm -rf -- "$ROOT/usr/share/licenses/pirostats"
+	if [[ -n "$ROOT" ]]; then
+		print_command rm -rf -- "$ROOT/usr/share/plasma/plasmoids/$APPLET_ID"
+		printf '\nDESTDIR staging only; no service or live Plasma commands would run.\n'
+		return
+	fi
+	printf '\n3. Remove global applet, reload service manager, and clear runtime/cache data\n'
+	printf '  If kpackagetool6 is available:\n'
+	print_command ${SUDO:+$SUDO} kpackagetool6 --type Plasma/Applet --global --remove "$APPLET_ID"
+	print_command systemctl --user daemon-reload
+	print_command rm -rf -- "$RUNTIME_REMOVE" "$CACHE_REMOVE"
+}
+
 if [[ "$MODE" == user ]]; then
 	[[ "${HOME:-}" == /* && "$HOME" != / ]] || {
 		echo "[error] --user requires an absolute, non-root HOME" >&2
@@ -92,10 +176,18 @@ if [[ "$MODE" == user ]]; then
 		exit 1
 	fi
 	if [[ ! -f "$LIBDIR/.pirostats-install" ]]; then
-		echo "No owned user-local PiroStats install found under $DATA_HOME."
+		if [[ "$DRY_RUN" == true ]]; then
+			print_user_dry_run
+		else
+			echo "No owned user-local PiroStats install found under $DATA_HOME."
+		fi
 		exit 0
 	fi
 	prepare_runtime_cache || exit 2
+	if [[ "$DRY_RUN" == true ]]; then
+		print_user_dry_run
+		exit 0
+	fi
 
 	systemctl --user disable --now pirostats 2>/dev/null || true
 	if command -v kpackagetool6 >/dev/null; then
@@ -126,7 +218,16 @@ SUDO=""
 if [[ -z "$ROOT" && "$(id -u)" -ne 0 ]]; then SUDO=sudo; fi
 if [[ -z "$ROOT" ]]; then
 	prepare_runtime_cache || exit 2
+	if [[ "$DRY_RUN" == true ]]; then
+		print_system_dry_run
+		exit 0
+	fi
 	systemctl --user disable --now pirostats 2>/dev/null || true
+fi
+
+if [[ "$DRY_RUN" == true ]]; then
+	print_system_dry_run
+	exit 0
 fi
 
 $SUDO rm -f -- "$ROOT/usr/lib/systemd/user/pirostats.service"

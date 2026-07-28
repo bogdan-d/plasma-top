@@ -69,6 +69,16 @@ if XDG_DATA_HOME=/usr/local/share "$REPO_DIR/install.sh" --user >/dev/null 2>&1;
 if XDG_DATA_HOME=/tmp/../usr/local/share "$REPO_DIR/install.sh" --user >/dev/null 2>&1; then exit 1; fi
 [[ ! -e "$XDG_DATA_HOME/pirostats" ]]
 
+# Both dry-run spellings resolve paths without invoking install dependencies or writing files.
+: > "$FAKE_LOG"
+"$REPO_DIR/install.sh" --user --dry-run > "$TMP/dry-run.log"
+"$REPO_DIR/install.sh" --dry --user > "$TMP/dry.log"
+[[ ! -s "$FAKE_LOG" && ! -e "$XDG_DATA_HOME/pirostats" ]]
+grep -Fq "Install tree: $XDG_DATA_HOME/pirostats" "$TMP/dry-run.log"
+grep -Fq "Launcher: $HOME/.local/bin/pirostats" "$TMP/dry-run.log"
+grep -Fq 'systemctl --user restart pirostats' "$TMP/dry-run.log"
+grep -Fq 'Dry run only; no system changes will be made.' "$TMP/dry.log"
+
 # Uninstall and install refuse same-named paths without ownership marker.
 mkdir -p "$XDG_DATA_HOME/pirostats" "$HOME/.local/bin"
 printf 'keep data\n' > "$XDG_DATA_HOME/pirostats/unrelated"
@@ -101,6 +111,16 @@ grep -Fq "&quot;$LAUNCHER&quot; page next" "$FAKE_APPLET/contents/config/main.xm
 "$LAUNCHER" list-items >/dev/null
 [[ ! -L "$USER_ROOT/pirostats" ]]
 ! grep -Fq "$REPO_DIR" "$LAUNCHER"
+
+# Uninstall dry runs report every removal target without stopping or deleting anything.
+: > "$FAKE_LOG"
+"$REPO_DIR/uninstall.sh" --user --dry-run > "$TMP/uninstall-dry-run.log"
+"$REPO_DIR/uninstall.sh" --dry --user > "$TMP/uninstall-dry.log"
+[[ ! -s "$FAKE_LOG" && -x "$USER_ROOT/pirostats" && -x "$LAUNCHER" ]]
+grep -Fq "Install tree: $USER_ROOT" "$TMP/uninstall-dry-run.log"
+grep -Fq "Runtime data: $XDG_RUNTIME_DIR/pirostats" "$TMP/uninstall-dry-run.log"
+grep -Fq 'systemctl --user disable --now pirostats' "$TMP/uninstall-dry-run.log"
+grep -Fq 'Dry run only; no system changes will be made.' "$TMP/uninstall-dry.log"
 
 printf 'keep\n' > "$USER_ROOT/keep"
 if PIROSTATS_BINARY="$TMP/missing" "$REPO_DIR/install.sh" --user >/dev/null 2>&1; then
