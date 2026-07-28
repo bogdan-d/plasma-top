@@ -465,14 +465,14 @@ mod typed {
             Self {
                 disk_usage: true,
                 disk_smart: true,
-                cpu_temp: true,
-                gpu_nvidia_temp: true,
+                cpu_temp: false,
+                gpu_nvidia_temp: false,
                 hd_temp: true,
                 battery_sys: true,
                 battery_mouse: true,
                 battery_kbd: true,
                 server_check: false,
-                load_avg: true,
+                load_avg: false,
             }
         }
     }
@@ -1193,9 +1193,10 @@ mod tests {
     fn notifications_defaults_match_python() {
         let n = NotificationConfig::default();
         assert!(n.disk_usage);
-        assert!(n.cpu_temp);
+        assert!(!n.cpu_temp);
+        assert!(!n.gpu_nvidia_temp);
         assert!(!n.server_check);
-        assert!(n.load_avg);
+        assert!(!n.load_avg);
     }
 
     #[test]
