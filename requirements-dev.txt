@@ -1,8 +1,0 @@
-# Dependencies for the retained Python oracle and its validation tools.
-# None are production runtime dependencies.
-psutil
-pytest
-ruff
-vulture
-
-# PyGObject remains optional live-oracle coverage and is distro-provided.

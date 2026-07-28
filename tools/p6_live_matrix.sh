@@ -4,7 +4,7 @@ set -euo pipefail
 
 usage() {
     cat <<'EOF'
-Usage: tools/p6_live_matrix.sh [--python] [--no-build] [--interactive|--planar]
+Usage: tools/p6_live_matrix.sh [--no-build] [--interactive|--planar]
 
 Uses KDE's plasmoidviewer to exercise real horizontal and vertical compact
 representations, then its planar representation. Automatic checks prove load,
@@ -13,21 +13,17 @@ reads, and runtime-root discipline. --interactive keeps a horizontal instance
 open for hover/pin/wheel/resize validation. --planar opens the desktop form for
 background/outline/font/config-page validation.
 
-The Rust daemon is used by default. --python uses the Python daemon instead.
-
-Evidence is written to .test-artifacts/{p6,python}/live/ for the selected backend.
+Evidence is written to .test-artifacts/p6/live/.
 No system or production runtime path is modified. On immutable hosts,
 plasmoidviewer may be a Distrobox export.
 EOF
 }
 
 build=true
-backend=rust
 interactive=false
 planar=false
 while (($#)); do
     case "$1" in
-        --python) backend=python; build=false ;;
         --no-build) build=false ;;
         --interactive) interactive=true ;;
         --planar) planar=true ;;
@@ -39,7 +35,7 @@ done
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 binary="$repo_dir/rust/target/release/pirostats"
-artifact_root="$repo_dir/.test-artifacts/$([[ "$backend" == rust ]] && echo p6 || echo python)/live"
+artifact_root="$repo_dir/.test-artifacts/p6/live"
 original_runtime="${XDG_RUNTIME_DIR:-}"
 original_home="$HOME"
 original_config="${XDG_CONFIG_HOME:-$HOME/.config}"
@@ -96,19 +92,10 @@ for command in python3 awk; do
         exit 1
     }
 done
-if [[ "$backend" == rust && "$build" == true ]]; then
+if [[ "$build" == true ]]; then
     cargo build --manifest-path "$repo_dir/rust/Cargo.toml" --release --locked
 fi
-if [[ "$backend" == rust ]]; then
-    [[ -x "$binary" ]] || { echo "Rust binary not found: $binary" >&2; exit 1; }
-else
-    python="$repo_dir/.venv/bin/python"
-    [[ -x "$python" ]] || python="$(command -v python3)"
-    "$python" -c 'import psutil' 2>/dev/null || {
-        echo "Python backend requires psutil; create .venv from requirements-dev.txt" >&2
-        exit 1
-    }
-fi
+[[ -x "$binary" ]] || { echo "Rust binary not found: $binary" >&2; exit 1; }
 
 rm -rf "$artifact_root"
 mkdir -p "$artifact_root"
@@ -156,17 +143,10 @@ cat >"$test_root/bin/cat" <<'EOF'
 printf '%s\tcat\t%s\n' "$(date +%s.%N)" "$*" >>"$PIROSTATS_QML_TRACE"
 exec /usr/bin/cat "$@"
 EOF
-if [[ "$backend" == rust ]]; then
-    cat >"$test_root/bin/backend" <<EOF
+cat >"$test_root/bin/backend" <<EOF
 #!/usr/bin/env bash
 exec "$binary" "\$@"
 EOF
-else
-    cat >"$test_root/bin/backend" <<EOF
-#!/usr/bin/env bash
-exec "$python" "$repo_dir/pirostats" "\$@"
-EOF
-fi
 cat >"$test_root/bin/pirostats" <<EOF
 #!/usr/bin/env bash
 printf '%s\\tpirostats\\t%s\\n' "\$(date +%s.%N)" "\$*" >>"\$PIROSTATS_QML_TRACE"

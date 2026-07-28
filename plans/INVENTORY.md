@@ -10,7 +10,7 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 
 | Done | Current file | Disposition | Lane | Required verification |
 |---|---|---|---|---|
-| [x] | `.github/workflows/baseline.yml` | aggregate Rust + retained Python oracle CI | `SCAFFOLD/CUTOVER` | locked Rust fmt/check/clippy/test/doc, Python pytest, and user-install lifecycle jobs |
+| [x] | `.github/workflows/baseline.yml` | Rust-only aggregate CI after P8.4 | `SCAFFOLD/CUTOVER` | locked Rust fmt/check/clippy/test/doc and user-install lifecycle jobs; Python oracle job retired with runtime source |
 | [x] | `.gitignore` | update only for generated Rust artifacts | `SCAFFOLD/QML-VERIFY` | ignore audit (Phase 1: `rust/target/` added; QML-VERIFY re-audits at Gate 6) |
 | [x] | `.test-artifacts/.gitignore` | retain disposable evidence root without generated artifacts | `BASE/QML-VERIFY` | ignore audit; no generated evidence tracked |
 | [x] | `AGENTS.md` | current Rust-focused agent constraints | `CUTOVER` | production paths, gates, and load-bearing contract audit |
@@ -47,10 +47,10 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [x] | `plasmoid/package/contents/ui/libconfig/TextField.qml` | preserve; edit only if approved | `QML-VERIFY` | T6 config-page load/interaction; unchanged |
 | [x] | `plasmoid/package/contents/ui/libconfig/TextFormat.qml` | preserve; edit only if approved | `QML-VERIFY` | T6 config-page load/interaction; unchanged |
 | [x] | `plasmoid/package/contents/ui/libconfig/VertAlign.qml` | preserve; edit only if approved | `QML-VERIFY` | T6 config-page load/interaction; unchanged |
-| [x] | `plasmoid/package/contents/ui/main.qml` | preserve; edit only if approved | `QML-VERIFY` | T6 horizontal/vertical/planar geometry, watcher/lazy read, hover, pin, wheel, resize, desktop appearance; unchanged |
+| [x] | `plasmoid/package/contents/ui/main.qml` | preserve behavior; P8.4 updates two stale source-path comments only | `QML-VERIFY` | T6 horizontal/vertical/planar geometry, watcher/lazy read, hover, pin, wheel, resize, desktop appearance; executable QML unchanged |
 | [x] | `plasmoid/package/metadata.json` | preserve; edit only if approved | `QML-VERIFY` | correct lowercase id loaded through Application + panel runners; unchanged |
-| [x] | `requirements-dev.txt` | retain Python oracle dependencies until P8.4 | `BASE/CUTOVER` | clean venv install + full Python oracle gate |
-| [x] | `ruff.toml` | retain until Python removal | `BASE/CUTOVER` | ruff gate |
+| [x] | `requirements-dev.txt` | removed in P8.4; contained oracle-only `psutil`/pytest/Ruff/Vulture, never production dependencies | `BASE/CUTOVER` | P8.2 clean-venv oracle gate preserved in handoff; P8.4 production manifest audit proves no Python dependency |
+| [x] | `ruff.toml` | removed in P8.4 with the retired Python source lint gate | `BASE/CUTOVER` | final Ruff pass preserved in P8.2 handoff; Rust Clippy remains mandatory |
 | [x] | `rust-toolchain.toml` | new; pin stable Rust + clippy/rustfmt components | `SCAFFOLD` | P1.1 toolchain shell + toolchain present in CI |
 | [x] | `rust/Cargo.lock` | new; committed per parity plan | `SCAFFOLD` | P1.1 lockfile present + `cargo fetch --locked` no-op |
 | [x] | `rust/Cargo.toml` | new; single crate metadata, `test-support` feature | `SCAFFOLD` | P1.1 + P1.2 feature gate; integration-owner path after freeze |
@@ -123,25 +123,25 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [x] | `screenshots/process.png` | preserve reference | `QML-VERIFY` | visual comparison; regenerate only approved |
 | [x] | `service/pirostats.service` | preserve for native binary | `PACKAGING` | staged manifest retains `ExecStart=/usr/bin/pirostats daemon` |
 | [x] | `service/pirostats-user.service` | add user-local path variant | `CUTOVER` | normalized unit parity + `%h/.local/bin/pirostats` assertion |
-| [x] | `src/__init__.py` | port then remove | `CUTOVER` | empty oracle package marker; no production or callable behavior; remove in P8.4 |
-| [x] | `src/bolt_battery.py` | port then remove | `HID` | all seven symbols mapped to `rust/src/sensors/hid.rs`; fixed Rust packet assertions match Python-oracle packet bytes; discovery/error/name/battery branches covered by 16 focused tests |
-| [x] | `src/chart.py` | port then remove | `CHART` | symbol + differential parity via Rust chart pixel corpus |
-| [x] | `src/config.py` | port then remove | `CONFIG` | symbol + differential parity |
-| [x] | `src/daemon.py` | port then remove | `DAEMON-CLI` | symbol + differential parity |
-| [x] | `src/formatter.py` | port then remove | `FORMATTER/PAGES` | main panel/tooltip and deep-dive formatter symbols mapped to Rust formatter/page suites |
-| [x] | `src/forms.py` | port then remove | `DOMAIN` | symbol + differential parity |
-| [x] | `src/items.py` | port then remove | `FORMATTER` | reusable cell/row builders mapped to Rust formatter/cells tests and byte goldens |
-| [x] | `src/metrics.py` | port then remove | `DOMAIN` | symbol + differential parity |
-| [x] | `src/mono_render.py` | port then remove | `RENDER-CORE` | symbol + differential parity |
-| [x] | `src/notifier.py` | port then remove | `NOTIFY` | all five symbols mapped to Rust notification boundary/state machine with exact payload and transition tests |
-| [x] | `src/pages.py` | port then remove | `PAGES` | all current page symbols mapped to `rust/src/page_commands.rs` + `rust/src/render/pages.rs`; exact helper/page HTML corpora and command fault traces |
-| [x] | `src/pagestate.py` | port then remove | `RUNTIME` | symbol + differential parity |
-| [x] | `src/registry.py` | port then remove | `DOMAIN/FORMATTER` | token/capability and render-dispatch halves mapped to verified Rust domain/formatter suites |
-| [x] | `src/render_model.py` | port then remove | `RENDER-CORE` | symbol + differential parity |
-| [x] | `src/runtime.py` | port then remove | `RUNTIME` | symbol + differential parity |
-| [x] | `src/sensors.py` | port then remove | `SENSOR-*/COLLECTOR` | symbol + differential parity |
-| [x] | `src/traces.py` | port then remove | `TRACES` | symbol + differential parity |
-| [x] | `src/units.py` | port then remove | `DOMAIN` | symbol + differential parity |
+| [x] | `src/__init__.py` | removed in P8.4 | `CUTOVER` | empty package marker; no callable or runtime behavior |
+| [x] | `src/bolt_battery.py` | removed in P8.4 after verified Rust port | `HID` | all seven symbols mapped to `rust/src/sensors/hid.rs`; fixed packet bytes plus 16 discovery/error/name/battery tests |
+| [x] | `src/chart.py` | removed in P8.4 after verified Rust port | `CHART` | `rust/src/render/chart.rs` decoded-pixel corpus and PNG structure/CRC tests |
+| [x] | `src/config.py` | removed in P8.4 after verified Rust port | `CONFIG` | `rust/src/config/` differential corpus, 50 mapped cases, and shipped-config integration tests |
+| [x] | `src/daemon.py` | removed in P8.4 after verified Rust port | `DAEMON-CLI` | Rust process CLI, lifecycle, QML, P7 soak, and accepted P8.2 live-session evidence |
+| [x] | `src/formatter.py` | removed in P8.4 after verified Rust port | `FORMATTER/PAGES` | exact Rust panel/tooltip goldens and deep-page formatter suites |
+| [x] | `src/forms.py` | removed in P8.4 after verified Rust port | `DOMAIN` | exhaustive Rust form/surface invariant and differential tests |
+| [x] | `src/items.py` | removed in P8.4 after verified Rust port | `FORMATTER` | Rust formatter/cells tests and byte-identical goldens |
+| [x] | `src/metrics.py` | removed in P8.4 after verified Rust port | `DOMAIN` | exhaustive Rust metric/capability registry tests |
+| [x] | `src/mono_render.py` | removed in P8.4 after verified Rust port | `RENDER-CORE` | five-plan fixed byte corpus, width sweep, and table-free invariant |
+| [x] | `src/notifier.py` | removed in P8.4 after verified Rust port | `NOTIFY` | exact Rust notification payload/transition/failure corpus |
+| [x] | `src/pages.py` | removed in P8.4 after verified Rust port | `PAGES` | exact Rust page helper/HTML corpora and command fault traces |
+| [x] | `src/pagestate.py` | removed in P8.4 after verified Rust port | `RUNTIME` | Rust page-state matrix and 32-thread flock stress test |
+| [x] | `src/registry.py` | removed in P8.4 after verified Rust port | `DOMAIN/FORMATTER` | 51-row token corpus, 51×2 placement matrix, and formatter dispatch tests |
+| [x] | `src/render_model.py` | removed in P8.4 after verified Rust port | `RENDER-CORE` | Rust model grouping/threshold/inline fixed corpora |
+| [x] | `src/runtime.py` | removed in P8.4 after verified Rust port | `RUNTIME` | Rust path, directory, atomic-publication, and process integration tests |
+| [x] | `src/sensors.py` | removed in P8.4 after verified Rust port | `SENSOR-*/COLLECTOR` | per-family fixture/fault suites, 47 collector tests, and P7 live differential evidence |
+| [x] | `src/traces.py` | removed in P8.4 after verified Rust port | `TRACES` | 12 focused Rust tests with fixed byte corpus and combo-row parity |
+| [x] | `src/units.py` | removed in P8.4 after verified Rust port | `DOMAIN` | mapped Rust unit formatting and domain differential evidence |
 | [x] | `style/icons.toml` | preserve | `CONFIG/QML-VERIFY` | byte/key/selector parity |
 | [x] | `style/style-dark.css` | preserve | `CONFIG/QML-VERIFY` | byte/key/selector parity |
 | [x] | `style/style-light.css` | preserve | `CONFIG/QML-VERIFY` | byte/key/selector parity |
@@ -169,11 +169,11 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [x] | `tools/inventory_ast_reporter.py` | preserve/update invocation | `BASE/INTEGRATION` | tool smoke + exact inventory gate |
 | [ ] | `tools/manual_tooltip_preview.py` | preserve/update invocation | `BASE/QML-VERIFY` | tool smoke + target parity |
 | [x] | `tools/python_oracle.py` | retain Python CLI as explicit stabilization oracle | `CUTOVER` | P8.1 oracle CLI smoke; never installed |
-| [x] | `tools/python_live_matrix.sh` | retained Python live-probe matrix for stabilization comparisons | `BASE/HARDWARE` | Phase 7 near-simultaneous Python/Rust probe evidence; never installed |
-| [x] | `tools/p6_live_matrix.sh` | add isolated horizontal/vertical/planar applet gate | `QML-VERIFY` | geometry/orientation/watcher/lazy/action traces + human interaction evidence |
+| [x] | `tools/python_live_matrix.sh` | removed in P8.4 with obsolete Python live launch path | `BASE/HARDWARE` | Phase 7 comparisons preserved in hardware handoff; `tools/p6_live_matrix.sh` remains Rust-only |
+| [x] | `tools/p6_live_matrix.sh` | isolated Rust-only horizontal/vertical/planar applet gate after P8.4 | `QML-VERIFY` | geometry/orientation/watcher/lazy/action traces + human interaction evidence; obsolete `--python` launch removed |
 | [x] | `tools/p6_png_diff.py` | add strict fixed-image comparator | `QML-VERIFY` | dimension/mean/max/fraction synthetic threshold check |
-| [x] | `tools/p6_qt_matrix.sh` | add fixed-host all-page/theme Qt matrix | `QML-VERIFY` | 24 valid screenshots + table-free/golden pre-gates + environment manifest |
-| [x] | `tools/p6_package_test.sh` | add disposable native package gate | `PACKAGING` | repo/`/tmp`-only install, upgrade, Python rollback, uninstall, user-file, AUR manifest checks |
+| [x] | `tools/p6_qt_matrix.sh` | fixed-host all-page/theme Qt matrix with Rust golden pre-gate after P8.4 | `QML-VERIFY` | 24 valid screenshots + table-free/Rust-golden pre-gates + environment manifest; Python pytest pre-gate retired |
+| [x] | `tools/p6_package_test.sh` | disposable native package gate | `PACKAGING` | repo/`/tmp`-only legacy-layout upgrade, repeat native upgrade, uninstall, user-file, and AUR manifest checks; rollback source remains at tag `pre-rust-cutover` |
 | [x] | `tools/qml_verify.sh` | add isolated Rust-daemon/applet launcher | `QML-VERIFY` | bash syntax + correct-id Application smoke; disposable XDG/runtime roots; no system paths |
 | [x] | `tools/qt_shot.py` | preserve/update invocation | `BASE/QML-VERIFY` | all-page dark/light/overlay matrix + plasmoid ANSI path |
 | [x] | `tools/user_install_test.sh` | add disposable user-local lifecycle gate | `CUTOVER` | no sudo/global calls; spaced paths; install/upgrade/repeat uninstall/config preservation |
@@ -182,6 +182,10 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 ## Production Python callable inventory
 
 Every top-level function/class and class method under `src/`, plus the root entry point, is listed. Nested local functions/closures are covered through their enclosing callable branch/call-edge ledger generated in Phase 0.
+
+P8.4 removed every file in this section only after all rows were checked and
+mapped to the cited Rust tests/evidence. Line numbers and call edges below are a
+frozen pre-removal ledger, not live Python source.
 
 ### `src/__init__.py`
 
@@ -1545,6 +1549,9 @@ legend as the rest of this file (U/D/F/I/L/P + E0–E5).
 | [x] | `compute_*` (pure cores) | functions | `CONFIG` | U: pure helpers tested without host env mutation |
 
 ## Call-edge accounting gate
+
+This is the frozen Phase 0/P8.2 Python ledger. Its exact reporter gate passed
+before P8.4 removal; post-removal inventory enforcement is deferred to P8.5.
 
 Phase 0 must generate a machine-readable AST call-edge report for every Python code file. `tests/test_inventory.py` runs `tools/inventory_ast_reporter.py` across `src`, `tests`, and `tools`, and this table must match the reporter's per-file `Call sites` and `Unique syntactic callees` counts. Dynamic calls/closures are assigned to enclosing symbol and tested by ordered dependency traces. The checked static call totals are:
 

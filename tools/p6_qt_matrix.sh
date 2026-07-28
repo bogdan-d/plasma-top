@@ -39,11 +39,9 @@ fi
 rm -rf "$artifact_root"
 mkdir -p "$artifact_root"/{html,png,logs}
 
-# Existing deterministic gates establish Python/Rust source parity before Qt.
+# The deterministic Rust golden gate runs before Qt rasterization.
 cargo test --manifest-path "$repo_dir/rust/Cargo.toml" --all-features \
     golden -- --nocapture >"$artifact_root/logs/rust-golden.log" 2>&1
-"$python" -m pytest "$repo_dir/tests/test_golden_render.py" -q \
-    >"$artifact_root/logs/python-golden.log" 2>&1
 
 make_config() {
     local variant="$1" dir="$2"

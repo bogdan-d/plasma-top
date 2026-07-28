@@ -164,7 +164,7 @@
 
 /* ── Common ───────────────────────────────────────────────────────────────── */
 
-/* Threshold colors, assigned dynamically in Python from value + thresholds. */
+/* Threshold colors, assigned dynamically by Rust from value + thresholds. */
 .good { color: #fcfcfc; }
 .warn { color: #ffff65; }
 .crit { color: #ff6565; }

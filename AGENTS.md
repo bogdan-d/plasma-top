@@ -1,13 +1,11 @@
 ## Working model
 
 PiroStats is a synchronous Rust daemon plus bundled Plasma applet. Rust under
-`rust/src/` is production-authoritative; Python under `src/` remains only as the
-temporary behavioral oracle during Phase 8 stabilization. `./pirostats` runs the
-Rust checkout with repository assets.
+`rust/src/` is the sole runtime implementation. `./pirostats` runs the Rust
+checkout with repository assets.
 
 Run commands from repository root. Development setup and full gates live in
-`docs/DEVELOPMENT.md`; `python3 tools/python_oracle.py ...` is the supported
-developer-facing Python oracle entrypoint.
+`docs/DEVELOPMENT.md`.
 
 ## Architecture boundaries
 
@@ -42,10 +40,8 @@ developer-facing Python oracle entrypoint.
 
 ## Validation
 
-Use full Rust fmt/check/clippy/test/doc plus retained Python pytest/ruff/vulture
-gates from `docs/DEVELOPMENT.md`. For intended HTML changes, update Python
-goldens first with `UPDATE_GOLDEN=1 python3 -m pytest tests/test_golden_render.py`,
-then prove Rust parity. Never weaken parity, lint, dead-code, or inventory gates.
+Use the full Rust fmt/check/clippy/test/doc gates from `docs/DEVELOPMENT.md`.
+Never weaken parity evidence, lint, dead-code, or inventory accounting.
 
 Read `docs/ITEMS.md` for item behavior, `docs/PERFORMANCE.md` before poll/cache
 changes, and `plans/STATUS.md` before migration/cutover work.

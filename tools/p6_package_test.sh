@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Disposable native install/upgrade/rollback/uninstall layout test.
+# Disposable native install/upgrade/uninstall layout test.
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -37,16 +37,14 @@ assert_native_layout() {
 		"$ROOT/usr/lib/pirostats/pirostats" list-items >/dev/null
 }
 
-stage_python_rollback() {
+stage_legacy_layout() {
 	rm -rf "$ROOT/usr/lib/pirostats"
 	mkdir -p "$ROOT/usr/lib/pirostats" "$ROOT/usr/bin"
-	cp -r "$REPO_DIR/src" "$REPO_DIR/style" "$REPO_DIR/lang" "$REPO_DIR/config" \
-		"$ROOT/usr/lib/pirostats/"
-	install -m755 "$REPO_DIR/tools/python_oracle.py" "$ROOT/usr/lib/pirostats/pirostats"
+	printf 'legacy package marker\n' > "$ROOT/usr/lib/pirostats/stale-runtime"
 	ln -sfn /usr/lib/pirostats/pirostats "$ROOT/usr/bin/pirostats"
 }
 
-stage_python_rollback
+stage_legacy_layout
 stage_native
 assert_native_layout
 printf 'stale upgrade file\n' > "$ROOT/usr/lib/pirostats/stale"
@@ -54,13 +52,6 @@ stage_native
 assert_native_layout
 test ! -e "$ROOT/usr/lib/pirostats/stale"
 
-stage_python_rollback
-test -d "$ROOT/usr/lib/pirostats/src"
-test -L "$ROOT/usr/bin/pirostats"
-test "$(cat "$HOME/.config/pirostats/config.toml")" = "user config"
-test "$(cat "$HOME/.cache/pirostats/geom")" = "cache"
-
-stage_native
 DESTDIR="$ROOT" HOME="$HOME" "$REPO_DIR/uninstall.sh"
 test ! -e "$ROOT/usr/bin/pirostats"
 test ! -e "$ROOT/usr/lib/pirostats"
@@ -83,4 +74,4 @@ test -f "$pkgdir/usr/share/licenses/pirostats-git/LICENSE"
 test -f "$pkgdir/usr/share/licenses/pirostats-git/NOTICE"
 test ! -e "$pkgdir/usr/lib/pirostats/src"
 
-echo "P6 package layout, upgrade, rollback, and uninstall checks passed"
+echo "P6 native package layout, legacy upgrade, repeat upgrade, and uninstall checks passed"

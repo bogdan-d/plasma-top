@@ -10,8 +10,6 @@ owning sensor logic or another polling clock.
 
 Compatibility drives the shape: the Rust backend preserves the applet, config,
 runtime files, CLI, sensor formulas, rendering, and graceful absence behavior.
-Python remains temporarily under `src/` only as the Phase 8 behavioral oracle;
-it is not installed or used by production launchers.
 
 ## Repository architecture
 
@@ -30,7 +28,7 @@ rust/src/
 plasmoid/                    unchanged Plasma display/interaction boundary
 config/, style/, lang/       shipped data and presentation assets
 service/, packaging/         native Rust runtime installation
-src/, tests/                 temporary Python oracle and compatibility tests
+tests/                       retained migration evidence and Rust integration tests
 ```
 
 `lib.rs` is the process composition root. `daemon.rs` owns the runtime loop;
@@ -177,7 +175,6 @@ NVML support is feature-gated and falls back non-fatally to `nvidia-smi`.
 
 Rust tests cover domain rules, config, rendering, sensors, adapter traces,
 runtime concurrency, daemon lifecycle, CLI processes, packaging, and applet
-integration. Fixed Python byte corpora and retained Python tests remain parity
-evidence during stabilization. Full commands live in
+integration. Fixed compatibility corpora remain migration evidence. Full commands live in
 [DEVELOPMENT.md](DEVELOPMENT.md); migration state lives in
 [`plans/STATUS.md`](../plans/STATUS.md).
