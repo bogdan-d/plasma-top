@@ -12,8 +12,8 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 |---|---|---|---|---|
 | [x] | `.gitignore` | update only for generated Rust artifacts | `SCAFFOLD/QML-VERIFY` | ignore audit (Phase 1: `rust/target/` added; QML-VERIFY re-audits at Gate 6) |
 | [ ] | `CLAUDE.md` | update after cutover | `CUTOVER` | link/content audit |
-| [ ] | `LICENSE` | preserve | `PACKAGING` | license/package audit |
-| [ ] | `NOTICE` | preserve | `PACKAGING` | license/package audit |
+| [x] | `LICENSE` | preserve | `PACKAGING` | staged manual/AUR manifests include GPL license |
+| [x] | `NOTICE` | preserve | `PACKAGING` | staged manual/AUR manifests include applet attribution |
 | [ ] | `README.md` | update after cutover | `CUTOVER` | link/content audit |
 | [ ] | `config/config.toml` | preserve | `CONFIG/QML-VERIFY` | byte/key/selector parity |
 | [ ] | `config/machines.toml` | preserve | `CONFIG/QML-VERIFY` | byte/key/selector parity |
@@ -21,10 +21,11 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [ ] | `docs/ITEMS.md` | update after cutover | `CUTOVER` | link/content audit |
 | [ ] | `docs/LAYOUT.md` | update after cutover | `CUTOVER` | link/content audit |
 | [ ] | `docs/PERFORMANCE.md` | update after cutover | `CUTOVER` | link/content audit |
-| [ ] | `install.sh` | modify for native binary | `PACKAGING` | package/install/upgrade/uninstall |
+| [x] | `install.sh` | modify for native binary | `PACKAGING` | locked native build + disposable DESTDIR install/upgrade/rollback/uninstall scenario |
 | [ ] | `lang/en.toml` | preserve | `CONFIG/QML-VERIFY` | byte/key/selector parity |
-| [ ] | `packaging/aur/PKGBUILD` | modify for native binary | `PACKAGING` | package/install/upgrade/uninstall |
-| [ ] | `packaging/aur/pirostats.install` | modify for native binary | `PACKAGING` | package/install/upgrade/uninstall |
+| [x] | `packaging/aur/PKGBUILD` | modify for native binary | `PACKAGING` | locked x86_64 Rust build + staged package-function manifest audit |
+| [x] | `packaging/aur/pirostats.install` | modify for native binary | `PACKAGING` | native dependency/help text + shell syntax |
+| [x] | `packaging/pirostats-launcher` | add packaged asset-root launcher | `PACKAGING` | staged executable sets `/usr/lib/pirostats` and execs sole Rust binary |
 | [ ] | `pirostats` | replace | `DAEMON-CLI` | CLI process matrix |
 | [x] | `plasmoid/.gitignore` | update only for generated Rust artifacts | `SCAFFOLD/QML-VERIFY` | Gate 6 ignore audit; no generated applet paths needed |
 | [ ] | `plasmoid/LICENSE` | preserve/review | `INTEGRATION` | file-specific inspection |
@@ -109,7 +110,7 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [ ] | `screenshots/panel-horizontal.png` | preserve reference | `QML-VERIFY` | visual comparison; regenerate only approved |
 | [ ] | `screenshots/panel-vertical.png` | preserve reference | `QML-VERIFY` | visual comparison; regenerate only approved |
 | [ ] | `screenshots/process.png` | preserve reference | `QML-VERIFY` | visual comparison; regenerate only approved |
-| [ ] | `service/pirostats.service` | modify for native binary | `PACKAGING` | package/install/upgrade/uninstall |
+| [x] | `service/pirostats.service` | preserve for native binary | `PACKAGING` | staged manifest retains `ExecStart=/usr/bin/pirostats daemon` |
 | [ ] | `src/__init__.py` | port then remove | `CUTOVER` | symbol + differential parity |
 | [x] | `src/bolt_battery.py` | port then remove | `HID` | all seven symbols mapped to `rust/src/sensors/hid.rs`; fixed Rust packet assertions match Python-oracle packet bytes; discovery/error/name/battery branches covered by 16 focused tests |
 | [x] | `src/chart.py` | port then remove | `CHART` | symbol + differential parity via Rust chart pixel corpus |
@@ -157,9 +158,10 @@ Evidence codes: **U** unit, **D** Python/Rust differential, **F** fault injectio
 | [x] | `tools/p6_live_matrix.sh` | add isolated horizontal/vertical/planar applet gate | `QML-VERIFY` | geometry/orientation/watcher/lazy/action traces + human interaction evidence |
 | [x] | `tools/p6_png_diff.py` | add strict fixed-image comparator | `QML-VERIFY` | dimension/mean/max/fraction synthetic threshold check |
 | [x] | `tools/p6_qt_matrix.sh` | add fixed-host all-page/theme Qt matrix | `QML-VERIFY` | 24 valid screenshots + table-free/golden pre-gates + environment manifest |
+| [x] | `tools/p6_package_test.sh` | add disposable native package gate | `PACKAGING` | repo/`/tmp`-only install, upgrade, Python rollback, uninstall, user-file, AUR manifest checks |
 | [x] | `tools/qml_verify.sh` | add isolated Rust-daemon/applet launcher | `QML-VERIFY` | bash syntax + correct-id Application smoke; disposable XDG/runtime roots; no system paths |
 | [x] | `tools/qt_shot.py` | preserve/update invocation | `BASE/QML-VERIFY` | all-page dark/light/overlay matrix + plasmoid ANSI path |
-| [ ] | `uninstall.sh` | modify for native binary | `PACKAGING` | package/install/upgrade/uninstall |
+| [x] | `uninstall.sh` | modify for native binary | `PACKAGING` | DESTDIR uninstall removes package files while preserving user config/cache |
 
 ## Production Python callable inventory
 
@@ -1133,22 +1135,31 @@ Existing tests remain oracle evidence until mapped to a passing Rust test or int
 
 ### `install.sh`
 
-- [ ] No declared function: shell syntax plus full script scenario test.
+- [x] No declared function: shell syntax + full disposable DESTDIR scenario; real host install remains P6.5 environment evidence.
+
+### `packaging/pirostats-launcher`
+
+- [x] No declared function: staged executable exports packaged asset root and `exec`s the Rust binary.
 
 ### `packaging/aur/PKGBUILD`
 
-- [ ] line 27 `pkgver` — PACKAGING scenario + failure/rollback evidence.
-- [ ] line 42 `package` — PACKAGING scenario + failure/rollback evidence.
+- [x] `pkgver` — tagged/untagged fallback retained; shell syntax checked.
+- [x] `build` — locked release build with runtime-loaded NVML feature passed.
+- [x] `package` — sourced directly into a disposable `/tmp` package root; native manifest audited.
 
 ### `packaging/aur/pirostats.install`
 
-- [ ] line 4 `post_install` — PACKAGING scenario + failure/rollback evidence.
-- [ ] line 24 `post_upgrade` — PACKAGING scenario + failure/rollback evidence.
-- [ ] line 33 `pre_remove` — PACKAGING scenario + failure/rollback evidence.
+- [x] `post_install` — native dependency/help text and shell syntax checked.
+- [x] `post_upgrade` — restart guidance and shell syntax checked.
+- [x] `pre_remove` — user-config preservation guidance and shell syntax checked.
+
+### `tools/p6_package_test.sh`
+
+- [x] `stage_native` / `assert_native_layout` / `stage_python_rollback` — disposable install, repeat upgrade, Python rollback, uninstall, user-file preservation, and AUR package-function manifest pass.
 
 ### `uninstall.sh`
 
-- [ ] No declared function: shell syntax plus full script scenario test.
+- [x] No declared function: shell syntax + disposable DESTDIR removal scenario; real host service removal remains P6.5 environment evidence.
 
 ## Rust callable inventory
 

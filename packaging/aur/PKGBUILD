@@ -3,21 +3,16 @@ pkgname=pirostats-git
 _reponame=pirostats
 pkgver=0
 pkgrel=1
-pkgdesc="System stats in the KDE Plasma panel and a paginated tooltip, rendered by an in-memory Python daemon"
-arch=('any')
+pkgdesc="System stats in the KDE Plasma panel and a paginated tooltip"
+arch=('x86_64')
 url="https://github.com/lucazade/pirostats"
 license=('GPL-2.0-or-later')
-# psutil is imported unconditionally (no metrics without it); gi drives battery
-# (UPower) and threshold notifications and the code treats it as a base dep;
-# plasma-workspace provides plasmashell + kpackage + kreadconfig6.
-depends=('python' 'python-psutil' 'python-gobject' 'plasma-workspace')
-# Every optional feature degrades to "absent" when its tool is missing.
-optdepends=('python-nvidia-ml-py: NVIDIA GPU metrics (preferred, low-overhead NVML)'
-            'nvidia-utils: NVIDIA GPU metrics via nvidia-smi (fallback when python-nvidia-ml-py is absent)'
-            'iproute2: the "connections" tooltip page (ss)'
-            'fastfetch: the "fastfetch" tooltip page'
-            'hidapi: wireless mouse/keyboard battery (Logitech Bolt/Unifying HID)')
-makedepends=('git')
+depends=('plasma-workspace')
+optdepends=('nvidia-utils: NVIDIA GPU metrics through NVML or nvidia-smi'
+            'iproute2: network identity and the connections tooltip page'
+            'iw: Wi-Fi SSID and signal'
+            'fastfetch: the fastfetch tooltip page')
+makedepends=('cargo' 'git')
 provides=('pirostats')
 conflicts=('pirostats')
 source=("git+https://github.com/lucazade/pirostats.git")
@@ -26,11 +21,7 @@ install="$_reponame.install"
 
 pkgver() {
 	cd "$srcdir/$_reponame"
-	# Prefer a tag (v1.2.3-4-gabc -> 1.2.3.r4.gabc); fall back to commit-count.rHASH
-	# on a repo that has never been tagged. The `if` (not a `desc | sed` pipe) is
-	# load-bearing: on an untagged repo `git describe` fails but a piped `sed`
-	# succeeds on empty input, so the `||` would never fire and pkgver() would be
-	# empty.
+	# A pipeline would hide an untagged git-describe failure under sed's success.
 	local desc
 	if desc=$(git describe --long --tags 2>/dev/null); then
 		printf '%s' "$desc" | sed 's/^v//; s/\([^-]*-g\)/r\1/; s/-/./g'
@@ -39,34 +30,28 @@ pkgver() {
 	fi
 }
 
+build() {
+	cd "$srcdir/$_reponame"
+	CARGO_TARGET_DIR=rust/target \
+		cargo build --manifest-path rust/Cargo.toml --release --locked --features nvml
+}
+
 package() {
 	cd "$srcdir/$_reponame"
 	local libdir="$pkgdir/usr/lib/pirostats"
 	local appletid="com.github.lucazade.pirostats"
 
-	# ── code tree + shipped defaults (read-only), mirroring install.sh ────────────
 	install -d "$libdir"
-	cp -r src style lang config "$libdir/"
-	install -m755 pirostats "$libdir/pirostats"
-	find "$libdir" -name __pycache__ -type d -prune -exec rm -rf {} +
-
-	# CLI: /usr/bin symlink into the tree; the bin resolves src/ beside its real path.
-	install -d "$pkgdir/usr/bin"
-	ln -s /usr/lib/pirostats/pirostats "$pkgdir/usr/bin/pirostats"
-
-	# systemd --user unit (ExecStart=/usr/bin/pirostats daemon).
+	cp -r style lang config "$libdir/"
+	install -m755 rust/target/release/pirostats "$libdir/pirostats"
+	install -Dm755 packaging/pirostats-launcher "$pkgdir/usr/bin/pirostats"
 	install -Dm644 service/pirostats.service "$pkgdir/usr/lib/systemd/user/pirostats.service"
-
-	# Applet icon.
 	install -Dm644 plasmoid/package/contents/icons/pirostats.svg \
 		"$pkgdir/usr/share/icons/hicolor/scalable/apps/pirostats.svg"
 
-	# Plasma applet: drop the package tree where kpackagetool6 --global would put it,
-	# so pacman owns the files instead of a host-side kpackagetool call.
 	install -d "$pkgdir/usr/share/plasma/plasmoids/$appletid"
 	cp -r plasmoid/package/. "$pkgdir/usr/share/plasma/plasmoids/$appletid/"
 
-	# License + the Zren attribution (applet derives from plasma-applet-commandoutput).
 	install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 	install -Dm644 NOTICE "$pkgdir/usr/share/licenses/$pkgname/NOTICE"
 }

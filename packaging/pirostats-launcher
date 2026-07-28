@@ -1,0 +1,4 @@
+#!/bin/sh
+PIROSTATS_CODE_ROOT=/usr/lib/pirostats
+export PIROSTATS_CODE_ROOT
+exec /usr/lib/pirostats/pirostats "$@"

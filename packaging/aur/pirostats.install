@@ -16,8 +16,8 @@ post_install() {
       systemctl --user restart pirostats
     Editing an already-present XDG config/style hot-reloads, no restart needed.
 
-==> Optional features pull in optdepends (NVIDIA GPU, ss connections, fastfetch,
-    Bolt HID batteries) — see `pacman -Qi pirostats-git`.
+==> Optional tools provide NVIDIA, network/Wi-Fi, and fastfetch data — see
+    `pacman -Qi pirostats-git`.
 EOF
 }
 
