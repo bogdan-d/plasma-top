@@ -53,7 +53,7 @@ Only integration owner edits this file. Lane agents write under `handoffs/`.
 | QML-VERIFY | 6 | verified | Codex | `6ffba34` | `plans/handoffs/qml-verify-codex-20260722.md` | P6.1–P6.3 verified on Plasma 6.7.2 Wayland: correct-id Application smoke plus isolated `plasmoidviewer` horizontal/vertical/planar runs under disposable XDG/HOME/runtime roots; actual QML traces prove geometry publication/orientation, watcher refresh, lazy tooltip reads, page/click commands, and root discipline; strict Qt matrix covers panel H/V + main/five deep pages in dark/light/overlay with faithful fastfetch ANSI conversion; human pass confirms hover, pin/unpin, wheel grouping/quick reverse, resize, desktop transparent/background/outline/font/config behavior; no QML workaround or accepted deviation |
 | PACKAGING | 6 | verified | Codex | `703bae7` | `plans/handoffs/packaging-codex-20260728.md` | P6.4 native manual/AUR packaging verified: locked `x86_64` release build with runtime-loaded NVML, FHS asset-root launcher, Rust-only runtime manifest, preserved service/applet/license contracts; repo/`/tmp`-only disposable install, repeat upgrade, Python rollback, uninstall, user-file preservation, and sourced AUR `package()` checks pass; real pacman/user-systemd lifecycle waived by D005 |
 | HARDWARE-* | 7 | verified | Codex | `3bfe101` | `plans/handoffs/hardware-current-host-codex-20260728.md` | Current-host P7.1/P7.2/P7.4/P7.5 pass; unavailable live paths have mandatory fixture proof and explicit D006 acceptance; Gate P7 green |
-| CUTOVER | 8 | active | Codex | `fc65079` | `plans/handoffs/cutover-p8.1-codex-20260728.md`; `plans/handoffs/cutover-p8.2-20260729.md` | P8.1 verified; P8.2 verified and user-accepted 2026-07-29 after a live user-local Rust session on Plasma 6.7.3 Wayland covered lifecycle/publication, panel/tooltip refresh, click, bidirectional wheel paging, pin/unpin, config/style hot reload, restoration, and full Rust/Python gates; P8.4 not started |
+| CUTOVER | 8 | active | Codex | `ba9b507` | `plans/handoffs/cutover-p8.1-codex-20260728.md`; `plans/handoffs/cutover-p8.2-20260729.md`; `plans/handoffs/cutover-p8.4-20260729.md` | P8.1/P8.2 verified and accepted; P8.4 verified: Python runtime/dependency/launch/CI paths removed, production surfaces remain Rust-only, full Rust/install/package/Qt gates green; P8.5 not started |
 
 ## Milestones
 
@@ -82,27 +82,39 @@ Only integration owner edits this file. Lane agents write under `handoffs/`.
   config/style hot reload with restoration. Daemon journal is clean; no Rust
   defect was found. Full Rust and retained Python gates pass. User accepted P8.2
   on 2026-07-29; P8.4 was not started.
-- **Current aggregate gate**: Rust fmt/check/clippy/test/doc pass with 507 library + 26 integration tests (533 total). Full Python oracle remains green with 175 passed + 1 optional ruff skip; ruff and vulture pass.
+- **P8.4 Python runtime removal complete**: all 19 former production files under
+  `src/`, the oracle-only dependency manifest/Ruff config, Python CI job, and
+  obsolete Python live launcher are removed. Rust-only install, legacy-layout
+  upgrade, repeat upgrade, uninstall, user-file, AUR manifest, and Qt matrix
+  checks pass. The pre-cutover tag remains intact. Oracle evidence/tools and
+  migration-plan archival remain P8.5 work.
+- **Current aggregate gate**: Rust fmt/check/clippy/test/doc pass with 507 library
+  + 26 integration tests (533 total). User-install, native package, and 24-cell
+  Qt matrix gates pass. Python pytest/Ruff/Vulture gates retired explicitly with
+  P8.4 source removal; their final P8.2 result was 175 passed + 1 optional skip,
+  Ruff/Vulture green.
 
 ## Active Phase 8 work
 
 - **P8.2:** closed and user-accepted 2026-07-29; live evidence is in
   `plans/handoffs/cutover-p8.2-20260729.md`.
+- **P8.4:** verified 2026-07-29; removal and retired-gate evidence is in
+  `plans/handoffs/cutover-p8.4-20260729.md`.
 - **Parity evidence:** fixed corpora and integration/live comparisons are green.
   `rust/tests/parity_runner.sh` remains an explicit skip until a fixture-only
   Rust diagnostic seam is approved or the runner is retired.
 - **Inventory:** verified implementation rows are reconciled. Unchecked rows are
   limited to the deferred shared-fixture runner, inventory-gate strengthening,
   oracle archival, and two preview-tool smokes.
-- **P8.4/P8.5:** remove Python only after P8.2 approval, then promote/archive
-  oracle evidence and migration plans.
+- **P8.5:** promote/archive oracle evidence and migration plans; decide the
+  deferred parity runner and strengthen final inventory closure.
 
 ## Accepted deviations
 
 | ID | Accepted deviation | Approval/evidence | Risk/rollback |
 |---|---|---|---|
-| D005 | Skip real pacman install/upgrade/Python-downgrade/uninstall and user-systemd lifecycle validation | User approval 2026-07-28; `tools/p6_package_test.sh` covers native install, repeat upgrade, Python rollback, uninstall, user-file preservation, and AUR manifest under `/tmp` | Package-manager hooks or service enablement may still fail on Arch; rollback is the retained Python package/source and D005 can be reopened on an Arch Plasma environment |
-| D006 | Defer unavailable Intel/NVIDIA/battery/HID and suspend/route-switch/hotplug live validation for this cutover | User approval 2026-07-28; focused fixture suites plus current-host live differential/soak evidence | Hardware-specific integration defects may remain; retain Python oracle through stabilization and reopen these rows when suitable hardware is available |
+| D005 | Skip real pacman install/upgrade/Python-downgrade/uninstall and user-systemd lifecycle validation | User approval 2026-07-28; P6 handoff preserves Python-downgrade evidence; current `tools/p6_package_test.sh` covers legacy-layout/native upgrades, uninstall, user files, and AUR manifest under `/tmp` | Package-manager hooks or service enablement may still fail on Arch; source rollback is tag `pre-rust-cutover`, and D005 can be reopened on an Arch Plasma environment |
+| D006 | Defer unavailable Intel/NVIDIA/battery/HID and suspend/route-switch/hotplug live validation for this cutover | User approval 2026-07-28; focused fixture suites plus current-host live differential/soak evidence | Hardware-specific integration defects may remain; fixture evidence is retained and these rows reopen when suitable hardware is available |
 
 ## Deferred validation
 
