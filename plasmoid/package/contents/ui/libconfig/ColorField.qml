@@ -6,10 +6,6 @@ import QtQuick.Dialogs as QtDialogs
 import QtQuick.Window
 import org.kde.kirigami as Kirigami
 
-// https://doc.qt.io/qt-6/qtgraphicaleffects5-index.html
-import Qt5Compat.GraphicalEffects as QtGraphicalEffects
-
-
 QQC2.TextField {
 	id: colorField
 	font.family: "monospace"
@@ -91,30 +87,26 @@ QQC2.TextField {
 		onClicked: dialogLoader.active = true
 
 		// Color Preview Circle
-		Rectangle {
-			id: previewBgMask
-			visible: false
-			anchors.fill: parent
-			border.width: 1 * Screen.devicePixelRatio
-			border.color: "transparent"
-			radius: width / 2
-		}
-		QtGraphicalEffects.ConicalGradient {
-			id: previewBgGradient
+		Canvas {
+			id: previewBg
 			visible: colorField.showPreviewBg
 			anchors.fill: parent
-			angle: 0.0
-			gradient: Gradient {
-				GradientStop { position: 0.00; color: "white" }
-				GradientStop { position: 0.24; color: "white" }
-				GradientStop { position: 0.25; color: "#cccccc" }
-				GradientStop { position: 0.49; color: "#cccccc" }
-				GradientStop { position: 0.50; color: "white" }
-				GradientStop { position: 0.74; color: "white" }
-				GradientStop { position: 0.75; color: "#cccccc" }
-				GradientStop { position: 1.00; color: "#cccccc" }
+			onPaint: {
+				const context = getContext("2d")
+				const halfWidth = width / 2
+				const halfHeight = height / 2
+				context.clearRect(0, 0, width, height)
+				context.save()
+				context.beginPath()
+				context.ellipse(0, 0, width, height)
+				context.clip()
+				context.fillStyle = "white"
+				context.fillRect(0, 0, width, height)
+				context.fillStyle = "#cccccc"
+				context.fillRect(halfWidth, 0, halfWidth, halfHeight)
+				context.fillRect(0, halfHeight, halfWidth, halfHeight)
+				context.restore()
 			}
-			source: previewBgMask
 		}
 		Rectangle {
 			id: previewFill
