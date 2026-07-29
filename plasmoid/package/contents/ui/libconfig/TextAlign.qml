@@ -7,12 +7,13 @@ import QtQuick.Layouts
 RowLayout {
 	id: configTextAlign
 
+	property var configObject: plasmoid.configuration
 	property string configKey: ''
-	readonly property string configValue: configKey ? plasmoid.configuration[configKey] : ""
+	readonly property string configValue: configKey ? configObject[configKey] : ""
 
 	function setValue(val) {
 		if (configKey) {
-			plasmoid.configuration[configKey] = val
+			configObject[configKey] = val
 		}
 		updateChecked()
 	}

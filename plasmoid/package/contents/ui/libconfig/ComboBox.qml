@@ -31,8 +31,9 @@ LibConfig.ComboBox {
 QQC2.ComboBox {
 	id: configComboBox
 
+	property var configObject: plasmoid.configuration
 	property string configKey: ''
-	readonly property string configValue: configKey ? plasmoid.configuration[configKey] : ""
+	readonly property string configValue: configKey ? configObject[configKey] : ""
 	onConfigValueChanged: {
 		if (!focus && value != configValue) {
 			selectValue(configValue)
@@ -66,7 +67,7 @@ QQC2.ComboBox {
 			if (typeof item !== "undefined") {
 				var val = item[_valueRole]
 				if (configKey && (typeof val !== "undefined") && populated) {
-					plasmoid.configuration[configKey] = val
+					configObject[configKey] = val
 				}
 			}
 		}

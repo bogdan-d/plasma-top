@@ -13,6 +13,7 @@ Flow {
 	spacing: Kirigami.Units.smallSpacing * 2
 	Layout.fillWidth: true
 
+	property var configObject: plasmoid.configuration
 	property alias boldConfigKey: configBold.configKey
 	property alias italicConfigKey: configItalic.configKey
 	property alias underlineConfigKey: configUnderline.configKey
@@ -22,42 +23,47 @@ Flow {
 	RowLayout {
 		QQC2.Button {
 			id: configBold
+			property var configObject: configTextFormat.configObject
 			property string configKey: ''
 			visible: configKey
 			icon.name: 'format-text-bold-symbolic'
 			checkable: true
-			checked: configKey ? plasmoid.configuration[configKey] : false
-			onClicked: plasmoid.configuration[configKey] = checked
+			checked: configKey ? configObject[configKey] : false
+			onClicked: configObject[configKey] = checked
 		}
 
 		QQC2.Button {
 			id: configItalic
+			property var configObject: configTextFormat.configObject
 			property string configKey: ''
 			visible: configKey
 			icon.name: 'format-text-italic-symbolic'
 			checkable: true
-			checked: configKey ? plasmoid.configuration[configKey] : false
-			onClicked: plasmoid.configuration[configKey] = checked
+			checked: configKey ? configObject[configKey] : false
+			onClicked: configObject[configKey] = checked
 		}
 
 		QQC2.Button {
 			id: configUnderline
+			property var configObject: configTextFormat.configObject
 			property string configKey: ''
 			visible: configKey
 			icon.name: 'format-text-underline-symbolic'
 			checkable: true
-			checked: configKey ? plasmoid.configuration[configKey] : false
-			onClicked: plasmoid.configuration[configKey] = checked
+			checked: configKey ? configObject[configKey] : false
+			onClicked: configObject[configKey] = checked
 		}
 	}
 
 	LibConfig.TextAlign {
 		id: configTextAlign
+		configObject: configTextFormat.configObject
 		visible: configKey
 	}
 
 	LibConfig.VertAlign {
 		id: configVertAlign
+		configObject: configTextFormat.configObject
 		visible: configKey
 	}
 }

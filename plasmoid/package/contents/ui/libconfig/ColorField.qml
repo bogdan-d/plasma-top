@@ -30,11 +30,12 @@ QQC2.TextField {
 	property bool showAlphaChannel: true
 	property bool showPreviewBg: true
 
+	property var configObject: plasmoid.configuration
 	property string configKey: ''
 	property string defaultColor: ''
 	property string value: {
 		if (configKey) {
-			return plasmoid.configuration[configKey]
+			return configObject[configKey]
 		} else {
 			return "#000"
 		}
@@ -55,9 +56,9 @@ QQC2.TextField {
 		}
 		if (configKey) {
 			if (value == defaultColorValue) {
-				plasmoid.configuration[configKey] = ""
+				configObject[configKey] = ""
 			} else {
-				plasmoid.configuration[configKey] = value
+				configObject[configKey] = value
 			}
 		}
 	}

@@ -32,8 +32,9 @@ LibConfig.SpinBox {
 QQC2.SpinBox {
 	id: spinBox
 
+	property var configObject: plasmoid.configuration
 	property string configKey: ''
-	readonly property var configValue: configKey ? plasmoid.configuration[configKey] : 0
+	readonly property var configValue: configKey ? configObject[configKey] : 0
 
 	readonly property real factor: Math.pow(10, decimals)
 	readonly property real valueReal: value / factor
@@ -90,9 +91,9 @@ QQC2.SpinBox {
 		onTriggered: {
 			if (configKey) {
 				if (decimals == 0) {
-					plasmoid.configuration[configKey] = spinBox.value
+					configObject[configKey] = spinBox.value
 				} else {
-					plasmoid.configuration[configKey] = spinBox.valueReal
+					configObject[configKey] = spinBox.valueReal
 				}
 			}
 		}
