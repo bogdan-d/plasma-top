@@ -23,10 +23,17 @@ smoke=false
 build=true
 for arg in "$@"; do
     case "$arg" in
-        --smoke) smoke=true ;;
-        --no-build) build=false ;;
-        -h|--help) usage; exit 0 ;;
-        *) echo "unknown argument: $arg" >&2; usage >&2; exit 2 ;;
+    --smoke) smoke=true ;;
+    --no-build) build=false ;;
+    -h | --help)
+        usage
+        exit 0
+        ;;
+    *)
+        echo "unknown argument: $arg" >&2
+        usage >&2
+        exit 2
+        ;;
     esac
 done
 
@@ -74,8 +81,8 @@ ln -s "$binary" "$test_root/bin/plasma-top"
 
 # A Wayland display name is relative to XDG_RUNTIME_DIR. Expose only that socket
 # inside the disposable root; X11 sessions need no equivalent setup.
-if [[ -n "${WAYLAND_DISPLAY:-}" && -n "$original_runtime" \
-    && -S "$original_runtime/$WAYLAND_DISPLAY" ]]; then
+if [[ -n "${WAYLAND_DISPLAY:-}" && -n "$original_runtime" &&
+    -S "$original_runtime/$WAYLAND_DISPLAY" ]]; then
     ln -s "$original_runtime/$WAYLAND_DISPLAY" "$test_root/runtime/$WAYLAND_DISPLAY"
 fi
 

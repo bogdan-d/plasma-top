@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 # Verify the unchanged Plasma applet against a daemon in disposable roots.
+# shellcheck disable=SC2097,SC2098
+# distrobox starts with host XDG/HOME to reach host sockets; the viewer inside
+# is handed disposable roots via `env`, so the temp assignments and the
+# re-expansions are deliberate and do not see each other.
 set -euo pipefail
 
 usage() {
@@ -24,11 +28,18 @@ interactive=false
 planar=false
 while (($#)); do
     case "$1" in
-        --no-build) build=false ;;
-        --interactive) interactive=true ;;
-        --planar) planar=true ;;
-        -h|--help) usage; exit 0 ;;
-        *) echo "unknown argument: $1" >&2; usage >&2; exit 2 ;;
+    --no-build) build=false ;;
+    --interactive) interactive=true ;;
+    --planar) planar=true ;;
+    -h | --help)
+        usage
+        exit 0
+        ;;
+    *)
+        echo "unknown argument: $1" >&2
+        usage >&2
+        exit 2
+        ;;
     esac
     shift
 done
@@ -77,8 +88,8 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-if command -v distrobox >/dev/null 2>&1 \
-    && distrobox list 2>/dev/null | grep -q "| $viewer_container "; then
+if command -v distrobox >/dev/null 2>&1 &&
+    distrobox list 2>/dev/null | grep -q "| $viewer_container "; then
     viewer="distrobox"
 elif command -v plasmoidviewer >/dev/null 2>&1; then
     viewer="host"
@@ -95,7 +106,10 @@ done
 if [[ "$build" == true ]]; then
     cargo build --manifest-path "$repo_dir/rust/Cargo.toml" --release --locked
 fi
-[[ -x "$binary" ]] || { echo "Rust binary not found: $binary" >&2; exit 1; }
+[[ -x "$binary" ]] || {
+    echo "Rust binary not found: $binary" >&2
+    exit 1
+}
 
 rm -rf "$artifact_root"
 mkdir -p "$artifact_root"
@@ -103,8 +117,8 @@ test_root="$(mktemp -d "$artifact_root/run.XXXXXX")"
 mkdir -p "$test_root"/{runtime,config/plasma-top,cache,data,home,package,bin,logs}
 chmod 700 "$test_root/runtime"
 
-if [[ -n "${WAYLAND_DISPLAY:-}" && -n "$original_runtime" \
-    && -S "$original_runtime/$WAYLAND_DISPLAY" ]]; then
+if [[ -n "${WAYLAND_DISPLAY:-}" && -n "$original_runtime" &&
+    -S "$original_runtime/$WAYLAND_DISPLAY" ]]; then
     ln -s "$original_runtime/$WAYLAND_DISPLAY" "$test_root/runtime/$WAYLAND_DISPLAY"
 fi
 
@@ -277,8 +291,8 @@ verify_compact_case() {
         return 1
     fi
     read -r usable advance vertical tooltip_advance <"$state_root/geom"
-    [[ "$usable" != 0 && "$advance" != 0 && "$tooltip_advance" != 0 \
-        && "$vertical" == "$expected_vertical" ]] || {
+    [[ "$usable" != 0 && "$advance" != 0 && "$tooltip_advance" != 0 &&
+        "$vertical" == "$expected_vertical" ]] || {
         echo "$formfactor invalid geometry: $(cat "$state_root/geom")" >&2
         return 1
     }
@@ -326,7 +340,7 @@ echo "PASS runtime_root entries=panel.html,state,tooltip.html" >>"$artifact_root
 cp "$test_root/logs/daemon.log" "$artifact_root/daemon.log"
 
 if [[ "$interactive" == false && "$planar" == false ]]; then
-    echo "P6 live automatic matrix passed: ${artifact_root#$repo_dir/}/automatic.txt"
+    echo "P6 live automatic matrix passed: ${artifact_root#"$repo_dir"/}/automatic.txt"
     exit 0
 fi
 

@@ -15,9 +15,16 @@ EOF
 build=true
 while (($#)); do
     case "$1" in
-        --no-build) build=false ;;
-        -h|--help) usage; exit 0 ;;
-        *) echo "unknown argument: $1" >&2; usage >&2; exit 2 ;;
+    --no-build) build=false ;;
+    -h | --help)
+        usage
+        exit 0
+        ;;
+    *)
+        echo "unknown argument: $1" >&2
+        usage >&2
+        exit 2
+        ;;
     esac
     shift
 done
@@ -36,7 +43,10 @@ trap 'rm -rf "$tmp_root"' EXIT
 if [[ "$build" == true ]]; then
     cargo build --manifest-path "$repo_dir/rust/Cargo.toml" --release --locked
 fi
-[[ -x "$binary" ]] || { echo "Rust binary not found: $binary" >&2; exit 1; }
+[[ -x "$binary" ]] || {
+    echo "Rust binary not found: $binary" >&2
+    exit 1
+}
 
 rm -rf "$artifact_root"
 mkdir -p "$artifact_root"/{html,png,logs}
@@ -71,16 +81,39 @@ for cell in "${cells[@]}"; do
         [[ "$variant" == light ]] && bg="#eeeeee"
 
         case "$cell" in
-            panel-h) args=(render --config "$env_dir/config.toml" --component panel --layout horizontal --format html); source=/tmp/plasma-top_render_panel.html; qt=(--width 1400 --height 96 --point --size 8 --scale 2) ;;
-            panel-v) args=(render --config "$env_dir/config.toml" --component panel --layout vertical --format html); source=/tmp/plasma-top_render_panel.html; qt=(--width 80 --height 1200 --point --size 8 --scale 2) ;;
-            tooltip) args=(render --config "$env_dir/config.toml" --component tooltip --format html); source=/tmp/plasma-top_render_tooltip.html; qt=(--fit --point --size 11 --lineheight 1.05 --scale 2) ;;
-            fastfetch) args=(render --config "$env_dir/config.toml" --page "$cell" --format html); source=/tmp/plasma-top_render_tooltip.html; qt=(--fit --point --size 11 --lineheight 1.05 --scale 2 --plasmoid-output) ;;
-            *) args=(render --config "$env_dir/config.toml" --page "$cell" --format html); source=/tmp/plasma-top_render_tooltip.html; qt=(--fit --point --size 11 --lineheight 1.05 --scale 2) ;;
+        panel-h)
+            args=(render --config "$env_dir/config.toml" --component panel --layout horizontal --format html)
+            source=/tmp/plasma-top_render_panel.html
+            qt=(--width 1400 --height 96 --point --size 8 --scale 2)
+            ;;
+        panel-v)
+            args=(render --config "$env_dir/config.toml" --component panel --layout vertical --format html)
+            source=/tmp/plasma-top_render_panel.html
+            qt=(--width 80 --height 1200 --point --size 8 --scale 2)
+            ;;
+        tooltip)
+            args=(render --config "$env_dir/config.toml" --component tooltip --format html)
+            source=/tmp/plasma-top_render_tooltip.html
+            qt=(--fit --point --size 11 --lineheight 1.05 --scale 2)
+            ;;
+        fastfetch)
+            args=(render --config "$env_dir/config.toml" --page "$cell" --format html)
+            source=/tmp/plasma-top_render_tooltip.html
+            qt=(--fit --point --size 11 --lineheight 1.05 --scale 2 --plasmoid-output)
+            ;;
+        *)
+            args=(render --config "$env_dir/config.toml" --page "$cell" --format html)
+            source=/tmp/plasma-top_render_tooltip.html
+            qt=(--fit --point --size 11 --lineheight 1.05 --scale 2)
+            ;;
         esac
 
         HOME="$env_dir/home" "$binary" "${args[@]}" >"$render_log" 2>&1
         cp "$source" "$html"
-        ! grep -qi '<table' "$html" || { echo "table found in $html" >&2; exit 1; }
+        ! grep -qi '<table' "$html" || {
+            echo "table found in $html" >&2
+            exit 1
+        }
         QT_QPA_PLATFORM=offscreen "$python" "$repo_dir/tools/qt_shot.py" \
             --html "$html" "$png" --bg "$bg" "${qt[@]}" >"$qt_log" 2>&1
     done
@@ -148,4 +181,4 @@ PY
     sha256sum "$artifact_root"/png/*.png
 } >"$artifact_root/environment.txt"
 
-echo "P6 Qt matrix passed: ${artifact_root#$repo_dir/}/images.json"
+echo "P6 Qt matrix passed: ${artifact_root#"$repo_dir"/}/images.json"

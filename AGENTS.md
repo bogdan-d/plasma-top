@@ -20,6 +20,13 @@ Run commands from repository root. Development setup and full gates live in `doc
 - Tooltip width is derived from maxed readings. Any new width-driving field must be bounded and covered by `canonical_width_covers_every_tooltip_item`.
 - Qt RichText supports less CSS than browsers. Validate visual changes with `tools/qt_shot.py` or `tools/p6_qt_matrix.sh` before theorizing from browser CSS.
 - Keep all repository text English. Comments explain invariants, not mechanics.
+- Never hard-wrap prose, docs, or comments to a fixed column. Write each paragraph and comment sentence as a single line; let viewers reflow.
+
+## Shell scripts
+
+- Run `shellcheck` on every shell script you change, when it is installed.
+- Before finishing a session that touched `*.sh`, run `shfmt` across the changed files; `.editorconfig` sets the 4-space style.
+- Silence a shellcheck finding only with a directive plus a one-line invariant comment, not by weakening checks.
 
 ## Validation
 
