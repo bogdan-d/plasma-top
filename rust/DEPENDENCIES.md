@@ -3,7 +3,7 @@
 Review every direct dependency here before updating `Cargo.lock`.
 
 | Crate | Version | License | Purpose and footprint |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `nix` | 0.29 | MIT | Safe `flock(2)`, `getuid(2)`, and `poll(2)` wrappers. Pure Rust over `libc`; features limited to `fs`, `poll`, `process`, and `user`. Transitive: `bitflags`, `cfg-if`, `libc`; build helper: `cfg_aliases`. |
 | `toml` | 1 | MIT OR Apache-2.0 | Production config and test-fixture parsing. Pure Rust. Uses `serde_core`, `serde_spanned`, `toml_datetime`, `toml_parser`, `toml_writer`, `winnow`, and ordered-map support. |
 | `serde` | 1 | MIT OR Apache-2.0 | Typed config deserialization with derive support. Pure Rust; adds the `serde_derive` proc macro and reuses `serde_core`. |
