@@ -10,13 +10,13 @@ Rust is the sole runtime implementation.
 ## Verification
 
 ```bash
-cargo fetch --locked --manifest-path rust/Cargo.toml
-git diff --exit-code -- rust/Cargo.lock
-cargo fmt --manifest-path rust/Cargo.toml -- --check
-cargo check --manifest-path rust/Cargo.toml --all-targets --all-features
-cargo clippy --manifest-path rust/Cargo.toml --all-targets --all-features -- -D warnings
-cargo test --manifest-path rust/Cargo.toml --all-targets --all-features
-cargo doc --manifest-path rust/Cargo.toml --no-deps
+cargo fetch --locked
+git diff --exit-code -- Cargo.lock
+cargo fmt -- --check
+cargo check --all-targets --all-features
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test --all-targets --all-features
+cargo doc --no-deps
 tools/repository_gate.sh
 bash -n install.sh uninstall.sh packaging/aur/PKGBUILD \
   packaging/aur/plasma-top.install plasma-top tools/*.sh scripts/*.sh
@@ -43,4 +43,4 @@ Run `tools/qml_verify.sh --smoke` in Plasma when applet/runtime integration chan
 
 `install.sh` and `packaging/aur/PKGBUILD` both build with `--locked`; package launchers set `PLASMA_TOP_CODE_ROOT` and execute the installed native binary. `tools/p6_package_test.sh` verifies their shared manifest, legacy-layout upgrade, repeat upgrade, uninstall, and user-file preservation contracts.
 
-Python is not a runtime, build, lint, or baseline CI dependency. Optional Qt/QML verification uses Python 3; `tools/qt_shot.py` additionally needs PyQt6. Fixed compatibility snapshots and fixtures live under `rust/tests/`.
+Python is not a runtime, build, lint, or baseline CI dependency. Optional Qt/QML verification uses Python 3; `tools/qt_shot.py` additionally needs PyQt6. Fixed compatibility snapshots and fixtures live under `tests/`.

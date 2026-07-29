@@ -1,6 +1,6 @@
 #!/bin/sh
 # Checkout launcher. Packaged installs use packaging/plasma-top-launcher instead.
-REPO_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+REPO_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 export PLASMA_TOP_CODE_ROOT="$REPO_DIR"
-exec cargo run --quiet --locked --manifest-path "$REPO_DIR/rust/Cargo.toml" \
-	--features nvml -- "$@"
+exec cargo run --quiet --locked --manifest-path "$REPO_DIR/Cargo.toml" \
+    --features nvml -- "$@"

@@ -3,7 +3,7 @@
 //! Mirrors the Python `CODE_ROOT` / `XDG_DIR` constants from `src/config.py`,
 //! adapted for the Rust binary model. Python resolves paths relative to
 //! `__file__`; a compiled Rust binary has no `__file__`, so the shipped tree
-//! is found via `CARGO_MANIFEST_DIR/..` baked in at compile time, plus a
+//! is found via `CARGO_MANIFEST_DIR` baked in at compile time, plus a
 //! `PLASMA_TOP_CODE_ROOT` env override for packaged installs where the binary
 //! and the read-only assets live under different `/usr/...` prefixes (e.g.
 //! `/usr/bin/plasma-top` reading from `/usr/lib/plasma-top`).
@@ -15,10 +15,9 @@
 use std::env;
 use std::path::{Path, PathBuf};
 
-/// Compile-time path of the crate manifest dir (`rust/`) joined with `..`,
-/// yielding the repo root in dev. Overridden at runtime by
-/// `PLASMA_TOP_CODE_ROOT` for packaged installs.
-const COMPILE_TIME_CODE_ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/..");
+/// Compile-time repository root, which is also the crate manifest directory.
+/// Overridden at runtime by `PLASMA_TOP_CODE_ROOT` for packaged installs.
+const COMPILE_TIME_CODE_ROOT: &str = env!("CARGO_MANIFEST_DIR");
 
 /// Env var name that overrides the shipped-tree root for packaged installs.
 ///
@@ -27,8 +26,8 @@ pub const PLASMA_TOP_CODE_ROOT_ENV: &str = "PLASMA_TOP_CODE_ROOT";
 
 /// Returns the path to the shipped asset tree.
 ///
-/// Dev: `<repo>` (the parent of `rust/`). Packaged: whatever the installer
-/// wrote into the `PLASMA_TOP_CODE_ROOT` env (e.g. `/usr/lib/plasma-top`).
+/// Dev: `<repo>`. Packaged: whatever the installer wrote into the
+/// `PLASMA_TOP_CODE_ROOT` env (e.g. `/usr/lib/plasma-top`).
 #[must_use]
 pub fn code_root() -> PathBuf {
     compute_code_root(env::var(PLASMA_TOP_CODE_ROOT_ENV).ok().as_deref())
@@ -148,11 +147,7 @@ mod tests {
     fn compute_code_root_uses_compile_time_default_when_unset() {
         let resolved = compute_code_root(None);
 
-        assert!(
-            resolved.ends_with(".."),
-            "default code root is CARGO_MANIFEST_DIR/.., got {}",
-            resolved.display(),
-        );
+        assert_eq!(resolved, PathBuf::from(env!("CARGO_MANIFEST_DIR")));
     }
 
     #[test]

@@ -2,7 +2,7 @@ __pycache__/
 *.pyc
 *.pyo
 
-rust/target/
+/target/
 
 # Tooling caches / agent config (not part of the shipped tool)
 .claude/

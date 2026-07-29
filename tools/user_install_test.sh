@@ -10,7 +10,7 @@ export XDG_DATA_HOME="$TMP/data with spaces"
 export XDG_CONFIG_HOME="$TMP/config"
 export XDG_CACHE_HOME="$TMP/cache"
 export XDG_RUNTIME_DIR="$TMP/runtime"
-export PLASMA_TOP_BINARY="$REPO_DIR/rust/target/release/plasma-top"
+export PLASMA_TOP_BINARY="$REPO_DIR/target/release/plasma-top"
 export FAKE_LOG="$TMP/commands.log"
 export FAKE_APPLET="$TMP/installed-applet"
 export FAKE_APPLET_STATE="$TMP/applet-installed"
@@ -56,7 +56,7 @@ chmod +x "$FAKE_BIN"/*
 export PATH="$FAKE_BIN:$PATH"
 
 [[ -x "$PLASMA_TOP_BINARY" ]] || {
-    cargo build --manifest-path "$REPO_DIR/rust/Cargo.toml" --release --locked --features nvml
+    cargo build --manifest-path "$REPO_DIR/Cargo.toml" --release --locked --features nvml
 }
 
 # Argument failures happen before writes.

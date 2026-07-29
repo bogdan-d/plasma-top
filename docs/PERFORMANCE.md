@@ -18,9 +18,9 @@ Do not copy historical measurements into a current benchmark report. Rerun them.
 
 The daemon spends most of its time asleep. Work belongs to four boundaries:
 
-1. `/proc`, `/sys`, and device I/O in `rust/src/sensors/`;
-2. timeout-bound commands and `busctl` calls in `rust/src/adapters.rs`;
-3. pure Rust formatting and chart rasterization in `rust/src/render/`;
+1. `/proc`, `/sys`, and device I/O in `src/sensors/`;
+2. timeout-bound commands and `busctl` calls in `src/adapters.rs`;
+3. pure Rust formatting and chart rasterization in `src/render/`;
 4. Qt RichText parsing/layout in plasmashell.
 
 Formatting is deterministic and allocation-heavy relative to arithmetic, but hardware and process I/O usually dominate. Measure before optimizing either. Failure paths must remain bounded: every external command has a timeout, absent services degrade without retries in a tight loop, and logs stay bounded.
@@ -58,7 +58,7 @@ Cache timestamps use monotonic `Duration` values. `Option` represents “never s
 
 SMART intervals remain configurable by drive class. Histories use `display.history_interval` and trim to the largest enabled consumer.
 
-During the first 90 seconds, `rust/src/daemon.rs` logs when requested slow readings first become available. The boot watch then disables itself, keeping steady-state observability cost negligible.
+During the first 90 seconds, `src/daemon.rs` logs when requested slow readings first become available. The boot watch then disables itself, keeping steady-state observability cost negligible.
 
 Canonical tooltip width is currently recomputed from bounded, maxed readings on first paint and each normal poll. This keeps width correct after mounts, hardware, or identity changes. Treat memoization as a future optimization only after profiling proves this render contributes material work.
 
@@ -89,7 +89,7 @@ Historical live-app measurement used `pidstat -p $(pidof plasmashell) 1`, the sa
 | one 33-row `<table>` | 85–100% |
 | tables without percentage widths | ~50% |
 
-Before the rewrite, the normal tooltip reached 15–20% CPU, roughly 300 ms every 1.5 seconds. `rust/src/render/mono.rs` now aligns five row shapes with monospace `&nbsp;` padding and emits no tables. Historical tooltip-open CPU fell to roughly 1–3%.
+Before the rewrite, the normal tooltip reached 15–20% CPU, roughly 300 ms every 1.5 seconds. `src/render/mono.rs` now aligns five row shapes with monospace `&nbsp;` padding and emits no tables. Historical tooltip-open CPU fell to roughly 1–3%.
 
 Do not reintroduce `<table>` on any render path. Keep the 8 px inset in the plasmoid text padding, not a layout table. Validate rendered changes with the real Qt path. Rust unit tests enforce table-free output for mono layouts, pages, and render models; `tools/p6_qt_matrix.sh` covers the Qt RichText path.
 

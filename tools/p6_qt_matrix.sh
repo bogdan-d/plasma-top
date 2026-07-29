@@ -30,7 +30,7 @@ while (($#)); do
 done
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-binary="$repo_dir/rust/target/release/plasma-top"
+binary="$repo_dir/target/release/plasma-top"
 python="${PYTHON:-python3}"
 artifact_root="$repo_dir/.test-artifacts/p6/qt"
 tmp_root="$(mktemp -d /tmp/plasma-top-p6-qt.XXXXXX)"
@@ -41,7 +41,7 @@ trap 'rm -rf "$tmp_root"' EXIT
     exit 1
 }
 if [[ "$build" == true ]]; then
-    cargo build --manifest-path "$repo_dir/rust/Cargo.toml" --release --locked
+    cargo build --manifest-path "$repo_dir/Cargo.toml" --release --locked
 fi
 [[ -x "$binary" ]] || {
     echo "Rust binary not found: $binary" >&2
@@ -52,7 +52,7 @@ rm -rf "$artifact_root"
 mkdir -p "$artifact_root"/{html,png,logs}
 
 # The deterministic Rust golden gate runs before Qt rasterization.
-cargo test --manifest-path "$repo_dir/rust/Cargo.toml" --all-features \
+cargo test --manifest-path "$repo_dir/Cargo.toml" --all-features \
     golden -- --nocapture >"$artifact_root/logs/rust-golden.log" 2>&1
 
 make_config() {

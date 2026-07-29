@@ -8,13 +8,13 @@ ROOT="$TMP/root"
 HOME="$TMP/home"
 trap 'rm -rf "$TMP"' EXIT
 export CARGO_HOME="${CARGO_HOME:-$TMP/cargo-home}"
-export CARGO_TARGET_DIR="$REPO_DIR/rust/target"
+export CARGO_TARGET_DIR="$REPO_DIR/target"
 
 mkdir -p "$HOME/.config/plasma-top" "$HOME/.cache/plasma-top"
 printf 'user config\n' >"$HOME/.config/plasma-top/config.toml"
 printf 'cache\n' >"$HOME/.cache/plasma-top/geom"
 
-cargo build --manifest-path "$REPO_DIR/rust/Cargo.toml" --release --locked --features nvml
+cargo build --manifest-path "$REPO_DIR/Cargo.toml" --release --locked --features nvml
 BINARY="$CARGO_TARGET_DIR/release/plasma-top"
 
 stage_native() {

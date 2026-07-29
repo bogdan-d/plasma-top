@@ -18,13 +18,13 @@ Existing fixture tests cover success, absence, malformed data, failure, timeouts
 
 ## Relevant files
 
-- `rust/src/sensors/gpu_intel.rs`
-- `rust/src/sensors/gpu_nvidia.rs`
-- `rust/src/sensors/power.rs`
-- `rust/src/sensors/hid.rs`
-- `rust/src/sensors/net.rs`
-- `rust/src/sensors/disk.rs`
-- `rust/src/sensors/tests.rs`
+- `src/sensors/gpu_intel.rs`
+- `src/sensors/gpu_nvidia.rs`
+- `src/sensors/power.rs`
+- `src/sensors/hid.rs`
+- `src/sensors/net.rs`
+- `src/sensors/disk.rs`
+- `src/sensors/tests.rs`
 - `tools/p6_live_matrix.sh`
 
 ## Handoff

@@ -2,13 +2,13 @@
 //!
 //! [`FixtureRoot`] is the virtual `/` for every test that needs to read procfs,
 //! sysfs, or runtime-equivalent files. Tests build a [`FixtureRoot`] from a
-//! fixture directory under `rust/tests/fixtures/` and pass it to the production
+//! fixture directory under `tests/fixtures/` and pass it to the production
 //! filesystem readers (the future `sensors/source.rs`) so no test ever touches
 //! the host `/proc` or `/sys`.
 
 use std::path::{Path, PathBuf};
 
-/// Resolved root of a fixture tree, typically under `rust/tests/fixtures/`.
+/// Resolved root of a fixture tree, typically under `tests/fixtures/`.
 ///
 /// Acts as a virtual `/` for fixture-based tests: every host boundary (`proc/`,
 /// `sys/`, `run/`) is mapped under this root so no test ever touches the real
@@ -23,7 +23,7 @@ impl FixtureRoot {
     /// Creates a fixture root pointing at `root`.
     ///
     /// Prefer [`FixtureRoot::from_env`] when a test wants the canonical
-    /// `rust/tests/fixtures/` tree; use [`FixtureRoot::new`] when the test
+    /// `tests/fixtures/` tree; use [`FixtureRoot::new`] when the test
     /// owns a private tempdir.
     #[must_use]
     pub fn new(root: PathBuf) -> Self {
@@ -33,8 +33,8 @@ impl FixtureRoot {
     /// Resolves the fixture root from the build environment.
     ///
     /// The root is `<CARGO_MANIFEST_DIR>/tests/fixtures`, where
-    /// `CARGO_MANIFEST_DIR` is the crate's manifest directory (`rust/`) baked
-    /// into the binary at compile time. This makes the root robust against the
+    /// `CARGO_MANIFEST_DIR` is the repository root baked into the binary at
+    /// compile time. This makes the root robust against the
     /// test's runtime working directory: `cargo test` can be invoked from the
     /// repo root or the crate dir and the resolved path is the same.
     ///
@@ -81,7 +81,7 @@ impl FixtureRoot {
 impl Default for FixtureRoot {
     fn default() -> Self {
         Self {
-            root: PathBuf::from("rust/tests/fixtures"),
+            root: PathBuf::from("tests/fixtures"),
         }
     }
 }
@@ -97,11 +97,11 @@ mod tests {
         // Invariant: the default root is the shared fixture tree under the
         // repo, never the host `/`. This is the load-bearing assertion that
         // prevents fixture tests from accidentally reading real `/proc`/`/sys`.
-        assert_eq!(root.root, PathBuf::from("rust/tests/fixtures"));
+        assert_eq!(root.root, PathBuf::from("tests/fixtures"));
         assert_ne!(root.root, PathBuf::from("/"));
         assert_eq!(
             root.join("proc/stat"),
-            PathBuf::from("rust/tests/fixtures/proc/stat"),
+            PathBuf::from("tests/fixtures/proc/stat"),
         );
     }
 

@@ -38,7 +38,7 @@ print_dry_run() {
         printf '  Use prebuilt binary %q.\n' "$BINARY"
     else
         printf '  CARGO_TARGET_DIR=%q cargo build --manifest-path %q --release --locked --features nvml\n' \
-            "$REPO_DIR/rust/target" "$REPO_DIR/rust/Cargo.toml"
+            "$REPO_DIR/target" "$REPO_DIR/Cargo.toml"
     fi
     print_command test -x "$BINARY"
 
@@ -239,14 +239,14 @@ if [[ -n "${PLASMA_TOP_BINARY:-}" ]]; then
     }
     BINARY="$PLASMA_TOP_BINARY"
 else
-    BINARY="$REPO_DIR/rust/target/release/plasma-top"
+    BINARY="$REPO_DIR/target/release/plasma-top"
     if [[ "$DRY_RUN" == false ]]; then
         command -v cargo >/dev/null || {
             echo "[error] cargo not found — Rust 1.85+ is required." >&2
             exit 1
         }
-        CARGO_TARGET_DIR="$REPO_DIR/rust/target" \
-            cargo build --manifest-path "$REPO_DIR/rust/Cargo.toml" --release --locked --features nvml
+        CARGO_TARGET_DIR="$REPO_DIR/target" \
+            cargo build --manifest-path "$REPO_DIR/Cargo.toml" --release --locked --features nvml
     fi
 fi
 if [[ "$DRY_RUN" == true ]]; then

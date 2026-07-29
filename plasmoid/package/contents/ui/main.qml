@@ -104,7 +104,7 @@ PlasmoidItem {
 		id: config
 		// The daemon publishes into a per-user runtime directory, and we resolve the
 		// very same one it does: QStandardPaths' RuntimeLocation IS $XDG_RUNTIME_DIR
-		// on Linux, which is what the daemon reads (see rust/src/runtime/mod.rs). So the path
+		// on Linux, which is what the daemon reads (see src/runtime/mod.rs). So the path
 		// is written down in neither the kcfg nor the daemon's config — the two sides
 		// derive it and cannot drift apart. It also can't be a kcfg default: /run/user/
 		// <uid> isn't knowable when the package is built and installed system-wide.
@@ -362,7 +362,7 @@ PlasmoidItem {
 	// any watch on the file itself. This is inotify (FolderListModel), not an mtime
 	// poll — verified to catch every write at a 700ms cadence, faster than mtime's 1s
 	// granularity could resolve. Nothing else may live in that directory; see
-	// rust/src/runtime/mod.rs.
+	// src/runtime/mod.rs.
 	FolderListModel {
 		id: outputWatcher
 		folder: config.runtimeUrl

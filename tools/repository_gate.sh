@@ -15,10 +15,10 @@ if git grep -IniE "$legacy_pattern" || git ls-files | grep -Ei "$legacy_pattern"
 fi
 
 required=(
-    rust/Cargo.toml rust/Cargo.lock rust/src/main.rs rust/src/lib.rs
-    rust/tests/golden/panel_h.html rust/tests/golden/panel_v.html
-    rust/tests/golden/tooltip.html
-    rust/tests/fixtures/oracle/oracle_render_full.toml
+    Cargo.toml Cargo.lock src/main.rs src/lib.rs
+    tests/golden/panel_h.html tests/golden/panel_v.html
+    tests/golden/tooltip.html
+    tests/fixtures/oracle/oracle_render_full.toml
     plasma-top install.sh uninstall.sh packaging/plasma-top-launcher
     service/plasma-top.service service/plasma-top-user.service
     packaging/aur/PKGBUILD packaging/aur/plasma-top.install
@@ -30,7 +30,7 @@ done
 mapfile -t python_files < <(
     find . -type f -name '*.py' \
         -not -path './.git/*' -not -path './.venv/*' \
-        -not -path './rust/target/*' -not -path './.agents/*' \
+        -not -path './target/*' -not -path './.agents/*' \
         -printf '%P\n' | sort
 )
 expected_python='tools/qt_shot.py'
@@ -53,9 +53,9 @@ grep -Fq 'exec /usr/lib/plasma-top/plasma-top "$@"' packaging/plasma-top-launche
     fail "package launcher drift"
 grep -Fq "makedepends=('cargo' 'git')" packaging/aur/PKGBUILD ||
     fail "AUR Rust build dependencies drift"
-grep -Fq 'canonical_width_covers_every_tooltip_item' rust/src/render/formatter.rs ||
+grep -Fq 'canonical_width_covers_every_tooltip_item' src/render/formatter.rs ||
     fail "canonical-width closure test missing"
-grep -Fq 'html.contains("<table")' rust/src/render/mono.rs ||
+grep -Fq 'html.contains("<table")' src/render/mono.rs ||
     fail "table-free render assertion missing"
 
 echo "repository gate: ok"

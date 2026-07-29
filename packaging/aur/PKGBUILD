@@ -1,4 +1,6 @@
 # Maintainer: BogdanD
+# makepkg sources this Bash fragment and provides its globals; it is not a standalone shell script.
+# shellcheck disable=all
 pkgname=plasma-top-git
 _reponame=plasma-top
 pkgver=0
@@ -9,9 +11,9 @@ url="https://github.com/bogdan-d/plasma-top"
 license=('GPL-2.0-or-later')
 depends=('plasma-workspace')
 optdepends=('nvidia-utils: NVIDIA GPU metrics through NVML or nvidia-smi'
-            'iproute2: network identity and the connections tooltip page'
-            'iw: Wi-Fi SSID and signal'
-            'fastfetch: the fastfetch tooltip page')
+	'iproute2: network identity and the connections tooltip page'
+	'iw: Wi-Fi SSID and signal'
+	'fastfetch: the fastfetch tooltip page')
 makedepends=('cargo' 'git')
 provides=('plasma-top')
 conflicts=('plasma-top')
@@ -32,8 +34,8 @@ pkgver() {
 
 build() {
 	cd "$srcdir/$_reponame"
-	CARGO_TARGET_DIR=rust/target \
-		cargo build --manifest-path rust/Cargo.toml --release --locked --features nvml
+	CARGO_TARGET_DIR=target \
+		cargo build --manifest-path Cargo.toml --release --locked --features nvml
 }
 
 package() {
@@ -43,7 +45,7 @@ package() {
 
 	install -d "$libdir"
 	cp -r style lang config "$libdir/"
-	install -m755 rust/target/release/plasma-top "$libdir/plasma-top"
+	install -m755 target/release/plasma-top "$libdir/plasma-top"
 	install -Dm755 packaging/plasma-top-launcher "$pkgdir/usr/bin/plasma-top"
 	install -Dm644 service/plasma-top.service "$pkgdir/usr/lib/systemd/user/plasma-top.service"
 	install -Dm644 plasmoid/package/contents/icons/plasma-top.svg \

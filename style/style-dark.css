@@ -21,7 +21,7 @@
    just visible text).
 
    label/val/extra/title/separator-rule-* are single classes in code
-   (rust/src/render/formatter.rs and model.rs) — panel vs tooltip is decided entirely
+   (src/render/formatter.rs and model.rs) — panel vs tooltip is decided entirely
    here, by scoping under each root wrapper ("panel panel-v"/"panel
    panel-h" for the panel, "tooltip" for the tooltip). font-size set on a
    wrapper is inherited by children that don't override it. */

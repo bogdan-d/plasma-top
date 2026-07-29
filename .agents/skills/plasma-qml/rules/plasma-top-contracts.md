@@ -13,4 +13,4 @@ Preserve these contracts:
 - Qt RichText, not browser HTML/CSS, is the rendering target. HTML tables are forbidden and tooltip width must cover bounded canonical readings.
 - Dark/light selector and layout changes stay mirrored.
 
-Read `main.qml`, `rust/src/page_commands.rs`, `rust/src/runtime/`, relevant render code, and design/performance docs before changing either side of a boundary. Prefer one protocol fix over compensating logic on both sides.
+Read `main.qml`, `src/page_commands.rs`, `src/runtime/`, relevant render code, and design/performance docs before changing either side of a boundary. Prefer one protocol fix over compensating logic on both sides.

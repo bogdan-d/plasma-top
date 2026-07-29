@@ -9,7 +9,7 @@ Compatibility drives the shape: the Rust backend preserves the applet, config, r
 ## Repository architecture
 
 ```text
-rust/src/
+src/
   lib.rs, cli.rs             command parsing and dispatch
   daemon.rs                  lifecycle, reload, poll, publish, shutdown
   diagnostics.rs             render, probe, profiling, list-items
@@ -23,7 +23,7 @@ rust/src/
 plasmoid/                    unchanged Plasma display/interaction boundary
 config/, style/, lang/       shipped data and presentation assets
 service/, packaging/         native Rust runtime installation
-rust/tests/                  integration tests, fixtures, and fixed snapshots
+tests/                      integration tests, fixtures, and fixed snapshots
 ```
 
 `lib.rs` is the process composition root. `daemon.rs` owns the runtime loop; feature modules own their rules and state. Host effects cross explicit traits in `domain/boundary.rs`, with production implementations in `adapters.rs` and deterministic fakes under `test_support/`.
@@ -113,6 +113,6 @@ SIGINT and SIGTERM use `signal-hook`; shutdown removes daemon-owned runtime file
 
 ## Dependencies and verification
 
-Production dependencies are reviewed in `rust/DEPENDENCIES.md`. The crate denies unsafe production code, `unwrap`, `expect`, `todo`, and `unimplemented`. Optional NVML support is feature-gated and falls back non-fatally to `nvidia-smi`.
+Production dependencies are reviewed in `DEPENDENCIES.md`. The crate denies unsafe production code, `unwrap`, `expect`, `todo`, and `unimplemented`. Optional NVML support is feature-gated and falls back non-fatally to `nvidia-smi`.
 
 Rust tests cover domain rules, config, rendering, sensors, adapter traces, runtime concurrency, daemon lifecycle, CLI processes, packaging, and applet integration. Fixed compatibility corpora live with those tests. Full commands live in [DEVELOPMENT.md](DEVELOPMENT.md). Deferred work lives in [`todo/`](../todo/).

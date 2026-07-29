@@ -10,7 +10,7 @@ Usage: tools/qml_verify.sh [--smoke] [--no-build]
 Launch an isolated Plasma applet backed by the Rust daemon.
 
   --smoke     Run a short non-interactive load check, then exit.
-  --no-build  Reuse rust/target/release/plasma-top.
+  --no-build  Reuse target/release/plasma-top.
 
 Without --smoke, close the plasmawindowed window to finish an Application-form
 inspection. `plasmawindowed` cannot emulate panel form factors; use
@@ -38,7 +38,7 @@ for arg in "$@"; do
 done
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-binary="$repo_dir/rust/target/release/plasma-top"
+binary="$repo_dir/target/release/plasma-top"
 original_runtime="${XDG_RUNTIME_DIR:-}"
 test_root="$(mktemp -d /tmp/plasma-top-qml-verify.XXXXXX)"
 daemon_pid=""
@@ -69,7 +69,7 @@ for command in "${commands[@]}"; do
 done
 
 if [[ "$build" == true ]]; then
-    cargo build --manifest-path "$repo_dir/rust/Cargo.toml" --release --locked
+    cargo build --manifest-path "$repo_dir/Cargo.toml" --release --locked
 elif [[ ! -x "$binary" ]]; then
     echo "Rust binary not found: $binary" >&2
     exit 1

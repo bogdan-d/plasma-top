@@ -45,7 +45,7 @@ while (($#)); do
 done
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-binary="$repo_dir/rust/target/release/plasma-top"
+binary="$repo_dir/target/release/plasma-top"
 artifact_root="$repo_dir/.test-artifacts/p6/live"
 original_runtime="${XDG_RUNTIME_DIR:-}"
 original_home="$HOME"
@@ -104,7 +104,7 @@ for command in python3 awk; do
     }
 done
 if [[ "$build" == true ]]; then
-    cargo build --manifest-path "$repo_dir/rust/Cargo.toml" --release --locked
+    cargo build --manifest-path "$repo_dir/Cargo.toml" --release --locked
 fi
 [[ -x "$binary" ]] || {
     echo "Rust binary not found: $binary" >&2
