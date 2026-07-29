@@ -31,7 +31,7 @@ nvml = ["dep:nvml-wrapper"]
 # boundaries internally.
 # License: MIT. GPL-2.0-or-later compatible. No native build script; pure-Rust
 # bindings over libc. See `DEPENDENCIES.md` for the full review row.
-nix = { version = "0.29", default-features = false, features = ["fs", "poll", "process", "user"] }
+nix = { version = "0.31", default-features = false, features = ["fs", "poll", "process", "user"] }
 # TOML parser used by production config loading and test fixtures. It remains a
 # hard dependency because `config.toml` and `machines.toml` require it; the
 # `test-support` feature gates test helpers, not the parser.
@@ -53,16 +53,16 @@ serde = { version = "1", features = ["derive"] }
 # License: MIT OR Zlib OR Apache-2.0. GPL-2.0-or-later compatible. No build
 # script; transitive footprint is tiny (`adler2`). See
 # `DEPENDENCIES.md` for the review row.
-miniz_oxide = "0.8"
+miniz_oxide = "0.9"
 # Safe, runtime-loaded NVIDIA Management Library adapter. Optional so the
 # default build remains portable; release packaging may enable `nvml` without a
 # link-time libnvidia-ml dependency.
-# License: MIT. GPL-2.0-or-later compatible. See `DEPENDENCIES.md`.
-nvml-wrapper = { version = "0.11", optional = true, default-features = false }
+# License: MIT OR Apache-2.0. GPL-2.0-or-later compatible. See `DEPENDENCIES.md`.
+nvml-wrapper = { version = "0.12", optional = true, default-features = false }
 # Small safe wrappers used only at process boundaries. `wait-timeout` provides
 # timeout-bound child waits; `signal-hook` provides safe SIGINT/SIGTERM flags.
 wait-timeout = "0.2"
-signal-hook = "0.3"
+signal-hook = "0.4"
 # `busctl --json=short` is the production D-Bus transport. JSON decoding keeps
 # the project free of a native libdbus dependency and preserves the existing
 # fixtureable DbusFacade contract.
