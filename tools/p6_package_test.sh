@@ -18,7 +18,7 @@ cargo build --manifest-path "$REPO_DIR/Cargo.toml" --release --locked --features
 BINARY="$CARGO_TARGET_DIR/release/plasma-top"
 
 stage_native() {
-    DESTDIR="$ROOT" HOME="$HOME" PLASMA_TOP_BINARY="$BINARY" "$REPO_DIR/install.sh"
+    DESTDIR="$ROOT" HOME="$HOME" PLASMA_TOP_BINARY="$BINARY" "$REPO_DIR/install.sh" --system
 }
 
 assert_native_layout() {
@@ -52,7 +52,7 @@ stage_native
 assert_native_layout
 test ! -e "$ROOT/usr/lib/plasma-top/stale"
 
-DESTDIR="$ROOT" HOME="$HOME" "$REPO_DIR/uninstall.sh"
+DESTDIR="$ROOT" HOME="$HOME" "$REPO_DIR/uninstall.sh" --system
 test ! -e "$ROOT/usr/bin/plasma-top"
 test ! -e "$ROOT/usr/lib/plasma-top"
 test ! -e "$ROOT/usr/lib/systemd/user/plasma-top.service"

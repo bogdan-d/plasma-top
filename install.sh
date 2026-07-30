@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install system-wide by default, or entirely below user-owned paths with --user.
+# Install below user-owned paths by default, or system-wide with --system.
 # shellcheck disable=SC2016
 # Dry-run output prints command templates; $STAGE and $APPLET_STAGE are literal
 # placeholders shown to the user, not expansions to perform.
@@ -7,9 +7,10 @@ set -euo pipefail
 
 usage() {
     cat <<'EOF'
-Usage: ./install.sh [--user] [--dry-run|--dry]
+Usage: ./install.sh [--system] [--dry-run|--dry]
 
-  --user  Install without sudo under ~/.local and XDG_DATA_HOME.
+  By default, installs without sudo under ~/.local and XDG_DATA_HOME.
+  --system  Install system-wide under /usr.
   --dry-run, --dry  Print resolved paths and planned commands without running them.
 EOF
 }
@@ -126,19 +127,19 @@ remove_temp_tree() {
     rm -rf -- "$path"
 }
 
-MODE=system
+MODE=user
 DRY_RUN=false
-user_set=false
+system_set=false
 dry_run_set=false
 for argument in "$@"; do
     case "$argument" in
-    --user)
-        [[ "$user_set" == false ]] || {
+    --system)
+        [[ "$system_set" == false ]] || {
             echo "[error] duplicate argument: $argument" >&2
             exit 2
         }
-        MODE=user
-        user_set=true
+        MODE=system
+        system_set=true
         ;;
     --dry-run | --dry)
         [[ "$dry_run_set" == false ]] || {
@@ -160,7 +161,7 @@ for argument in "$@"; do
     esac
 done
 if [[ "$MODE" == user && -n "${DESTDIR:-}" ]]; then
-    echo "[error] DESTDIR cannot be combined with --user" >&2
+    echo "[error] DESTDIR requires --system" >&2
     exit 2
 fi
 
@@ -169,7 +170,7 @@ APPLET_ID="com.github.bogdan-d.plasma-top"
 
 if [[ "$MODE" == user ]]; then
     [[ "${HOME:-}" == /* && "$HOME" != / ]] || {
-        echo "[error] --user requires an absolute, non-root HOME" >&2
+        echo "[error] user install requires an absolute, non-root HOME" >&2
         exit 2
     }
     HOME="$(canonical_path "$HOME")"
@@ -343,13 +344,13 @@ if [[ "$MODE" == user ]]; then
 
     if kpackagetool6 --type Plasma/Applet --show "$APPLET_ID" >/dev/null 2>&1; then
         if ! kpackagetool6 --type Plasma/Applet --upgrade "$APPLET_STAGE"; then
-            echo "[error] files installed, but applet upgrade failed; retry ./install.sh --user" >&2
+            echo "[error] files installed, but applet upgrade failed; retry ./install.sh" >&2
             exit 1
         fi
         applet_upgraded=true
     else
         if ! kpackagetool6 --type Plasma/Applet --install "$APPLET_STAGE"; then
-            echo "[error] files installed, but applet install failed; retry ./install.sh --user" >&2
+            echo "[error] files installed, but applet install failed; retry ./install.sh" >&2
             exit 1
         fi
         applet_upgraded=false

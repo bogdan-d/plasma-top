@@ -61,18 +61,20 @@ export PATH="$FAKE_BIN:$PATH"
 
 # Argument failures happen before writes.
 if "$REPO_DIR/install.sh" --bogus >/dev/null 2>&1; then exit 1; fi
-if DESTDIR="$TMP/stage" "$REPO_DIR/install.sh" --user >/dev/null 2>&1; then exit 1; fi
-if DESTDIR=/ "$REPO_DIR/install.sh" >/dev/null 2>&1; then exit 1; fi
-if DESTDIR=/ "$REPO_DIR/uninstall.sh" >/dev/null 2>&1; then exit 1; fi
-if XDG_DATA_HOME=relative "$REPO_DIR/install.sh" --user >/dev/null 2>&1; then exit 1; fi
-if XDG_DATA_HOME=/usr/local/share "$REPO_DIR/install.sh" --user >/dev/null 2>&1; then exit 1; fi
-if XDG_DATA_HOME=/tmp/../usr/local/share "$REPO_DIR/install.sh" --user >/dev/null 2>&1; then exit 1; fi
+if "$REPO_DIR/install.sh" --user >/dev/null 2>&1; then exit 1; fi
+if "$REPO_DIR/uninstall.sh" --user >/dev/null 2>&1; then exit 1; fi
+if DESTDIR="$TMP/stage" "$REPO_DIR/install.sh" >/dev/null 2>&1; then exit 1; fi
+if DESTDIR=/ "$REPO_DIR/install.sh" --system >/dev/null 2>&1; then exit 1; fi
+if DESTDIR=/ "$REPO_DIR/uninstall.sh" --system >/dev/null 2>&1; then exit 1; fi
+if XDG_DATA_HOME=relative "$REPO_DIR/install.sh" >/dev/null 2>&1; then exit 1; fi
+if XDG_DATA_HOME=/usr/local/share "$REPO_DIR/install.sh" >/dev/null 2>&1; then exit 1; fi
+if XDG_DATA_HOME=/tmp/../usr/local/share "$REPO_DIR/install.sh" >/dev/null 2>&1; then exit 1; fi
 [[ ! -e "$XDG_DATA_HOME/plasma-top" ]]
 
 # Both dry-run spellings resolve paths without invoking install dependencies or writing files.
 : >"$FAKE_LOG"
-"$REPO_DIR/install.sh" --user --dry-run >"$TMP/dry-run.log"
-"$REPO_DIR/install.sh" --dry --user >"$TMP/dry.log"
+"$REPO_DIR/install.sh" --dry-run >"$TMP/dry-run.log"
+"$REPO_DIR/install.sh" --dry >"$TMP/dry.log"
 [[ ! -s "$FAKE_LOG" && ! -e "$XDG_DATA_HOME/plasma-top" ]]
 grep -Fq "Install tree: $XDG_DATA_HOME/plasma-top" "$TMP/dry-run.log"
 grep -Fq "Launcher: $HOME/.local/bin/plasma-top" "$TMP/dry-run.log"
@@ -83,19 +85,19 @@ grep -Fq 'Dry run only; no system changes will be made.' "$TMP/dry.log"
 mkdir -p "$XDG_DATA_HOME/plasma-top" "$HOME/.local/bin"
 printf 'keep data\n' >"$XDG_DATA_HOME/plasma-top/unrelated"
 printf 'keep launcher\n' >"$HOME/.local/bin/plasma-top"
-"$REPO_DIR/uninstall.sh" --user >/dev/null
+"$REPO_DIR/uninstall.sh" >/dev/null
 [[ "$(cat "$XDG_DATA_HOME/plasma-top/unrelated")" == "keep data" ]]
 [[ "$(cat "$HOME/.local/bin/plasma-top")" == "keep launcher" ]]
-if "$REPO_DIR/install.sh" --user >/dev/null 2>&1; then exit 1; fi
+if "$REPO_DIR/install.sh" >/dev/null 2>&1; then exit 1; fi
 rm -rf -- "$XDG_DATA_HOME/plasma-top"
 rm -f -- "$HOME/.local/bin/plasma-top"
 
 mkdir -p "$TMP/symlink-target"
 ln -s "$TMP/symlink-target" "$XDG_DATA_HOME/plasma-top"
-if "$REPO_DIR/install.sh" --user >/dev/null 2>&1; then exit 1; fi
+if "$REPO_DIR/install.sh" >/dev/null 2>&1; then exit 1; fi
 rm -f -- "$XDG_DATA_HOME/plasma-top"
 
-"$REPO_DIR/install.sh" --user
+"$REPO_DIR/install.sh"
 USER_ROOT="$XDG_DATA_HOME/plasma-top"
 LAUNCHER="$HOME/.local/bin/plasma-top"
 UNIT="$XDG_DATA_HOME/systemd/user/plasma-top.service"
@@ -114,8 +116,8 @@ if grep -Fq "$REPO_DIR" "$LAUNCHER"; then exit 1; fi
 
 # Uninstall dry runs report every removal target without stopping or deleting anything.
 : >"$FAKE_LOG"
-"$REPO_DIR/uninstall.sh" --user --dry-run >"$TMP/uninstall-dry-run.log"
-"$REPO_DIR/uninstall.sh" --dry --user >"$TMP/uninstall-dry.log"
+"$REPO_DIR/uninstall.sh" --dry-run >"$TMP/uninstall-dry-run.log"
+"$REPO_DIR/uninstall.sh" --dry >"$TMP/uninstall-dry.log"
 [[ ! -s "$FAKE_LOG" && -x "$USER_ROOT/plasma-top" && -x "$LAUNCHER" ]]
 grep -Fq "Install tree: $USER_ROOT" "$TMP/uninstall-dry-run.log"
 grep -Fq "Runtime data: $XDG_RUNTIME_DIR/plasma-top" "$TMP/uninstall-dry-run.log"
@@ -123,7 +125,7 @@ grep -Fq 'systemctl --user disable --now plasma-top' "$TMP/uninstall-dry-run.log
 grep -Fq 'Dry run only; no system changes will be made.' "$TMP/uninstall-dry.log"
 
 printf 'keep\n' >"$USER_ROOT/keep"
-if PLASMA_TOP_BINARY="$TMP/missing" "$REPO_DIR/install.sh" --user >/dev/null 2>&1; then
+if PLASMA_TOP_BINARY="$TMP/missing" "$REPO_DIR/install.sh" >/dev/null 2>&1; then
     exit 1
 fi
 [[ "$(cat "$USER_ROOT/keep")" == keep ]]
@@ -135,23 +137,23 @@ diff -u \
     <(sed 's|^ExecStart=.*|ExecStart=<launcher> daemon|' "$REPO_DIR/service/plasma-top-user.service")
 
 printf 'stale\n' >"$USER_ROOT/stale"
-"$REPO_DIR/install.sh" --user
+"$REPO_DIR/install.sh"
 [[ ! -e "$USER_ROOT/stale" ]]
 grep -q -- '--upgrade' "$FAKE_LOG"
 
 # Unsafe state roots fail before owned files are touched.
-if XDG_CACHE_HOME=/ "$REPO_DIR/uninstall.sh" --user >/dev/null 2>&1; then exit 1; fi
-if XDG_RUNTIME_DIR=/ "$REPO_DIR/uninstall.sh" --user >/dev/null 2>&1; then exit 1; fi
+if XDG_CACHE_HOME=/ "$REPO_DIR/uninstall.sh" >/dev/null 2>&1; then exit 1; fi
+if XDG_RUNTIME_DIR=/ "$REPO_DIR/uninstall.sh" >/dev/null 2>&1; then exit 1; fi
 [[ -x "$USER_ROOT/plasma-top" && -x "$LAUNCHER" ]]
 
-if FAIL_SERVICE=1 "$REPO_DIR/install.sh" --user >"$TMP/activation-failure.log" 2>&1; then
+if FAIL_SERVICE=1 "$REPO_DIR/install.sh" >"$TMP/activation-failure.log" 2>&1; then
     exit 1
 fi
 grep -Fq 'journalctl --user -u plasma-top -n 100' "$TMP/activation-failure.log"
 "$LAUNCHER" list-items >/dev/null
 
-"$REPO_DIR/uninstall.sh" --user
-"$REPO_DIR/uninstall.sh" --user
+"$REPO_DIR/uninstall.sh"
+"$REPO_DIR/uninstall.sh"
 [[ ! -e "$USER_ROOT" && ! -e "$LAUNCHER" && ! -e "$UNIT" ]]
 [[ "$(cat "$XDG_CONFIG_HOME/plasma-top/config.toml")" == "user config" ]]
 [[ ! -e "$XDG_CACHE_HOME/plasma-top" ]]

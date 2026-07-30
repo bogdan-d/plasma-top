@@ -47,15 +47,15 @@ User-local install is recommended on immutable/Atomic systems and anywhere you d
 ```bash
 git clone https://github.com/bogdan-d/plasma-top.git
 cd plasma-top
-./install.sh --user
+./install.sh
 ```
 
-This installs below `$HOME/.local` and `$XDG_DATA_HOME` (default `$HOME/.local/share`), activates the user service, and never uses sudo or writes under `/usr`. Add `$HOME/.local/bin` to your interactive shell `PATH` if needed; the service and applet use explicit paths. To build elsewhere, pass an absolute host-compatible binary as `PLASMA_TOP_BINARY=/path/to/plasma-top`. Preview resolved paths and commands without building or changing files with `./install.sh --user --dry-run` (`--dry` is an alias).
+This installs below `$HOME/.local` and `$XDG_DATA_HOME` (default `$HOME/.local/share`), activates the user service, and never uses sudo or writes under `/usr`. Add `$HOME/.local/bin` to your interactive shell `PATH` if needed; the service and applet use explicit paths. To build elsewhere, pass an absolute host-compatible binary as `PLASMA_TOP_BINARY=/path/to/plasma-top`. Preview resolved paths and commands without building or changing files with `./install.sh --dry-run` (`--dry` is an alias).
 
 Traditional system-wide install remains available:
 
 ```bash
-./install.sh
+./install.sh --system
 ```
 
 Both modes build the locked Rust binary, install matching assets, applet, icon, and user service, then activate it. System mode uses `/usr/lib/plasma-top` and `/usr/bin/plasma-top` plus sudo for file installation. Your settings live in ~/.config/plasma-top and are never touched — see [Configuration](#configuration). For checkout-based development, use [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) instead of the system-wide installer.
@@ -64,7 +64,7 @@ Arch packaging metadata lives under `packaging/aur/`. It builds the locked nativ
 
 Then add the widget: **right-click a panel → Add Widgets → search "PlasmaTop"**.
 
-Re-run the same install command to upgrade. Remove a user install with `./uninstall.sh --user`, or a system install with `./uninstall.sh`. Configuration survives either command. Preview removals with `--dry-run` or its `--dry` alias. If an existing widget keeps stale action paths after switching install modes, remove and re-add that widget; the installer never rewrites Plasma's configuration database.
+Re-run the same install command to upgrade. Remove a user install with `./uninstall.sh`, or a system install with `./uninstall.sh --system`. Configuration survives either command. Preview removals with `--dry-run` or its `--dry` alias. If an existing widget keeps stale action paths after switching install modes, remove and re-add that widget; the installer never rewrites Plasma's configuration database.
 
 ## Configuration
 

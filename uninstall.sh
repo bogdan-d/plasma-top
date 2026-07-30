@@ -4,9 +4,10 @@ set -uo pipefail
 
 usage() {
     cat <<'EOF'
-Usage: ./uninstall.sh [--user] [--dry-run|--dry]
+Usage: ./uninstall.sh [--system] [--dry-run|--dry]
 
-  --user  Uninstall user-local files.
+  By default, uninstalls user-local files.
+  --system  Uninstall system-wide files.
   --dry-run, --dry  Print resolved paths and planned commands without changing files.
 EOF
 }
@@ -21,19 +22,19 @@ canonical_path() {
     realpath -m -- "$1"
 }
 
-MODE=system
+MODE=user
 DRY_RUN=false
-user_set=false
+system_set=false
 dry_run_set=false
 for argument in "$@"; do
     case "$argument" in
-    --user)
-        [[ "$user_set" == false ]] || {
+    --system)
+        [[ "$system_set" == false ]] || {
             echo "[error] duplicate argument: $argument" >&2
             exit 2
         }
-        MODE=user
-        user_set=true
+        MODE=system
+        system_set=true
         ;;
     --dry-run | --dry)
         [[ "$dry_run_set" == false ]] || {
@@ -55,7 +56,7 @@ for argument in "$@"; do
     esac
 done
 if [[ "$MODE" == user && -n "${DESTDIR:-}" ]]; then
-    echo "[error] DESTDIR cannot be combined with --user" >&2
+    echo "[error] DESTDIR requires --system" >&2
     exit 2
 fi
 
@@ -167,7 +168,7 @@ print_system_dry_run() {
 
 if [[ "$MODE" == user ]]; then
     [[ "${HOME:-}" == /* && "$HOME" != / ]] || {
-        echo "[error] --user requires an absolute, non-root HOME" >&2
+        echo "[error] user uninstall requires an absolute, non-root HOME" >&2
         exit 2
     }
     HOME="$(canonical_path "$HOME")"
