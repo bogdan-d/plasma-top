@@ -4,11 +4,11 @@ set -euo pipefail
 
 usage() {
     cat <<'EOF'
-Usage: tools/p6_qt_matrix.sh [--no-build]
+Usage: tools/qt_render_matrix.sh [--no-build]
 
 Renders panel H/V, main tooltip, and all deep-dive pages in dark/light/overlay.
 Fails on render/Qt errors, invalid PNGs, tables, or cross-theme layout drift.
-Writes screenshots and an environment manifest under .test-artifacts/p6/qt/.
+Writes screenshots and an environment manifest under .test-artifacts/plasma/qt/.
 EOF
 }
 
@@ -32,8 +32,8 @@ done
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 binary="$repo_dir/target/release/plasma-top"
 python="${PYTHON:-python3}"
-artifact_root="$repo_dir/.test-artifacts/p6/qt"
-tmp_root="$(mktemp -d /tmp/plasma-top-p6-qt.XXXXXX)"
+artifact_root="$repo_dir/.test-artifacts/plasma/qt"
+tmp_root="$(mktemp -d /tmp/plasma-top-qt-render.XXXXXX)"
 trap 'rm -rf "$tmp_root"' EXIT
 
 "$python" -c 'import PyQt6.QtGui' >/dev/null 2>&1 || {
@@ -181,4 +181,4 @@ PY
     sha256sum "$artifact_root"/png/*.png
 } >"$artifact_root/environment.txt"
 
-echo "P6 Qt matrix passed: ${artifact_root#"$repo_dir"/}/images.json"
+echo "Qt render matrix passed: ${artifact_root#"$repo_dir"/}/images.json"

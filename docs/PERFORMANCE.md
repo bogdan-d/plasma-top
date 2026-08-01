@@ -91,7 +91,7 @@ Historical live-app measurement used `pidstat -p $(pidof plasmashell) 1`, the sa
 
 Before the rewrite, the normal tooltip reached 15–20% CPU, roughly 300 ms every 1.5 seconds. `src/render/mono.rs` now aligns five row shapes with monospace `&nbsp;` padding and emits no tables. Historical tooltip-open CPU fell to roughly 1–3%.
 
-Do not reintroduce `<table>` on any render path. Keep the 8 px inset in the plasmoid text padding, not a layout table. Validate rendered changes with the real Qt path. Rust unit tests enforce table-free output for mono layouts, pages, and render models; `tools/p6_qt_matrix.sh` covers the Qt RichText path.
+Do not reintroduce `<table>` on any render path. Keep the 8 px inset in the plasmoid text padding, not a layout table. Validate rendered changes with the real Qt path. Rust unit tests enforce table-free output for mono layouts, pages, and render models; `tools/qt_render_matrix.sh` covers the Qt RichText path.
 
 `pidstat -h` reports `%CPU` in field 8; `$(NF-1)` is the CPU/core id, not the percentage.
 

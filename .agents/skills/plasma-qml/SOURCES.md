@@ -20,7 +20,7 @@ Project authorities:
 - `docs/DEVELOPMENT.md`
 - `plasmoid/package/contents/ui/main.qml`
 - `tools/qml_verify.sh`
-- `tools/p6_qt_matrix.sh`
+- `tools/qt_render_matrix.sh`
 
 The Qt Company R&D `agent-skills` repository was safety-reviewed at commit `71d6c10da78b9a764468ae11c86ab3bc4ca4921f`. No upstream executable or skill was vendored. Applicable ideas were restated here because its generic Qt app, CMake, test-runner, and multi-agent assumptions do not match this plasmoid.
 

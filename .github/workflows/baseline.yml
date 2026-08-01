@@ -55,4 +55,4 @@ jobs:
         run: tools/user_install_test.sh
 
       - name: Native package manifest lifecycle
-        run: tools/p6_package_test.sh
+        run: tools/package_layout_test.sh

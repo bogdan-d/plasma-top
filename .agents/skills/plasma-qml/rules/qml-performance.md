@@ -7,4 +7,4 @@
 - Prefer existing watched-file wakeups over adding free-running timers.
 - Do not infer Qt RichText behavior from browsers. Unsupported CSS may be ignored, while expensive constructs can still trigger costly layout.
 
-PlasmaTop renders table-free, monospace-aligned HTML because real HTML tables caused severe Qt RichText CPU cost. Never add `<table>` on a render path. Mirror CSS selector/layout changes in dark and light styles and prove visual behavior with `tools/p6_qt_matrix.sh` or `tools/qt_shot.py`.
+PlasmaTop renders table-free, monospace-aligned HTML because real HTML tables caused severe Qt RichText CPU cost. Never add `<table>` on a render path. Mirror CSS selector/layout changes in dark and light styles and prove visual behavior with `tools/qt_render_matrix.sh` or `tools/qt_shot.py`.

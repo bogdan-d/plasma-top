@@ -60,7 +60,7 @@ Traditional system-wide install remains available:
 
 Both modes build the locked Rust binary, install matching assets, applet, icon, and user service, then activate it. System mode uses `/usr/lib/plasma-top` and `/usr/bin/plasma-top` plus sudo for file installation. Your settings live in ~/.config/plasma-top and are never touched — see [Configuration](#configuration). For checkout-based development, use [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) instead of the system-wide installer.
 
-Arch packaging metadata lives under `packaging/aur/`. It builds the locked native binary, installs the same applet/assets/service contracts, and has no Python runtime dependency. Maintainers can verify its staged manifest and install/upgrade/uninstall behavior with `tools/p6_package_test.sh`.
+Arch packaging metadata lives under `packaging/aur/`. It builds the locked native binary, installs the same applet/assets/service contracts, and has no Python runtime dependency. Maintainers can verify its staged manifest and install/upgrade/uninstall behavior with `tools/package_layout_test.sh`.
 
 Then add the widget: **right-click a panel → Add Widgets → search "PlasmaTop"**.
 

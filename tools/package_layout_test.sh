@@ -74,4 +74,4 @@ test -f "$pkgdir/usr/share/licenses/plasma-top-git/LICENSE"
 test -f "$pkgdir/usr/share/licenses/plasma-top-git/NOTICE"
 test ! -e "$pkgdir/usr/lib/plasma-top/src"
 
-echo "P6 native package layout, legacy upgrade, repeat upgrade, and uninstall checks passed"
+echo "Native package layout, legacy upgrade, repeat upgrade, and uninstall checks passed"

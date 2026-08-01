@@ -6,7 +6,7 @@ Deferred. Disposable staging tests pass; real package-manager and user-service l
 
 ## Residual risk
 
-`tools/p6_package_test.sh` verifies manifests, legacy-layout upgrades, repeat upgrades, uninstall behavior, AUR packaging, and user-file preservation under a temporary root. It cannot prove real pacman hooks or user-systemd enablement on an Arch Plasma installation.
+`tools/package_layout_test.sh` verifies manifests, legacy-layout upgrades, repeat upgrades, uninstall behavior, AUR packaging, and user-file preservation under a temporary root. It cannot prove real pacman hooks or user-systemd enablement on an Arch Plasma installation.
 
 ## Relevant files
 
@@ -17,7 +17,7 @@ Deferred. Disposable staging tests pass; real package-manager and user-service l
 - `service/plasma-top-user.service`
 - `install.sh`
 - `uninstall.sh`
-- `tools/p6_package_test.sh`
+- `tools/package_layout_test.sh`
 
 ## Handoff
 
@@ -35,5 +35,4 @@ Use a disposable Arch Plasma machine or snapshot-capable VM.
 - Real pacman install/upgrade/uninstall succeeds.
 - User-systemd lifecycle and applet operation succeed after login restart.
 - Package-owned versus user-owned file behavior matches documented contracts.
-- `tools/p6_package_test.sh` and all gates in `docs/DEVELOPMENT.md` remain green.
-
+- `tools/package_layout_test.sh` and all gates in `docs/DEVELOPMENT.md` remain green.

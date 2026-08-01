@@ -25,7 +25,7 @@ Existing fixture tests cover success, absence, malformed data, failure, timeouts
 - `src/sensors/net.rs`
 - `src/sensors/disk.rs`
 - `src/sensors/tests.rs`
-- `tools/p6_live_matrix.sh`
+- `tools/plasma_live_matrix.sh`
 
 ## Handoff
 
@@ -41,4 +41,3 @@ Existing fixture tests cover success, absence, malformed data, failure, timeouts
 - Each checklist item has reproducible live evidence or its own documented defect.
 - Any fixes pass focused tests plus all gates in `docs/DEVELOPMENT.md`.
 - Unsupported AMD GPU metrics remain out of scope unless separately requested.
-

@@ -8,7 +8,7 @@ set -euo pipefail
 
 usage() {
     cat <<'EOF'
-Usage: tools/p6_live_matrix.sh [--no-build] [--interactive|--planar]
+Usage: tools/plasma_live_matrix.sh [--no-build] [--interactive|--planar]
 
 Uses KDE's plasmoidviewer to exercise real horizontal and vertical compact
 representations, then its planar representation. Automatic checks prove load,
@@ -17,7 +17,7 @@ reads, and runtime-root discipline. --interactive keeps a horizontal instance
 open for hover/pin/wheel/resize validation. --planar opens the desktop form for
 background/outline/font/config-page validation.
 
-Evidence is written to .test-artifacts/p6/live/.
+Evidence is written to .test-artifacts/plasma/live/.
 No system or production runtime path is modified. On immutable hosts,
 plasmoidviewer may be a Distrobox export.
 EOF
@@ -46,7 +46,7 @@ done
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 binary="$repo_dir/target/release/plasma-top"
-artifact_root="$repo_dir/.test-artifacts/p6/live"
+artifact_root="$repo_dir/.test-artifacts/plasma/live"
 original_runtime="${XDG_RUNTIME_DIR:-}"
 original_home="$HOME"
 original_config="${XDG_CONFIG_HOME:-$HOME/.config}"
@@ -340,7 +340,7 @@ echo "PASS runtime_root entries=panel.html,state,tooltip.html" >>"$artifact_root
 cp "$test_root/logs/daemon.log" "$artifact_root/daemon.log"
 
 if [[ "$interactive" == false && "$planar" == false ]]; then
-    echo "P6 live automatic matrix passed: ${artifact_root#"$repo_dir"/}/automatic.txt"
+    echo "Plasma live automatic matrix passed: ${artifact_root#"$repo_dir"/}/automatic.txt"
     exit 0
 fi
 
@@ -362,7 +362,7 @@ Manual desktop checklist:
   3. Right-click stats → Configure PlasmaTop → Appearance. Toggle background,
      desktop outline, and font size; each applies cleanly without clipping.
   4. Wheel paging changes one page per gesture and content remains aligned.
-  5. Inspect .test-artifacts/p6/qt/contact-sheet.png for dark/light/overlay pages.
+  5. Inspect .test-artifacts/plasma/qt/contact-sheet.png for dark/light/overlay pages.
 
 Close plasmoidviewer when finished. Evidence root: $artifact_root
 EOF
@@ -378,7 +378,7 @@ Manual interaction checklist:
   3. Scroll one burst: exactly one page change. Pause >200 ms; scroll again:
      exactly one further page change. Quick reverse must still work.
   4. Resize window: panel remains readable and $state_root/geom changes.
-  5. Inspect .test-artifacts/p6/qt/contact-sheet.png.
+  5. Inspect .test-artifacts/plasma/qt/contact-sheet.png.
 
 Close plasmoidviewer when finished. Evidence root: $artifact_root
 EOF
