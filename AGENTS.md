@@ -32,7 +32,7 @@ Run commands from repository root. Development setup and full gates live in `doc
 
 Use the full Rust fmt/check/clippy/test/doc gates from `docs/DEVELOPMENT.md`. Never weaken required test evidence, lint, or dead-code checks.
 
-Read `docs/ITEMS.md` for item behavior and `docs/PERFORMANCE.md` before poll/cache changes. Deferred work lives in `todo/`.
+Read `docs/ITEMS.md` for item behavior and `docs/PERFORMANCE.md` before poll/cache changes. Deferred work lives in `.scratch/`.
 
 ## Agent skills
 

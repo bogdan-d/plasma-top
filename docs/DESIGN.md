@@ -115,4 +115,4 @@ SIGINT and SIGTERM use `signal-hook`; shutdown removes daemon-owned runtime file
 
 Production dependencies are reviewed in `DEPENDENCIES.md`. The crate denies unsafe production code, `unwrap`, `expect`, `todo`, and `unimplemented`. Optional NVML support is feature-gated and falls back non-fatally to `nvidia-smi`.
 
-Rust tests cover domain rules, config, rendering, sensors, adapter traces, runtime concurrency, daemon lifecycle, CLI processes, packaging, and applet integration. Fixed compatibility corpora live with those tests. Full commands live in [DEVELOPMENT.md](DEVELOPMENT.md). Deferred work lives in [`todo/`](../todo/).
+Rust tests cover domain rules, config, rendering, sensors, adapter traces, runtime concurrency, daemon lifecycle, CLI processes, packaging, and applet integration. Fixed compatibility corpora live with those tests. Full commands live in [DEVELOPMENT.md](DEVELOPMENT.md). Deferred work lives in [`.scratch/`](../.scratch/).

@@ -67,4 +67,4 @@ For a release candidate, perform a separate real-session pass only when modifyin
 
 Python is not a runtime, build, lint, or baseline CI dependency. Optional Qt/QML verification uses Python 3; `tools/qt_shot.py` additionally needs PyQt6. Fixed compatibility snapshots and fixtures live under `tests/`.
 
-Live hardware and safe mutation coverage that cannot be reproduced in fixtures is tracked in `todo/002-live-hardware-and-mutation-validation.md`.
+Live hardware and safe mutation coverage that cannot be reproduced in fixtures is tracked in `.scratch/live-hardware-and-mutation-validation/spec.md`.

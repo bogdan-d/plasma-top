@@ -14,7 +14,7 @@ Low-priority UX issue.
 2. Check whether Qt exposes the rejection reason or another signal that reliably distinguishes explicit cancellation.
 3. Define expected outside-click behavior before editing code.
 4. Keep live preview, Apply/OK, empty/default color, and alpha behavior intact.
-5. If Qt cannot distinguish the cases, document the platform limitation and remove the stale source TODO instead of adding event-filter complexity.
+5. If Qt cannot distinguish the cases, document the platform limitation and remove the stale source comment instead of adding event-filter complexity.
 
 ## Done when
 
