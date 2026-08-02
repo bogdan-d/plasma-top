@@ -31,4 +31,3 @@ The three pager dots at the bottom of the tooltip no longer appear horizontally 
 - Pager dots are visually centered on every page at supported widths and common scale factors.
 - Current-page highlighting remains correct while paging in both directions.
 - Focused pager tests, Qt visual checks, QML smoke, and full gates pass.
-

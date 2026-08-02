@@ -34,4 +34,3 @@ PlasmaTop uses Nerd Font glyphs, so switching to a common distro monospace font 
 - The chosen default is documented, broadly available under the supported installation story, and renders all required glyphs.
 - Tooltip text is smaller while remaining readable and unclipped at common scale factors.
 - README requirements, diagnostics fallback, KConfig defaults, visual checks, and package tests agree.
-

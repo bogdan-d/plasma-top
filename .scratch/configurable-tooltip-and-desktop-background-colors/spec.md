@@ -33,4 +33,3 @@ Appearance settings can toggle the desktop widget background, but cannot choose 
 - Theme defaults remain available without guessing a color value.
 - Alpha, scaling, rounded corners, borders, and tooltip geometry render correctly in real Plasma.
 - QML smoke, package checks, and relevant live visual checks pass.
-

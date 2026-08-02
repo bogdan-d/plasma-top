@@ -22,4 +22,3 @@ Low-priority UX issue.
 - Accepted selection persists through Plasma configuration.
 - Outside-click behavior is intentional and documented.
 - Real settings-dialog verification and `tools/qml_verify.sh --smoke` pass.
-

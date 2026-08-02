@@ -22,7 +22,7 @@ Existing fixture tests cover success, absence, malformed data, failure, timeouts
 - `src/sensors/gpu_nvidia.rs`
 - `src/sensors/power.rs`
 - `src/sensors/hid.rs`
-- `src/sensors/net.rs`
+- `src/sensors/network.rs`
 - `src/sensors/disk.rs`
 - `src/sensors/tests.rs`
 - `tools/plasma_live_matrix.sh`

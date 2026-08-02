@@ -4,6 +4,8 @@
 
 Deferred. Disposable staging tests pass; real package-manager and user-service lifecycle remains unverified.
 
+The installer defaults to a user-local install; system-wide installation is explicit via `--system`.
+
 ## Residual risk
 
 `tools/package_layout_test.sh` verifies manifests, legacy-layout upgrades, repeat upgrades, uninstall behavior, AUR packaging, and user-file preservation under a temporary root. It cannot prove real pacman hooks or user-systemd enablement on an Arch Plasma installation.

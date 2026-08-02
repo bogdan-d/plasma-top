@@ -34,4 +34,3 @@ Disk usage, SMART, disk temperature, and battery notification categories default
 - One setting disables all notification delivery without erasing category choices.
 - Disabled notification-only capabilities do not trigger unnecessary collection.
 - Config, notification, daemon lifecycle, and full repository tests pass.
-
