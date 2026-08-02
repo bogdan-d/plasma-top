@@ -33,3 +33,17 @@ Run commands from repository root. Development setup and full gates live in `doc
 Use the full Rust fmt/check/clippy/test/doc gates from `docs/DEVELOPMENT.md`. Never weaken required test evidence, lint, or dead-code checks.
 
 Read `docs/ITEMS.md` for item behavior and `docs/PERFORMANCE.md` before poll/cache changes. Deferred work lives in `todo/`.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs live as Markdown files under `.scratch/<feature-slug>/`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, and `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: root `CONTEXT.md` and `docs/adr/`. See `docs/agents/domain.md`.
