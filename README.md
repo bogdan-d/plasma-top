@@ -89,7 +89,7 @@ systemctl --user status plasma-top   # the live daemon
 
 ## How it works
 
-The daemon's pipeline (in `src/`: sensors, formatter, render model, mono renderer) renders stats as monospace-aligned HTML; the applet in `plasmoid/` displays it and publishes live panel geometry back to the daemon, which auto-fits bars and sparks to it. See [docs/](docs/) for the design (DESIGN.md), layout (LAYOUT.md), item catalogue (ITEMS.md) and performance (PERFORMANCE.md) notes.
+The daemon's pipeline (in `src/`: sensors, formatter, render model, mono renderer) renders stats as monospace-aligned HTML; the applet in `plasmoid/` displays it and publishes live panel geometry back to the daemon, which auto-fits bars and sparks to it. See [docs/](docs/) for the design (DESIGN.md), metric acquisition inventory (METRICS_INVENTORY.md), layout (LAYOUT.md), item catalogue (ITEMS.md) and performance (PERFORMANCE.md) notes.
 
 ## License & credits
 
