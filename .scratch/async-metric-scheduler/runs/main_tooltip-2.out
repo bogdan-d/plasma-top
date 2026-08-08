@@ -1,0 +1,30 @@
+── Tooltip output (full) ──────────────────────────────────
+CPU & MEM
+ 
+ Cpu usage: ⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀            3%
+ Mem usage: 21G / 125G           17%
+ Cpu freq:  Turbo            2.0 GHz
+ 
+DRIVES
+ 
+󰄫 Root:   0G / 0G                100%
+󰄫 T_01: 846G / 953G               88%
+ 
+THERMAL
+ 
+ Cpu temp:                      49°C
+󰋊 Nvme:     35°C  󰋊 Nvme:        49°C
+ 
+I/O
+ 
+ Read:        0   Write:          0
+󰕒 Upload:      0  󰇚 Dload:          0
+󰛳 Network:   enp191s0 - 192.168.10.10
+󰣸 Wifi:                       -- - --
+ 
+LOAD
+ 
+󰥔 Uptime:                      5h 49m
+󰐟 Load avg:            1.07 0.98 0.98
+
+

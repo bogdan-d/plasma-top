@@ -1,0 +1,12 @@
+hidden_equivalent	1	real_s=0.05 user_s=0.01 sys_s=0.00 max_rss_kb=7360 
+hidden_equivalent	2	real_s=0.05 user_s=0.00 sys_s=0.01 max_rss_kb=7444 
+hidden_equivalent	3	real_s=0.04 user_s=0.01 sys_s=0.00 max_rss_kb=7044 
+main_tooltip	1	real_s=1.06 user_s=0.01 sys_s=0.01 max_rss_kb=15288 
+main_tooltip	2	real_s=1.04 user_s=0.01 sys_s=0.01 max_rss_kb=15536 
+main_tooltip	3	real_s=1.06 user_s=0.01 sys_s=0.01 max_rss_kb=15212 
+graphs_page	1	real_s=1.06 user_s=0.01 sys_s=0.01 max_rss_kb=15388 
+graphs_page	2	real_s=1.06 user_s=0.01 sys_s=0.01 max_rss_kb=15320 
+graphs_page	3	real_s=1.06 user_s=0.01 sys_s=0.01 max_rss_kb=15352 
+processes_page	1	real_s=1.57 user_s=0.01 sys_s=0.02 max_rss_kb=14832 
+processes_page	2	real_s=1.57 user_s=0.01 sys_s=0.02 max_rss_kb=15028 
+processes_page	3	real_s=1.57 user_s=0.01 sys_s=0.02 max_rss_kb=15556 

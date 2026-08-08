@@ -1,0 +1,59 @@
+── Hardware discovery ──────────────────────────────────────
+machine:         (none)
+net_device:      enp191s0
+cpu_temp_path:   /sys/class/hwmon/hwmon10/temp1_input
+hd_temp [nvme0n1]:  /sys/class/hwmon/hwmon6/temp1_input
+hd_temp [nvme1n1]:  /sys/class/hwmon/hwmon5/temp1_input
+battery_mouse:   (not found)
+battery_kbd:     (not found)
+intel_gpu:       (not found)
+has_nvidia:      false
+
+── Readings ────────────────────────────────────────────────
+  cpu_usage              Some(4)
+  cpu_temp               Some(49)
+  cpu_freq               Some(3556.619)
+  cpu_turbo              Some(true)
+  cpu_history            [0]
+  mem_history            [16]
+  uptime                 Some(20968)
+  load_avg               Some(LoadAverage { one: 1.53, five: 1.08, fifteen: 1.02 })
+  top_process            None
+  top_process_full       None
+  cpu_core_usage         None
+  cpu_core_history       None
+  mem_usage              Some(16)
+  mem_used_gb            Some(21)
+  mem_total_gb           Some(125)
+  swap_usage             None
+  net_up_bps             Some(3977)
+  net_down_bps           Some(4212)
+  net_device             Some("enp191s0")
+  ip_address             Some("192.168.10.10")
+  wifi_ssid              None
+  wifi_signal            None
+  disk_read_bps          None
+  disk_write_bps         None
+  disk_usage             {"/": Some(DiskUsageReading { percent: 100, used_gib: 0, total_gib: 0 }), "/run/media/bogdan/T_01": Some(DiskUsageReading { percent: 88, used_gib: 846, total_gib: 953 })}
+  disk_smart             {"nvme0n1": None, "nvme1n1": None}
+  hd_temps               {"nvme0n1": Some(34), "nvme1n1": Some(49)}
+  fan_speeds             {}
+  battery_sys            []
+  battery_mouse          None
+  battery_kbd            None
+  gpu_temp               None
+  gpu_usage              None
+  gpu_mem                None
+  gpu_dec                None
+  gpu_fan                None
+  gpu_intel_freq         None
+  gpu_intel_usage        None
+  gpu_intel_dec_usage    None
+  gpu_usage_history      []
+  gpu_dec_history        []
+  net_up_history         [3977]
+  net_down_history       [4212]
+  screen_brightness      None
+  system_updates         None
+  server_ok              None
+

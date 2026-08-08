@@ -1,0 +1,22 @@
+── Tooltip output (processes) ──────────────────────────────────
+TOP PROCESSES
+ 
+   PID  COMMAND            %CPU  %MEM
+185311  Code --standard-s…   15   0.7
+656450  pi                   11   0.3
+  3318  kwin_wayland --wa…    3   0.2
+163170  Code --gpu-prefer…    3   0.1
+  3621  plasmashell --no-…    1   0.5
+324900  Code --standard-s…    1   0.4
+163112  code                  1   0.4
+327148  kilo serve --port…    1   0.3
+662206  plasma-top render…    1   0.0
+  7279  zen --name app.ze…    0   1.2
+ 10666  browser 12 tab        0   0.9
+  8827  browser 11 tab        0   0.9
+  7514  browser 5 tab         0   0.8
+384824  browser 29 tab        0   0.7
+325266  rust-analyzer         0   0.7
+                 ● ●
+
+

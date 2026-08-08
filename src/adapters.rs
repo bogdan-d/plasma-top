@@ -309,6 +309,22 @@ mod tests {
     use super::*;
 
     #[test]
+    fn command_runner_returns_timeout_without_waiting_for_child_exit() {
+        let mut runner = ProductionCommandRunner;
+        let result = runner.run(
+            Path::new("/bin/sh"),
+            &[OsString::from("-c"), OsString::from("sleep 1")],
+            Duration::from_millis(10),
+        );
+
+        let error = match result {
+            Ok(_) => panic!("sleeping command must time out"),
+            Err(error) => error,
+        };
+        assert!(error.to_string().contains("timed out after 0.010s"));
+    }
+
+    #[test]
     fn property_json_normalizes_to_interleaved_pairs() {
         let value = serde_json::json!({"data": [{
             "Percentage": {"type": "d", "data": 52.5},
