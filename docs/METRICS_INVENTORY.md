@@ -1,22 +1,22 @@
 # Metrics acquisition inventory
 
-This document maps PlasmaTop readings to their real acquisition paths. Use it to understand poll cost, blocking behavior, process dependencies, cache boundaries, and likely optimization targets. Item behavior and presentation remain documented in [ITEMS.md](ITEMS.md); measured and historical costs remain in [PERFORMANCE.md](PERFORMANCE.md).
+This document maps PlasmaTop metric samples to their real acquisition paths. Use it to understand source cost, blocking behavior, process dependencies, freshness budgets, and likely optimization targets. Item behavior and presentation remain documented in [ITEMS.md](ITEMS.md); measured and historical costs remain in [PERFORMANCE.md](PERFORMANCE.md).
 
 ## Executive summary
 
-PlasmaTop does not use a general system-monitoring crate such as `sysinfo`. Most readings are parsed directly from Linux `/proc` and `/sys` files with Rust's standard library. Filesystem capacity uses `nix`'s safe `statvfs` wrapper, Logitech Bolt uses `nix::poll` plus direct `hidraw` I/O, and NVIDIA can use the optional `nvml-wrapper` integration.
+PlasmaTop does not use a general system-monitoring crate such as `sysinfo`. Most metric samples are parsed directly from Linux `/proc` and `/sys` files with Rust's standard library. Filesystem capacity uses `nix`'s safe `statvfs` wrapper, Logitech Bolt uses `nix::poll` plus direct `hidraw` I/O, and NVIDIA can use the optional `nvml-wrapper` integration.
 
-Collection is synchronous and single-threaded. `src/daemon.rs` calls `src/sensors/mod.rs::collect` once per normal poll, and `collect` runs requested families in this order:
+Collection is synchronous and single-threaded. `src/daemon.rs` stores each domain owner separately and passes short-lived borrowed `OwnerRefs` to `src/sensors/collect.rs::collect_with_notifications` once per normal publication pass. Sampling runs demanded jobs in this order:
 
 ```text
-CPU -> memory -> network -> disks -> batteries -> NVIDIA GPU -> Intel GPU -> brightness/status files
+CPU and panel processes -> memory -> network -> disks/SMART/temperatures/fans -> batteries/HID -> NVIDIA GPU -> Intel GPU -> GPU history -> brightness/status files
 ```
 
-Every source finishes before the next source starts. Loops over mounts, drives, fans, or batteries are also sequential. Direct file reads, syscalls, NVML calls, HID reads, and subprocess waits therefore block the daemon thread. A blocked pass delays publication, page-state checks, and shutdown observation until the current operation returns.
+Every source finishes before the next source starts. Loops over mounts, drives, fans, or batteries are also sequential. Direct file reads, syscalls, NVML calls, HID reads, and subprocess waits therefore block the daemon thread. A blocked pass delays display-snapshot publication, selected-page checks, and shutdown observation until the current operation returns.
 
-Collection is demand-driven. Resolved panel and tooltip items, enabled notifications, and configured graph pages determine required capabilities. CPU and memory baselines are always read; unrequested optional capabilities do no sensor work. Shared reads execute once per pass and feed every item that needs them.
+The demand set is derived from resolved panel and tooltip items, enabled notifications, configured graph history, and selected-page work. CPU and memory are sampled every pass to preserve their diff baselines; optional metrics outside the demand set do no source work. Shared reads execute once per pass and can feed multiple metric samples.
 
-After collection and rendering, the daemon sleeps only for the remainder of `display.poll_interval`. If work consumes the whole interval, the next poll starts immediately rather than overlapping with the previous one.
+After synchronous sampling, display-snapshot assembly, rendering, and publication, the daemon sleeps only for the remainder of `display.poll_interval`. If work consumes the whole interval, the next pass starts immediately rather than overlapping with the previous one.
 
 ## Acquisition inventory
 
@@ -42,21 +42,21 @@ Relevant code: `src/sensors/cpu.rs`, `src/sensors/memory.rs`, and the CPU/memory
 
 | Reading | Primary source | Method | Normal cadence and notes |
 | --- | --- | --- | --- |
-| Panel top processes | `/proc/[pid]/stat`, `/proc/meminfo` | Direct directory/file scan; CPU percentage from consecutive process snapshots | 15-second cache; skipped during fast first paint |
-| Processes tooltip page | `/proc/[pid]/stat` and selected `/proc/[pid]/cmdline` files | Direct directory/file scan owned by the active page | Updated only while the processes page is active; separate from panel cache |
+| Panel top processes | `/proc/[pid]/stat`, `/proc/meminfo` | Direct directory/file scan; CPU percentage from consecutive process samples | 15-second freshness budget; skipped during fast first paint |
+| Processes tooltip page | `/proc/[pid]/stat` and selected `/proc/[pid]/cmdline` files | Direct directory/file scan owned by the selected page | Updated only while the processes page is selected; separate from the panel process sample |
 
 No `ps`, `top`, or process library is used. Cost scales mainly with process count because the reader walks procfs sequentially.
 
-Relevant code: `src/sensors/process.rs` and active-page handling in `src/daemon.rs`.
+Relevant code: process owner state and one-attempt reads in `src/sensors/process.rs`, with selected-page orchestration and final display-snapshot assembly in `src/daemon.rs`.
 
 ### Network
 
 | Reading | Primary source | Method | Normal cadence and notes |
 | --- | --- | --- | --- |
 | Upload/download rate | `/sys/class/net/<device>/statistics/tx_bytes` and `rx_bytes` | Direct Rust file reads; bytes per second from consecutive snapshots | Every requested poll; first sample seeds the diff; device changes reset it |
-| Active interface | `ip route get 8.8.8.8`, with `ip route show default` discovery fallback | External `ip` process | Identity cache refreshes every 10 seconds; each command has a 3-second timeout |
-| Local IP | `src` token from `ip route get 8.8.8.8` | External `ip` process | Shared 10-second identity cache and 3-second timeout |
-| Wi-Fi SSID and signal | `iw dev <device> link` | External `iw` process; dBm converted to a clamped percentage | Only for a wireless active interface; shared 10-second identity cache and 3-second timeout |
+| Active interface | `ip route get 8.8.8.8`, with `ip route show default` discovery fallback | External `ip` process | Identity sample has a 10-second freshness budget; each command has a 3-second timeout |
+| Local IP | `src` token from `ip route get 8.8.8.8` | External `ip` process | Shared identity sample with a 10-second freshness budget and 3-second timeout |
+| Wi-Fi SSID and signal | `iw dev <device> link` | External `iw` process; dBm converted to a clamped percentage | Only for the current wireless interface; shared identity sample with a 10-second freshness budget and 3-second timeout |
 | Network history | Rate samples already collected | In-memory vectors | Sampled at `display.history_interval` when required by graph consumers |
 
 Network identity refresh can invoke `ip` followed by `iw` sequentially. Hardware discovery may also invoke both `ip` route forms when the first does not provide a device.
@@ -70,9 +70,9 @@ Relevant code: `src/sensors/network.rs` and the network section of `src/sensors/
 | Mount discovery | Configured mounts or `/proc/mounts`; device identity from `/sys` | Direct Rust file and symlink reads | Resolved when disk usage is requested |
 | Filesystem usage | Mounted filesystem | `nix::sys::statvfs::statvfs` syscall wrapper | Once per requested mount per poll, sequentially |
 | Disk read/write rate | `/proc/diskstats` | Direct Rust file read; sector-counter diff using 512-byte sectors | Every requested poll; first sample seeds the diff; device changes reset it |
-| Disk temperature | Discovered `nvme` or `drivetemp` hwmon `temp*_input` files | Direct Rust file read | 30-second cache per drive |
-| Fan speed | Discovered hwmon `fan*_input` files | Direct Rust file read | 30-second cache per fan |
-| SMART health | UDisks2 `SmartUpdate` and property calls | External `busctl --system --json=short` processes through the D-Bus facade | Per-drive configurable SSD/HDD cache interval; calls are sequential; SMART update timeout is 15 seconds |
+| Disk temperature | Discovered `nvme` or `drivetemp` hwmon `temp*_input` files | Direct Rust file read | 30-second freshness budget per drive |
+| Fan speed | Discovered hwmon `fan*_input` files | Direct Rust file read | 30-second freshness budget per fan |
+| SMART health | UDisks2 `SmartUpdate` and property calls | External `busctl --system --json=short` processes through the D-Bus facade | Per-drive configurable SSD/HDD freshness budget; calls are sequential; SMART update timeout is 15 seconds |
 
 SMART acquisition is the disk path with the largest individual timeout. One refresh may require multiple D-Bus calls for each drive, and configured drives are processed one at a time.
 
@@ -82,10 +82,10 @@ Relevant code: `src/sensors/disk.rs`, `src/sensors/hwmon.rs`, and SMART function
 
 | Reading | Primary source | Method | Normal cadence and notes |
 | --- | --- | --- | --- |
-| System battery | `/sys/class/power_supply/<id>/...` | Direct Rust file reads | Preferred path; 30-second cache |
-| System battery fallback | UPower properties | External `busctl --system --json=short` processes through the D-Bus facade | Used when sysfs cannot provide the battery; 30-second cache |
-| UPower mouse/keyboard battery | UPower device properties | External `busctl --system --json=short` processes through the D-Bus facade | 30-second cache |
-| Logitech Bolt mouse/keyboard battery | `/dev/hidraw*`, discovered through `/sys/class/hidraw` | Direct HID++ report writes/reads using standard file I/O and `nix::poll` | One-hour cache; skipped during fast first paint; each report read has a 1-second timeout and a query accepts at most 10 reads |
+| System battery | `/sys/class/power_supply/<id>/...` | Direct Rust file reads | Preferred path; 30-second freshness budget |
+| System battery fallback | UPower properties | External `busctl --system --json=short` processes through the D-Bus facade | Used when sysfs cannot provide the battery; 30-second freshness budget |
+| UPower mouse/keyboard battery | UPower device properties | External `busctl --system --json=short` processes through the D-Bus facade | 30-second freshness budget |
+| Logitech Bolt mouse/keyboard battery | `/dev/hidraw*`, discovered through `/sys/class/hidraw` | Direct HID++ report writes/reads using standard file I/O and `nix::poll` | One-hour freshness budget; skipped during fast first paint; each report read has a 1-second timeout and a query accepts at most 10 reads |
 
 Production D-Bus calls default to a 5-second timeout unless a request supplies another value. Peripheral discovery is retried at most every 60 seconds when requested hardware remains unresolved.
 
@@ -96,10 +96,10 @@ Relevant code: `src/sensors/power.rs`, `src/sensors/hid.rs`, and `src/adapters.r
 | Reading | Primary source | Method | Normal cadence and notes |
 | --- | --- | --- | --- |
 | NVIDIA temperature, utilization, memory, decoder, fan | NVIDIA Management Library | Optional `nvml-wrapper` feature; library loaded at runtime | Every requested poll; skipped during fast first paint |
-| NVIDIA fallback metrics | `nvidia-smi --query-gpu=... --format=csv,noheader,nounits` | External `nvidia-smi` process | Used when NVML is unavailable or a read fails; 3-second cache and 5-second timeout |
+| NVIDIA fallback metrics | `nvidia-smi --query-gpu=... --format=csv,noheader,nounits` | External `nvidia-smi` process | Used when NVML is unavailable or a read fails; 3-second freshness budget and 5-second timeout |
 | NVIDIA history | Current NVIDIA sample | In-memory vectors | Sampled at `display.history_interval` when required |
 | Intel GPU frequency | Discovered DRM/sysfs frequency file | Direct Rust file read | Every requested poll |
-| Intel GPU render/decoder utilization | `/proc/[pid]/fd/*/fdinfo` DRM engine counters associated with the Intel PCI device | Direct procfs scan and consecutive counter diff | 30-second cache; skipped during fast first paint |
+| Intel GPU render/decoder utilization | `/proc/[pid]/fd/*/fdinfo` DRM engine counters associated with the Intel PCI device | Direct procfs scan and consecutive counter diff | 30-second freshness budget; skipped during fast first paint |
 
 The default Cargo feature set does not enable NVML. Packaging must build with the `nvml` feature to use `nvml-wrapper`; otherwise NVIDIA always uses the `nvidia-smi` fallback.
 
@@ -117,16 +117,16 @@ The update and server-check producers are outside the daemon. Optimizing or chan
 
 ## Deep-dive page inventory
 
-Deep-dive page bodies are built only while active. Page changes are checked during the daemon's sleep in 100 ms steps and can republish the tooltip without another full collection.
+Deep-dive page bodies are built only for the selected page. Page changes are checked during the daemon's sleep in 100 ms steps and can republish the tooltip without another full synchronous sampling pass. The daemon protocol does not report tooltip presentation, so selected-page work remains governed by page selection.
 
-| Page | Source | Blocking/caching behavior |
+| Page | Source | Blocking/retention behavior |
 | --- | --- | --- |
-| Full stats | Current `ReadingsSnapshot` | No extra acquisition beyond normal collection |
-| Processes | Direct `/proc` scan | Active-page only; no external process |
-| CPU cores | Per-core `/proc/stat` data | Collection enabled when page is configured; rendering active-page only |
-| Connections | `ss -4tlnp` | External process only while active; no cache; 5-second timeout |
-| Fastfetch | `fastfetch`, optionally wrapped by `script -qec` for terminal behavior | External process only while active; 30-second cache; 5-second timeout |
-| Graphs | Histories already held in memory, then pure-Rust PNG rasterization | Active-page render only; no acquisition subprocess |
+| Full stats | Current `DisplaySnapshot` | No extra acquisition beyond normal collection |
+| Processes | Direct `/proc` scan | Selected-page only; no external process |
+| CPU cores | Per-core `/proc/stat` data | Sampling enabled when page is configured; rendering only while selected |
+| Connections | `ss -4tlnp` | External process attempted on every selected-page render because its freshness budget is zero; the latest successful output is retained after a failed attempt; 5-second timeout |
+| Fastfetch | `fastfetch`, optionally wrapped by `script -qec` for terminal behavior | External process only while selected; 30-second freshness budget; 5-second timeout |
+| Graphs | Histories already held in memory, then pure-Rust PNG rasterization | Selected-page render only; no acquisition subprocess |
 
 ## Rust crates used at acquisition boundaries
 
@@ -144,14 +144,14 @@ Deep-dive page bodies are built only while active. Page changes are checked duri
 
 Metric and page acquisition:
 
-| Executable | Purpose | Timeout/cache |
+| Executable | Purpose | Timeout/freshness budget |
 | --- | --- | --- |
-| `ip` | Active route, interface, and local IP | 3 seconds per call; identity cached 10 seconds |
-| `iw` | Wi-Fi SSID and signal | 3 seconds per call; identity cached 10 seconds |
-| `nvidia-smi` | NVIDIA fallback metrics | 5 seconds; cached 3 seconds |
-| `busctl` | UPower batteries and UDisks2 discovery/SMART | 5-second default per call; SMART update uses 15 seconds; sensor-specific caches apply |
-| `ss` | Connections tooltip page | 5 seconds; no cache; active-page only |
-| `fastfetch` | System-info tooltip page | 5 seconds; cached 30 seconds; active-page only |
+| `ip` | Current route, interface, and local IP | 3 seconds per call; identity freshness budget is 10 seconds |
+| `iw` | Wi-Fi SSID and signal | 3 seconds per call; identity freshness budget is 10 seconds |
+| `nvidia-smi` | NVIDIA fallback metrics | 5 seconds; freshness budget is 3 seconds |
+| `busctl` | UPower batteries and UDisks2 discovery/SMART | 5-second default per call; SMART update uses 15 seconds; source-specific freshness budgets apply |
+| `ss` | Connections tooltip page | 5 seconds; zero freshness budget; selected-page only |
+| `fastfetch` | System-info tooltip page | 5 seconds; 30-second freshness budget; selected-page only |
 | `script` | Optional pseudo-terminal wrapper for `fastfetch` | Shares page command's 5-second timeout |
 
 Related external processes that do not acquire normal metrics:
@@ -171,7 +171,7 @@ The production command runner starts one child and waits synchronously with `wai
 
 Sensor failures are isolated logically: a missing file, malformed value, unavailable service, permission error, command failure, or timeout normally produces `None` or an empty reading, allowing later sensor families to run. This isolation does not make work concurrent; elapsed time before a timeout still delays everything that follows it.
 
-A rough worst-case pass is the sum of sequential slow operations that are both requested and cache-due. Per-command timeout values are ceilings, not expected timings, but multiple D-Bus calls or drives can accumulate beyond one timeout period.
+A rough worst-case pass is the sum of sequential slow operations that are both demanded and due under their freshness budgets. Per-command timeout values are ceilings, not expected timings, but multiple D-Bus calls or drives can accumulate beyond one timeout period.
 
 ## Optimization map
 
@@ -188,18 +188,21 @@ Highest-value questions:
 3. Are `busctl`, `ip`, `iw`, or `nvidia-smi` frequently reaching timeout rather than returning quickly?
 4. Is release packaging enabling NVML, avoiding the recurring `nvidia-smi` process?
 5. Are configured items or notifications requesting capabilities that are not useful on this machine?
-6. Is an active uncached connections page repeatedly running `ss`?
+6. Is the selected connections page repeatedly running `ss` on its zero freshness budget?
 
 Low-risk optimization levers already supported are removing unused metric capabilities, enabling NVML in packaging, increasing configurable SMART/history intervals where freshness permits, and avoiding expensive deep-dive pages when not needed. Before adding threads or async code, profile whether a specific sequential boundary causes visible latency; concurrency would add state, cancellation, publication-order, and shutdown complexity to a daemon whose common procfs/sysfs reads are normally cheap.
 
 ## Source map
 
-- Poll lifecycle and active-page wake behavior: `src/daemon.rs`
-- Collection order and capability gating: `src/sensors/mod.rs`
-- CPU, memory, network, disk, process, GPU, power, and HID details: matching modules under `src/sensors/`
+- Publication lifecycle, selected-page wake behavior, and final process-page display-snapshot assembly: `src/daemon.rs`
+- Synchronous order and demand-set capability gating: `src/sensors/collect.rs`
+- Short-lived borrowed owner wiring and collection boundaries: `src/sensors/coordinator.rs`
+- Separate owner state and reconciliation interfaces: matching domain modules under `src/sensors/`
+- One-attempt result contracts and source reads: `src/sensors/attempts.rs`, `src/sensors/attempts/`, and matching owner modules under `src/sensors/`
+- Hardware inventory discovery and reconciliation: `src/sensors/discovery.rs`
 - Subprocess, D-Bus, notification, and clock adapters: `src/adapters.rs`
 - Command-backed tooltip pages: `src/page_commands.rs`
 - Metric-to-capability mapping: `src/domain/metric.rs` and `src/domain/registry.rs`
-- Typed per-poll result: `src/domain/readings.rs`
-- Persistent collector/cache state: `src/sensors/mod.rs` and `src/domain/state.rs`
-- Current cache policy and profiling guidance: [PERFORMANCE.md](PERFORMANCE.md)
+- `MetricSample`, `HardwareInventory`, and `DisplaySnapshot` contracts: `src/domain/readings.rs`
+- Notification latch state: `src/domain/state.rs`
+- Current freshness policy and profiling guidance: [PERFORMANCE.md](PERFORMANCE.md)

@@ -1,10 +1,10 @@
 # Performance
 
-Read this before changing daemon polling, sensor caching, command boundaries, or HTML layout. The runtime is Rust-only. Current behavior and historical pre-cutover measurements are separated; old numbers are baselines, not claims about current Rust timings.
+Read this before changing daemon polling, metric-sample retention, freshness budgets, command boundaries, or HTML layout. The runtime is Rust-only. Current behavior and historical pre-cutover measurements are separated; old numbers are baselines, not claims about current Rust timings.
 
 ## Measure current Rust behavior
 
-`plasma-top profiling` uses `std::time::Instant` around real config loading, hardware discovery, and cold/warm collection. It prints timings and cache state to stdout and never writes daemon runtime files:
+`plasma-top profiling` uses `std::time::Instant` around real config loading, hardware discovery, and cold/warm synchronous sampling passes. It prints timings to stdout and never writes daemon runtime files:
 
 ```bash
 ./plasma-top profiling --config config/config.toml
@@ -25,23 +25,23 @@ The daemon spends most of its time asleep. Work belongs to four boundaries:
 
 Formatting is deterministic and allocation-heavy relative to arithmetic, but hardware and process I/O usually dominate. Measure before optimizing either. Failure paths must remain bounded: every external command has a timeout, absent services degrade without retries in a tight loop, and logs stay bounded.
 
-## Pay only for active pages
+## Pay only for the selected page
 
-The daemon publishes tooltip HTML every poll because it cannot see hover state, but it builds only the active page body.
+The daemon publishes tooltip HTML every poll because the current protocol does not report whether a tooltip is presented, but it builds only the selected page body.
 
-- `processes` uses a page-owned `/proc` diff sample while shown; panel process data keeps its separate 15-second cache.
+- `processes` uses a page-owned `/proc` diff sample while selected; panel process data has a separate 15-second freshness budget.
 - `cpu_cores` history is collected only when that page is configured.
-- `connections` runs `ss` only while shown.
-- `fastfetch` runs only while shown and caches output for 30 seconds.
-- `graphs` rasterizes PNGs only while shown; required histories are sampled only when the page is enabled.
+- `connections` runs `ss` only while selected.
+- `fastfetch` runs only while selected and has a 30-second freshness budget.
+- `graphs` rasterizes PNGs only while selected; required histories are sampled while the page is configured.
 
-Page state is checked during sleep in 100 ms steps. A page change republishes the tooltip without waiting a full `display.poll_interval` and without running a new full collection.
+Selected-page state is checked during sleep in 100 ms steps. A page change republishes the tooltip without waiting a full `display.poll_interval` and without running a new full sampling pass. The protocol does not report tooltip presentation, so page-owned work follows selection state.
 
-## Current cache policy
+## Current sample and freshness policy
 
-Cache timestamps use monotonic `Duration` values. `Option` represents “never sampled”; no numeric timestamp doubles as a sentinel. Diff-based caches holding no real sample retry promptly rather than hiding the first value for a full TTL.
+Metric-sample capture times and attempt times use monotonic `Duration` values. `Option` represents “never sampled”; no numeric timestamp doubles as a sentinel. Diff-based owners without a valid metric sample retry promptly rather than delaying the first value for a full freshness budget.
 
-| Reading | Current interval |
+| Metric sample | Current freshness budget |
 |---|---:|
 | disk temperature | 30 s |
 | fan speed | 30 s |
@@ -58,9 +58,9 @@ Cache timestamps use monotonic `Duration` values. `Option` represents “never s
 
 SMART intervals remain configurable by drive class. Histories use `display.history_interval` and trim to the largest enabled consumer.
 
-During the first 90 seconds, `src/daemon.rs` logs when requested slow readings first become available. The boot watch then disables itself, keeping steady-state observability cost negligible.
+During the first 90 seconds, `src/daemon.rs` logs when demanded slow metric samples first become available. The boot watch then disables itself, keeping steady-state observability cost negligible.
 
-Canonical tooltip width is currently recomputed from bounded, maxed readings on first paint and each normal poll. This keeps width correct after mounts, hardware, or identity changes. Treat memoization as a future optimization only after profiling proves this render contributes material work.
+Canonical tooltip width is recomputed from a bounded, maxed display snapshot on first paint and each normal publication pass. This keeps width correct after mounts, hardware inventory, or identity changes. Memoization is justified only if profiling shows this render contributes material work.
 
 ## Process-backed boundaries
 
@@ -69,8 +69,8 @@ PlasmaTop minimizes subprocess work but is not fork-free.
 - Plasma uses `cat` after watched HTML changes.
 - D-Bus requests use timeout-bound `busctl --json=short`.
 - Notifications use timeout-bound `notify-send`.
-- `nvidia-smi` is the cached fallback when NVML is unavailable.
-- `ip`, `iw`, `ss`, and `fastfetch` run only for requested capabilities/pages.
+- `nvidia-smi` is the retained fallback sample source when NVML is unavailable.
+- `ip`, `iw`, `ss`, and `fastfetch` run only when included in the current demand set.
 - system-update and server checks read files produced by external jobs rather than starting package managers or network probes inside the poll loop.
 
 Hardware presence uses sysfs instead of tools such as `lspci`. Historical measurement found NVIDIA detection through `lspci` took roughly 2000 ms while the equivalent sysfs walk took roughly 2 ms. Keep detection in-process.

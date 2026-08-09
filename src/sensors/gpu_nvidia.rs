@@ -1,29 +1,28 @@
-//! NVIDIA GPU discovery, metrics, fallback caching, and graph history.
+//! NVIDIA GPU discovery, metric sampling, and fallback state.
 //!
-//! NVML itself stays behind [`NvmlFacade`]. The Phase 5 collector owns loading
-//! the optional library and GPU-0 handle; this module owns all observable
-//! selection, fallback, clamp, cache, and history behavior.
+//! NVML itself stays behind [`NvmlFacade`]. The production adapter owns lazy loading of the optional library and GPU-0 handle, this module owns NVIDIA sample and source-selection state, and synchronous collection applies freshness decisions.
 
 use std::ffi::OsString;
 use std::fs;
+use std::io;
 use std::path::Path;
 use std::time::Duration;
 
-use crate::config::Config;
 use crate::domain::boundary::{ClockSnapshot, CommandRunner, CommandStatus};
-use crate::domain::readings::{HardwareSnapshot, ReadingsSnapshot};
-use crate::domain::state::{DaemonStateSnapshot, GpuCache};
+use crate::domain::readings::RetainedMetricSample;
 
 #[cfg(feature = "nvml")]
-use nvml_wrapper::{Nvml, enum_wrappers::device::TemperatureSensor};
+use nvml_wrapper::{
+    Nvml, enum_wrappers::device::TemperatureSensor, error::NvmlError as WrapperNvmlError,
+};
 
 /// `nvidia-smi` executable token used by the Python backend.
 pub const NVIDIA_SMI_PROGRAM: &str = "nvidia-smi";
 /// Timeout for the `nvidia-smi` fallback.
 pub const NVIDIA_SMI_TIMEOUT: Duration = Duration::from_secs(5);
-/// Forking fallback cache TTL.
+/// Freshness budget for the process-backed fallback sample.
 pub const GPU_CACHE_TTL: Duration = Duration::from_secs(3);
-/// NVML reads are cheap enough to run every poll.
+/// NVML samples are due on every requested synchronous pass.
 pub const GPU_CACHE_TTL_NVML: Duration = Duration::ZERO;
 
 const NVIDIA_VENDOR: &str = "0x10de";
@@ -47,13 +46,113 @@ pub struct NvidiaMetrics {
     pub fan_percent: Option<i32>,
 }
 
-/// NVML failure class needed by the fallback/cache state machine.
+/// Outcome of one optional NVML metric read.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NvmlOptionalMetric {
+    /// The metric was captured.
+    Value(i32),
+    /// NVML confirmed that this device does not support the metric.
+    NotSupported,
+    /// The operational read failed transiently.
+    Failed,
+}
+
+/// One NVML device read with typed optional metric outcomes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NvmlMetrics {
+    /// GPU temperature in °C.
+    pub temp_celsius: i32,
+    /// GPU utilization percentage.
+    pub usage_percent: i32,
+    /// GPU memory-controller utilization percentage.
+    pub memory_percent: i32,
+    /// Decoder read outcome.
+    pub decoder: NvmlOptionalMetric,
+    /// Fan read outcome.
+    pub fan: NvmlOptionalMetric,
+}
+
+impl From<NvidiaMetrics> for NvmlMetrics {
+    fn from(metrics: NvidiaMetrics) -> Self {
+        Self {
+            temp_celsius: metrics.temp_celsius.unwrap_or_default(),
+            usage_percent: metrics.usage_percent.unwrap_or_default(),
+            memory_percent: metrics.memory_percent.unwrap_or_default(),
+            decoder: metrics
+                .decoder_percent
+                .map_or(NvmlOptionalMetric::NotSupported, NvmlOptionalMetric::Value),
+            fan: metrics
+                .fan_percent
+                .map_or(NvmlOptionalMetric::NotSupported, NvmlOptionalMetric::Value),
+        }
+    }
+}
+
+/// Latest NVIDIA metrics and fallback-selection state.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct GpuCache {
+    /// GPU temperature in °C.
+    pub temp_celsius: Option<i32>,
+    /// GPU usage percentage.
+    pub usage_percent: Option<i32>,
+    /// GPU memory usage percentage.
+    pub memory_percent: Option<i32>,
+    /// GPU decoder usage percentage.
+    pub decoder_percent: Option<i32>,
+    /// GPU fan percentage.
+    pub fan_percent: Option<i32>,
+    /// Whether NVML initialization failed for the current confirmed device presence.
+    pub nvml_init_failed: bool,
+    /// Monotonic instant of the latest successful metric sample.
+    pub sampled_at: Option<Duration>,
+    /// Monotonic instant of the latest attempt, successful or not.
+    pub attempted_at: Option<Duration>,
+    /// Monotonic instant of the latest source failure.
+    pub failed_at: Option<Duration>,
+    /// Monotonic instant of the latest NVML attempt.
+    pub nvml_attempted_at: Option<Duration>,
+    /// Monotonic instant of the latest NVML failure.
+    pub nvml_failed_at: Option<Duration>,
+    /// Whether the latest NVML attempt failed.
+    pub nvml_latest_attempt_failed: bool,
+    /// Monotonic instant of the latest command-fallback attempt.
+    pub fallback_attempted_at: Option<Duration>,
+    /// Monotonic instant of the latest command-fallback failure.
+    pub fallback_failed_at: Option<Duration>,
+    /// Whether the latest command-fallback attempt failed.
+    pub fallback_latest_attempt_failed: bool,
+    pub(super) decoder: RetainedMetricSample<i32>,
+    pub(super) fan: RetainedMetricSample<i32>,
+}
+
+/// Mutable sample state owned by the NVIDIA domain.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct NvidiaState {
+    /// Latest NVIDIA reading.
+    pub cache: GpuCache,
+}
+
+impl NvidiaState {
+    pub(crate) fn reconcile_source(&mut self, active: bool) {
+        if !active {
+            self.cache = GpuCache::default();
+        }
+    }
+}
+
+/// NVML failure class needed by the fallback source-selection state machine.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NvmlError {
-    /// Library initialization or GPU-0 handle lookup failed permanently.
+    /// Library initialization or GPU-0 handle lookup failed for this presence generation.
     Init,
     /// A metric read failed; retry NVML next poll.
     Read,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum NvidiaSourceOutcome {
+    Captured,
+    Failed,
 }
 
 /// Narrow NVML boundary consumed by NVIDIA orchestration.
@@ -64,19 +163,18 @@ pub trait NvmlFacade {
     ///
     /// Returns [`NvmlError::Init`] for initialization/handle failure and
     /// [`NvmlError::Read`] when mandatory metric reads fail.
-    fn read_device_zero(&mut self) -> Result<NvidiaMetrics, NvmlError>;
+    fn read_device_zero(&mut self) -> Result<NvmlMetrics, NvmlError>;
 }
 
 /// Runtime-loaded production NVML adapter for NVIDIA GPU 0.
 ///
 /// Initialization is lazy so the daemon's fast first paint does not load the
-/// driver library. A missing library or GPU-0 handle returns [`NvmlError::Init`]
-/// once; [`read_nvidia`] then permanently selects its `nvidia-smi` fallback.
+/// driver library. Backend suppression belongs to [`NvidiaState`], allowing a
+/// confirmed device removal to clear it before a later re-add.
 #[cfg(feature = "nvml")]
 #[derive(Debug, Default)]
 pub struct ProductionNvml {
     nvml: Option<Nvml>,
-    init_failed: bool,
 }
 
 #[cfg(feature = "nvml")]
@@ -85,51 +183,35 @@ impl ProductionNvml {
     /// read, not during daemon construction.
     #[must_use]
     pub const fn new() -> Self {
-        Self {
-            nvml: None,
-            init_failed: false,
-        }
+        Self { nvml: None }
     }
 }
 
 #[cfg(feature = "nvml")]
 impl NvmlFacade for ProductionNvml {
-    fn read_device_zero(&mut self) -> Result<NvidiaMetrics, NvmlError> {
-        if self.init_failed {
-            return Err(NvmlError::Init);
-        }
+    fn read_device_zero(&mut self) -> Result<NvmlMetrics, NvmlError> {
         if self.nvml.is_none() {
             match Nvml::init() {
                 Ok(nvml) => self.nvml = Some(nvml),
-                Err(_) => {
-                    self.init_failed = true;
-                    return Err(NvmlError::Init);
-                }
+                Err(_) => return Err(NvmlError::Init),
             }
         }
 
         let Some(nvml) = self.nvml.as_ref() else {
-            self.init_failed = true;
             return Err(NvmlError::Init);
         };
-        let device = nvml.device_by_index(0).map_err(|_| {
-            self.init_failed = true;
-            NvmlError::Init
-        })?;
+        let device = nvml.device_by_index(0).map_err(|_| NvmlError::Init)?;
         let temp = device
             .temperature(TemperatureSensor::Gpu)
             .map_err(|_| NvmlError::Read)?;
         let usage = device.utilization_rates().map_err(|_| NvmlError::Read)?;
 
-        Ok(NvidiaMetrics {
-            temp_celsius: u32_to_i32(temp),
-            usage_percent: u32_to_i32(usage.gpu),
-            memory_percent: u32_to_i32(usage.memory),
-            decoder_percent: device
-                .decoder_utilization()
-                .ok()
-                .and_then(|value| u32_to_i32(value.utilization)),
-            fan_percent: device.fan_speed(0).ok().and_then(u32_to_i32),
+        Ok(NvmlMetrics {
+            temp_celsius: u32_to_i32(temp).ok_or(NvmlError::Read)?,
+            usage_percent: u32_to_i32(usage.gpu).ok_or(NvmlError::Read)?,
+            memory_percent: u32_to_i32(usage.memory).ok_or(NvmlError::Read)?,
+            decoder: optional_nvml(device.decoder_utilization().map(|value| value.utilization)),
+            fan: optional_nvml(device.fan_speed(0)),
         })
     }
 }
@@ -139,33 +221,72 @@ fn u32_to_i32(value: u32) -> Option<i32> {
     i32::try_from(value).ok()
 }
 
+#[cfg(feature = "nvml")]
+fn optional_nvml(result: Result<u32, WrapperNvmlError>) -> NvmlOptionalMetric {
+    match result {
+        Ok(value) => {
+            u32_to_i32(value).map_or(NvmlOptionalMetric::Failed, NvmlOptionalMetric::Value)
+        }
+        Err(WrapperNvmlError::NotSupported) => NvmlOptionalMetric::NotSupported,
+        Err(_) => NvmlOptionalMetric::Failed,
+    }
+}
+
 /// Detects an NVIDIA display-class PCI device below `sys_root`.
 #[must_use]
 pub fn detect_nvidia(sys_root: &Path) -> bool {
-    let Ok(devices) = fs::read_dir(sys_root.join("bus/pci/devices")) else {
-        return false;
-    };
-    devices.flatten().any(|entry| {
-        let device = entry.path();
-        let Ok(vendor) = fs::read_to_string(device.join("vendor")) else {
-            return false;
-        };
-        if vendor.trim() != NVIDIA_VENDOR {
-            return false;
-        }
-        fs::read_to_string(device.join("class"))
-            .is_ok_and(|class| class.trim().starts_with(DISPLAY_CLASS_PREFIX))
-    })
+    detect_nvidia_outcome(sys_root).unwrap_or(false)
 }
 
-/// Returns the active cache TTL for the current NVML state.
-#[must_use]
-pub const fn gpu_cache_ttl(nvml_available: bool, nvml_init_failed: bool) -> Duration {
-    if nvml_available && !nvml_init_failed {
-        GPU_CACHE_TTL_NVML
-    } else {
-        GPU_CACHE_TTL
+/// Detects NVIDIA presence without flattening an incomplete PCI enumeration.
+pub(crate) fn detect_nvidia_outcome(sys_root: &Path) -> io::Result<bool> {
+    let devices = fs::read_dir(sys_root.join("bus/pci/devices"))?;
+    let mut incomplete = false;
+    for entry in devices {
+        let Ok(entry) = entry else {
+            incomplete = true;
+            continue;
+        };
+        let device = entry.path();
+        let Ok(vendor) = fs::read_to_string(device.join("vendor")) else {
+            incomplete = true;
+            continue;
+        };
+        if parse_pci_value(&vendor).is_err() {
+            incomplete = true;
+            continue;
+        }
+        if vendor.trim() != NVIDIA_VENDOR {
+            continue;
+        }
+        let Ok(class) = fs::read_to_string(device.join("class")) else {
+            incomplete = true;
+            continue;
+        };
+        if parse_pci_value(&class).is_err() {
+            incomplete = true;
+            continue;
+        }
+        if class.trim().starts_with(DISPLAY_CLASS_PREFIX) {
+            return Ok(true);
+        }
     }
+    if incomplete {
+        Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "incomplete PCI enumeration",
+        ))
+    } else {
+        Ok(false)
+    }
+}
+
+fn parse_pci_value(value: &str) -> io::Result<u32> {
+    value
+        .trim()
+        .strip_prefix("0x")
+        .and_then(|value| u32::from_str_radix(value, 16).ok())
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "malformed PCI value"))
 }
 
 /// Caps a metric at 99 while preserving absence and negative values.
@@ -174,101 +295,133 @@ pub fn nvidia_cap(value: Option<i32>) -> Option<i32> {
     value.map(|value| value.min(99))
 }
 
-/// Reads NVIDIA metrics, preferring NVML and falling back to `nvidia-smi`.
-///
-/// NVML initialization failure is permanent and enables the three-second
-/// fallback cache. Ordinary NVML read failure falls back for this call but is
-/// retried next poll, matching Python's cached-handle behavior.
+/// Compatibility wrapper that performs one NVML read and, when needed, one fallback read; production synchronous collection keeps the two source freshness decisions independent.
 pub fn read_nvidia(
     state: &mut GpuCache,
-    mut nvml: Option<&mut dyn NvmlFacade>,
+    nvml: Option<&mut dyn NvmlFacade>,
     runner: &mut dyn CommandRunner,
     clock: ClockSnapshot,
 ) -> NvidiaMetrics {
-    let ttl = gpu_cache_ttl(nvml.is_some(), state.nvml_init_failed);
-    if let Some(sampled_at) = state.sampled_at
-        && clock.monotonic.saturating_sub(sampled_at) < ttl
-    {
-        return metrics_from_cache(state);
-    }
-
-    let nvml_result = if state.nvml_init_failed {
+    let nvml_outcome = if state.nvml_init_failed {
         None
     } else {
-        nvml.as_mut().map(|facade| facade.read_device_zero())
+        nvml.map(|facade| attempt_nvml(state, facade, clock.monotonic))
     };
-    let metrics = match nvml_result {
-        Some(Ok(metrics)) => cap_metrics(metrics),
-        Some(Err(NvmlError::Init)) => {
-            state.nvml_init_failed = true;
-            read_nvidia_smi(runner)
+    if nvml_outcome != Some(NvidiaSourceOutcome::Captured) {
+        let _ = attempt_fallback(state, runner, clock.monotonic);
+    }
+    metrics_from_cache(state)
+}
+
+/// Performs one NVML source read and records NVML-specific diagnostics.
+pub(super) fn attempt_nvml(
+    state: &mut GpuCache,
+    nvml: &mut dyn NvmlFacade,
+    captured_at: Duration,
+) -> NvidiaSourceOutcome {
+    state.attempted_at = Some(captured_at);
+    state.nvml_attempted_at = Some(captured_at);
+    match nvml.read_device_zero() {
+        Ok(metrics) => {
+            commit_optional(&mut state.decoder, metrics.decoder, captured_at);
+            commit_optional(&mut state.fan, metrics.fan, captured_at);
+            let metrics = NvidiaMetrics {
+                temp_celsius: nvidia_cap(Some(metrics.temp_celsius)),
+                usage_percent: nvidia_cap(Some(metrics.usage_percent)),
+                memory_percent: nvidia_cap(Some(metrics.memory_percent)),
+                decoder_percent: state.decoder.latest.as_ref().map(|sample| sample.value),
+                fan_percent: state.fan.latest.as_ref().map(|sample| sample.value),
+            };
+            store_metrics(state, metrics, captured_at);
+            state.nvml_latest_attempt_failed = false;
+            NvidiaSourceOutcome::Captured
         }
-        Some(Err(NvmlError::Read)) | None => read_nvidia_smi(runner),
-    };
-    store_metrics(state, metrics, clock.monotonic);
-    metrics
+        Err(error) => {
+            if error == NvmlError::Init {
+                state.nvml_init_failed = true;
+            }
+            state.failed_at = Some(captured_at);
+            state.nvml_failed_at = Some(captured_at);
+            state.nvml_latest_attempt_failed = true;
+            NvidiaSourceOutcome::Failed
+        }
+    }
+}
+
+/// Performs one `nvidia-smi` source read and records fallback-specific diagnostics.
+pub(super) fn attempt_fallback(
+    state: &mut GpuCache,
+    runner: &mut dyn CommandRunner,
+    captured_at: Duration,
+) -> NvidiaSourceOutcome {
+    state.attempted_at = Some(captured_at);
+    state.fallback_attempted_at = Some(captured_at);
+    if let Some(mut metrics) = read_nvidia_smi_attempt(runner) {
+        commit_fallback_optional(&mut state.decoder, metrics.decoder_percent, captured_at);
+        commit_fallback_optional(&mut state.fan, metrics.fan_percent, captured_at);
+        metrics.decoder_percent = state.decoder.latest.as_ref().map(|sample| sample.value);
+        metrics.fan_percent = state.fan.latest.as_ref().map(|sample| sample.value);
+        store_metrics(state, metrics, captured_at);
+        state.fallback_latest_attempt_failed = false;
+        NvidiaSourceOutcome::Captured
+    } else {
+        state.decoder.record_failure(captured_at);
+        state.fan.record_failure(captured_at);
+        state.failed_at = Some(captured_at);
+        state.fallback_failed_at = Some(captured_at);
+        state.fallback_latest_attempt_failed = true;
+        NvidiaSourceOutcome::Failed
+    }
+}
+
+fn commit_fallback_optional(
+    retained: &mut RetainedMetricSample<i32>,
+    value: Option<i32>,
+    attempted_at: Duration,
+) {
+    if let Some(value) = value {
+        retained.record_value(value, attempted_at);
+    } else {
+        retained.record_absence(attempted_at);
+    }
+}
+
+fn commit_optional(
+    retained: &mut RetainedMetricSample<i32>,
+    outcome: NvmlOptionalMetric,
+    attempted_at: Duration,
+) {
+    match outcome {
+        NvmlOptionalMetric::Value(value) => {
+            retained.record_value(nvidia_cap(Some(value)).unwrap_or(value), attempted_at);
+        }
+        NvmlOptionalMetric::NotSupported => retained.record_absence(attempted_at),
+        NvmlOptionalMetric::Failed => retained.record_failure(attempted_at),
+    }
 }
 
 /// Reads and parses the `nvidia-smi` CSV fallback.
 #[must_use]
 pub fn read_nvidia_smi(runner: &mut dyn CommandRunner) -> NvidiaMetrics {
+    read_nvidia_smi_attempt(runner).unwrap_or_default()
+}
+
+fn read_nvidia_smi_attempt(runner: &mut dyn CommandRunner) -> Option<NvidiaMetrics> {
     let args = [
         OsString::from(NVIDIA_SMI_QUERY),
         OsString::from(NVIDIA_SMI_FORMAT),
     ];
     let Ok(output) = runner.run(Path::new(NVIDIA_SMI_PROGRAM), &args, NVIDIA_SMI_TIMEOUT) else {
-        return NvidiaMetrics::default();
+        return None;
     };
     if output.status != CommandStatus::Exit(0) {
-        return NvidiaMetrics::default();
+        return None;
     }
     let Ok(stdout) = std::str::from_utf8(&output.stdout) else {
-        return NvidiaMetrics::default();
+        return None;
     };
-    parse_nvidia_smi(stdout).unwrap_or_default()
-}
-
-/// Samples the preferred GPU into graphs-page history and exposes the buffers.
-///
-/// NVIDIA wins on hybrid machines based on hardware presence, even when its
-/// current reading is absent. A missing usage sample preserves and re-exposes
-/// existing history without inserting a gap.
-pub fn sample_gpu_history(
-    state: &mut DaemonStateSnapshot,
-    cfg: &Config,
-    hw: &HardwareSnapshot,
-    readings: &mut ReadingsSnapshot,
-    clock: ClockSnapshot,
-) {
-    if !cfg.pages.order.iter().any(|page| page == "graphs") {
-        return;
-    }
-    let (usage, decoder) = if hw.has_nvidia {
-        (readings.gpu_usage, readings.gpu_dec)
-    } else if hw.intel_gpu_pci.is_some() {
-        (readings.gpu_intel_usage, readings.gpu_intel_dec_usage)
-    } else {
-        return;
-    };
-
-    if let Some(usage) = usage
-        && history_due(
-            state.gpu_history_sample_at,
-            clock.monotonic,
-            cfg.display.history_interval,
-        )
-    {
-        state.gpu_history_sample_at = Some(clock.monotonic);
-        state.gpu_usage_history.push(usage);
-        state.gpu_dec_history.push(decoder.unwrap_or(0));
-        let max_len = cfg.pages.graph_history_length.max(0) as usize;
-        trim_to_len(&mut state.gpu_usage_history, max_len);
-        trim_to_len(&mut state.gpu_dec_history, max_len);
-    }
-    readings
-        .gpu_usage_history
-        .clone_from(&state.gpu_usage_history);
-    readings.gpu_dec_history.clone_from(&state.gpu_dec_history);
+    parse_nvidia_smi(stdout)
+        .filter(|metrics| metrics.temp_celsius.is_some() && metrics.usage_percent.is_some())
 }
 
 fn parse_nvidia_smi(stdout: &str) -> Option<NvidiaMetrics> {
@@ -286,17 +439,7 @@ fn parse_metric(value: &str) -> Option<i32> {
     nvidia_cap(value.parse::<i32>().ok())
 }
 
-fn cap_metrics(metrics: NvidiaMetrics) -> NvidiaMetrics {
-    NvidiaMetrics {
-        temp_celsius: nvidia_cap(metrics.temp_celsius),
-        usage_percent: nvidia_cap(metrics.usage_percent),
-        memory_percent: nvidia_cap(metrics.memory_percent),
-        decoder_percent: nvidia_cap(metrics.decoder_percent),
-        fan_percent: nvidia_cap(metrics.fan_percent),
-    }
-}
-
-fn metrics_from_cache(cache: &GpuCache) -> NvidiaMetrics {
+pub(super) fn metrics_from_cache(cache: &GpuCache) -> NvidiaMetrics {
     NvidiaMetrics {
         temp_celsius: cache.temp_celsius,
         usage_percent: cache.usage_percent,
@@ -315,349 +458,5 @@ fn store_metrics(cache: &mut GpuCache, metrics: NvidiaMetrics, sampled_at: Durat
     cache.sampled_at = Some(sampled_at);
 }
 
-fn history_due(sampled_at: Option<Duration>, now: Duration, interval_secs: f64) -> bool {
-    let interval = if interval_secs.is_finite() && interval_secs > 0.0 {
-        Duration::from_secs_f64(interval_secs)
-    } else {
-        Duration::ZERO
-    };
-    sampled_at.is_none_or(|previous| now.saturating_sub(previous) >= interval)
-}
-
-fn trim_to_len<T>(values: &mut Vec<T>, max_len: usize) {
-    if values.len() > max_len {
-        values.drain(..values.len() - max_len);
-    }
-}
-
 #[cfg(all(test, feature = "test-support"))]
-mod tests {
-    use super::*;
-
-    use std::collections::VecDeque;
-    use std::fs;
-    use std::path::PathBuf;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    use crate::domain::boundary::{BoundaryError, CommandOutput};
-    use crate::test_support::FakeCommandRunner;
-
-    #[derive(Default)]
-    struct FakeNvml {
-        replies: VecDeque<Result<NvidiaMetrics, NvmlError>>,
-        calls: usize,
-    }
-
-    impl FakeNvml {
-        fn with(replies: impl IntoIterator<Item = Result<NvidiaMetrics, NvmlError>>) -> Self {
-            Self {
-                replies: replies.into_iter().collect(),
-                calls: 0,
-            }
-        }
-    }
-
-    impl NvmlFacade for FakeNvml {
-        fn read_device_zero(&mut self) -> Result<NvidiaMetrics, NvmlError> {
-            self.calls += 1;
-            self.replies.pop_front().unwrap_or(Err(NvmlError::Read))
-        }
-    }
-
-    struct TempTree(PathBuf);
-
-    impl TempTree {
-        fn new() -> Self {
-            let unique = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or(Duration::ZERO)
-                .as_nanos();
-            let root = std::env::temp_dir().join(format!(
-                "plasma-top-gpu-nvidia-{}-{unique}",
-                std::process::id()
-            ));
-            if let Err(error) = fs::create_dir_all(&root) {
-                panic!("failed to create {}: {error}", root.display());
-            }
-            Self(root)
-        }
-
-        fn write(&self, relative: &str, value: &str) {
-            let path = self.0.join(relative);
-            if let Some(parent) = path.parent()
-                && let Err(error) = fs::create_dir_all(parent)
-            {
-                panic!("failed to create {}: {error}", parent.display());
-            }
-            if let Err(error) = fs::write(&path, value) {
-                panic!("failed to write {}: {error}", path.display());
-            }
-        }
-    }
-
-    impl Drop for TempTree {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.0);
-        }
-    }
-
-    fn clock(seconds: u64) -> ClockSnapshot {
-        ClockSnapshot {
-            monotonic: Duration::from_secs(seconds),
-            wall: UNIX_EPOCH,
-        }
-    }
-
-    fn metrics(values: [Option<i32>; 5]) -> NvidiaMetrics {
-        NvidiaMetrics {
-            temp_celsius: values[0],
-            usage_percent: values[1],
-            memory_percent: values[2],
-            decoder_percent: values[3],
-            fan_percent: values[4],
-        }
-    }
-
-    fn smi_output(status: CommandStatus, stdout: &[u8]) -> CommandOutput {
-        CommandOutput {
-            program: PathBuf::from(NVIDIA_SMI_PROGRAM),
-            args: vec![
-                OsString::from(NVIDIA_SMI_QUERY),
-                OsString::from(NVIDIA_SMI_FORMAT),
-            ],
-            status,
-            stdout: stdout.to_vec(),
-            stderr: Vec::new(),
-        }
-    }
-
-    fn enqueue_smi(runner: &mut FakeCommandRunner, status: CommandStatus, stdout: &[u8]) {
-        runner.enqueue(
-            NVIDIA_SMI_PROGRAM,
-            [NVIDIA_SMI_QUERY, NVIDIA_SMI_FORMAT],
-            smi_output(status, stdout),
-        );
-    }
-
-    #[test]
-    fn detects_only_nvidia_display_class_devices() {
-        let tree = TempTree::new();
-        tree.write("bus/pci/devices/0000:01:00.0/vendor", "0x10de\n");
-        tree.write("bus/pci/devices/0000:01:00.0/class", "0x030000\n");
-        tree.write("bus/pci/devices/0000:02:00.0/vendor", "0x10de\n");
-        tree.write("bus/pci/devices/0000:02:00.0/class", "malformed\n");
-
-        assert!(detect_nvidia(&tree.0));
-        assert!(!detect_nvidia(&tree.0.join("missing")));
-    }
-
-    #[test]
-    fn caps_at_99_and_preserves_none_and_negative_values() {
-        assert_eq!(nvidia_cap(Some(100)), Some(99));
-        assert_eq!(nvidia_cap(Some(42)), Some(42));
-        assert_eq!(nvidia_cap(Some(-1)), Some(-1));
-        assert_eq!(nvidia_cap(None), None);
-    }
-
-    #[test]
-    fn nvml_success_clamps_and_runs_every_poll_without_smi() {
-        let expected = metrics([Some(99), Some(80), Some(70), None, Some(30)]);
-        let mut nvml = FakeNvml::with([
-            Ok(metrics([Some(100), Some(80), Some(70), None, Some(30)])),
-            Ok(expected),
-        ]);
-        let mut runner = FakeCommandRunner::new();
-        let mut state = GpuCache::default();
-
-        assert_eq!(
-            read_nvidia(&mut state, Some(&mut nvml), &mut runner, clock(10)),
-            expected
-        );
-        assert_eq!(
-            read_nvidia(&mut state, Some(&mut nvml), &mut runner, clock(10)),
-            expected
-        );
-        assert_eq!(nvml.calls, 2);
-        assert!(runner.call_trace().is_empty());
-    }
-
-    #[test]
-    fn nvml_init_failure_permanently_selects_cached_smi_fallback() {
-        let mut nvml = FakeNvml::with([Err(NvmlError::Init)]);
-        let mut runner = FakeCommandRunner::new();
-        enqueue_smi(&mut runner, CommandStatus::Exit(0), b"65, 70, 30, 40, 5\n");
-        let mut state = GpuCache::default();
-        let expected = metrics([Some(65), Some(70), Some(30), Some(5), Some(40)]);
-
-        assert_eq!(
-            read_nvidia(&mut state, Some(&mut nvml), &mut runner, clock(10)),
-            expected
-        );
-        assert!(state.nvml_init_failed);
-        assert_eq!(
-            read_nvidia(&mut state, Some(&mut nvml), &mut runner, clock(12)),
-            expected
-        );
-        assert_eq!(nvml.calls, 1);
-        assert_eq!(runner.call_trace().len(), 1);
-        assert_eq!(runner.call_trace()[0].timeout, NVIDIA_SMI_TIMEOUT);
-    }
-
-    #[test]
-    fn nvml_read_failure_falls_back_but_retries_nvml_next_poll() {
-        let recovered = metrics([Some(50), Some(20), Some(10), Some(3), None]);
-        let mut nvml = FakeNvml::with([Err(NvmlError::Read), Ok(recovered)]);
-        let mut runner = FakeCommandRunner::new();
-        enqueue_smi(
-            &mut runner,
-            CommandStatus::Exit(0),
-            b"60, 40, 20, N/A, N/A\n",
-        );
-        let mut state = GpuCache::default();
-
-        assert_eq!(
-            read_nvidia(&mut state, Some(&mut nvml), &mut runner, clock(10)),
-            metrics([Some(60), Some(40), Some(20), None, None])
-        );
-        assert_eq!(
-            read_nvidia(&mut state, Some(&mut nvml), &mut runner, clock(11)),
-            recovered
-        );
-        assert_eq!(nvml.calls, 2);
-        assert_eq!(runner.call_trace().len(), 1);
-    }
-
-    #[test]
-    fn smi_cache_expires_after_three_seconds() {
-        let mut runner = FakeCommandRunner::new();
-        enqueue_smi(&mut runner, CommandStatus::Exit(0), b"60, 40, 20, 10, 5\n");
-        enqueue_smi(&mut runner, CommandStatus::Exit(0), b"61, 41, 21, 11, 6\n");
-        let mut state = GpuCache::default();
-
-        let first = read_nvidia(&mut state, None, &mut runner, clock(10));
-        assert_eq!(read_nvidia(&mut state, None, &mut runner, clock(12)), first);
-        assert_eq!(
-            read_nvidia(&mut state, None, &mut runner, clock(13)),
-            metrics([Some(61), Some(41), Some(21), Some(6), Some(11)])
-        );
-        assert_eq!(runner.call_trace().len(), 2);
-    }
-
-    #[test]
-    fn all_absent_smi_result_is_cached() {
-        let mut runner = FakeCommandRunner::new();
-        enqueue_smi(&mut runner, CommandStatus::Exit(1), b"");
-        let mut state = GpuCache::default();
-
-        assert_eq!(
-            read_nvidia(&mut state, None, &mut runner, clock(10)),
-            NvidiaMetrics::default()
-        );
-        assert_eq!(
-            read_nvidia(&mut state, None, &mut runner, clock(12)),
-            NvidiaMetrics::default()
-        );
-        assert_eq!(runner.call_trace().len(), 1);
-    }
-
-    #[test]
-    fn smi_failure_and_malformed_results_degrade_to_absent_metrics() {
-        let cases = [
-            smi_output(CommandStatus::Exit(1), b"65, 70, 30, 40, 5\n"),
-            smi_output(CommandStatus::Signal(9), b""),
-            smi_output(CommandStatus::Exit(0), b"too,short"),
-            smi_output(CommandStatus::Exit(0), &[0xff, 0xfe]),
-        ];
-        for output in cases {
-            let mut runner = FakeCommandRunner::new();
-            runner.enqueue(
-                NVIDIA_SMI_PROGRAM,
-                [NVIDIA_SMI_QUERY, NVIDIA_SMI_FORMAT],
-                output,
-            );
-            assert_eq!(read_nvidia_smi(&mut runner), NvidiaMetrics::default());
-        }
-
-        let mut runner = FakeCommandRunner::new();
-        runner.enqueue_error(
-            NVIDIA_SMI_PROGRAM,
-            [NVIDIA_SMI_QUERY, NVIDIA_SMI_FORMAT],
-            BoundaryError::CommandFailed {
-                program: PathBuf::from(NVIDIA_SMI_PROGRAM),
-                args: Vec::new(),
-                detail: String::from("timeout"),
-            },
-        );
-        assert_eq!(read_nvidia_smi(&mut runner), NvidiaMetrics::default());
-    }
-
-    #[test]
-    fn history_prefers_nvidia_and_uses_zero_for_missing_decoder() {
-        let mut cfg = Config::default();
-        cfg.pages.order = vec![String::from("graphs")];
-        cfg.pages.graph_history_length = 2;
-        cfg.display.history_interval = 2.0;
-        let mut hw = HardwareSnapshot {
-            has_nvidia: true,
-            intel_gpu_pci: Some(String::from("0000:00:02.0")),
-            ..HardwareSnapshot::default()
-        };
-        let mut state = DaemonStateSnapshot::default();
-        let mut readings = ReadingsSnapshot {
-            gpu_usage: Some(70),
-            gpu_dec: None,
-            gpu_intel_usage: Some(20),
-            gpu_intel_dec_usage: Some(10),
-            ..ReadingsSnapshot::default()
-        };
-
-        sample_gpu_history(&mut state, &cfg, &hw, &mut readings, clock(10));
-        assert_eq!(readings.gpu_usage_history, vec![70]);
-        assert_eq!(readings.gpu_dec_history, vec![0]);
-
-        readings.gpu_usage = Some(71);
-        sample_gpu_history(&mut state, &cfg, &hw, &mut readings, clock(11));
-        assert_eq!(readings.gpu_usage_history, vec![70]);
-        readings.gpu_usage = Some(72);
-        readings.gpu_dec = Some(4);
-        sample_gpu_history(&mut state, &cfg, &hw, &mut readings, clock(12));
-        readings.gpu_usage = Some(73);
-        sample_gpu_history(&mut state, &cfg, &hw, &mut readings, clock(14));
-        assert_eq!(readings.gpu_usage_history, vec![72, 73]);
-        assert_eq!(readings.gpu_dec_history, vec![4, 4]);
-
-        hw.has_nvidia = false;
-        readings.gpu_intel_usage = Some(22);
-        readings.gpu_intel_dec_usage = Some(8);
-        sample_gpu_history(&mut state, &cfg, &hw, &mut readings, clock(16));
-        assert_eq!(readings.gpu_usage_history, vec![73, 22]);
-        assert_eq!(readings.gpu_dec_history, vec![4, 8]);
-    }
-
-    #[test]
-    fn history_gap_reexposes_buffer_and_disabled_page_does_nothing() {
-        let mut cfg = Config::default();
-        cfg.pages.order = vec![String::from("graphs")];
-        let hw = HardwareSnapshot {
-            has_nvidia: true,
-            ..HardwareSnapshot::default()
-        };
-        let mut state = DaemonStateSnapshot {
-            gpu_usage_history: vec![10, 20],
-            gpu_dec_history: vec![1, 2],
-            ..DaemonStateSnapshot::default()
-        };
-        let mut readings = ReadingsSnapshot::default();
-
-        sample_gpu_history(&mut state, &cfg, &hw, &mut readings, clock(10));
-        assert_eq!(readings.gpu_usage_history, vec![10, 20]);
-        assert_eq!(readings.gpu_dec_history, vec![1, 2]);
-
-        cfg.pages.order.clear();
-        readings.gpu_usage_history.clear();
-        readings.gpu_dec_history.clear();
-        sample_gpu_history(&mut state, &cfg, &hw, &mut readings, clock(20));
-        assert!(readings.gpu_usage_history.is_empty());
-        assert!(readings.gpu_dec_history.is_empty());
-    }
-}
+mod tests;

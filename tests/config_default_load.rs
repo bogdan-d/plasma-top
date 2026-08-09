@@ -61,8 +61,8 @@ fn loads_shipped_config_with_forced_horizontal() {
             String::from("/run/media"),
         ],
     );
-    assert_eq!(cfg.disks.smart_interval, 3600.0);
-    assert_eq!(cfg.disks.smart_interval_hdd, 21600.0);
+    assert_eq!(cfg.disks.smart_interval.as_secs_f64(), 3600.0);
+    assert_eq!(cfg.disks.smart_interval_hdd.as_secs_f64(), 21600.0);
     let _: &DiskConfig = &cfg.disks; // type-check the field shape
 
     // ── horizontal override: glyphs off, battery_sys removed ──────────────

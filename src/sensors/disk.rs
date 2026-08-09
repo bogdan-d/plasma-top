@@ -8,6 +8,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -15,13 +16,15 @@ use nix::sys::statvfs::statvfs;
 
 use crate::config::{Config, Mounts, SensorOverrides};
 use crate::domain::boundary::ClockSnapshot;
+use crate::domain::metric::Capability;
+use crate::domain::readings::{HardwareInventory, RetainedMetricSample, SmartDisk};
 
 use super::hwmon::{
     hwmon_dirs_matching, read_path_int, read_path_millidegrees_celsius, resolve_sensor_spec,
 };
 
-const HD_TEMP_CACHE_TTL: Duration = Duration::from_secs(30);
-const FAN_SPEED_CACHE_TTL: Duration = Duration::from_secs(30);
+pub(super) const HD_TEMP_CACHE_TTL: Duration = Duration::from_secs(30);
+pub(super) const FAN_SPEED_CACHE_TTL: Duration = Duration::from_secs(30);
 const DISKSTAT_SECTOR_BYTES: u64 = 512;
 const BYTES_PER_GIB: u64 = 1024 * 1024 * 1024;
 const DISK_TEMPERATURE_CHIPS: [&str; 2] = ["nvme", "drivetemp"];
@@ -57,21 +60,103 @@ pub struct DiskUsage {
     pub total_gb: u64,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct CachedReading<T> {
-    value: Option<T>,
-    sampled_at: Duration,
-}
-
-/// Mutable disk cache/diff state that persists between polls.
+/// Mutable disk sample and diff state that persists between sampling passes.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct DiskState {
-    hd_temp_cache: BTreeMap<String, CachedReading<i32>>,
-    fan_speed_cache: BTreeMap<String, CachedReading<i32>>,
-    rate_device: Option<String>,
+    pub(super) io: RetainedMetricSample<(u64, u64)>,
+    pub(super) usage: BTreeMap<String, RetainedMetricSample<DiskUsage>>,
+    pub(super) hd_temp_cache: BTreeMap<String, RetainedMetricSample<i32>>,
+    pub(super) fan_speed_cache: BTreeMap<String, RetainedMetricSample<i32>>,
+    pub(super) hd_temp_sources: BTreeMap<String, PathBuf>,
+    pub(super) fan_speed_sources: BTreeMap<String, PathBuf>,
+    pub(super) smart_cache: BTreeMap<String, RetainedMetricSample<bool>>,
+    pub(super) smart_sources: BTreeMap<String, SmartDisk>,
+    pub(super) rate_device: Option<String>,
     prev_read_bytes: u64,
     prev_write_bytes: u64,
     rate_sample_at: Option<Duration>,
+}
+
+impl DiskState {
+    pub(crate) fn reset_io(&mut self) {
+        self.io.invalidate();
+        self.rate_device = None;
+        self.prev_read_bytes = 0;
+        self.prev_write_bytes = 0;
+        self.rate_sample_at = None;
+    }
+
+    pub(crate) fn reconcile_mounts(&mut self, mounts: &[String]) {
+        self.usage
+            .retain(|mount, _| mounts.iter().any(|current| current == mount));
+    }
+
+    pub(crate) fn reconcile_sources(
+        &mut self,
+        hw: &HardwareInventory,
+        cfg: &Config,
+        capabilities: &BTreeSet<Capability>,
+    ) {
+        if !capabilities.contains(&Capability::DiskIo)
+            || hw.disk_io_device.is_none()
+            || self.rate_device.as_deref() != hw.disk_io_device.as_deref()
+        {
+            self.reset_io();
+        }
+        if !capabilities.contains(&Capability::DiskUsage) {
+            self.usage.clear();
+        }
+
+        reconcile_path_samples(
+            &mut self.hd_temp_cache,
+            &mut self.hd_temp_sources,
+            capabilities.contains(&Capability::DiskTemperature),
+            &hw.hd_temp_paths,
+        );
+        reconcile_path_samples(
+            &mut self.fan_speed_cache,
+            &mut self.fan_speed_sources,
+            capabilities.contains(&Capability::FanSpeed),
+            &hw.fan_paths,
+        );
+
+        if capabilities.contains(&Capability::DiskSmart) && cfg.disks.smart {
+            self.smart_cache
+                .retain(|label, _| hw.disk_smart_drives.contains_key(label));
+            self.smart_sources
+                .retain(|label, _| hw.disk_smart_drives.contains_key(label));
+            for (label, drive) in &hw.disk_smart_drives {
+                if self.smart_sources.get(label) != Some(drive) {
+                    self.smart_cache.remove(label);
+                    self.smart_sources.insert(label.clone(), drive.clone());
+                }
+            }
+        } else {
+            self.smart_cache.clear();
+            self.smart_sources.clear();
+        }
+    }
+}
+
+fn reconcile_path_samples(
+    samples: &mut BTreeMap<String, RetainedMetricSample<i32>>,
+    sources: &mut BTreeMap<String, PathBuf>,
+    demanded: bool,
+    current: &BTreeMap<String, PathBuf>,
+) {
+    if !demanded {
+        samples.clear();
+        sources.clear();
+        return;
+    }
+    samples.retain(|label, _| current.contains_key(label));
+    sources.retain(|label, _| current.contains_key(label));
+    for (label, path) in current {
+        if sources.get(label) != Some(path) {
+            samples.remove(label);
+            sources.insert(label.clone(), path.clone());
+        }
+    }
 }
 
 /// Resolves disk temperature hwmon paths, honoring manual overrides first.
@@ -137,38 +222,16 @@ pub fn find_fan_speed_paths(
     result
 }
 
-/// Reads a cached disk temperature, refreshing every 30 seconds.
+/// Performs one disk-temperature source read.
 #[must_use]
-pub fn read_hd_temp_cached(
-    state: &mut DiskState,
-    clock: ClockSnapshot,
-    label: &str,
-    path: &Path,
-) -> Option<i32> {
-    cached_by_label(
-        &mut state.hd_temp_cache,
-        label,
-        clock.monotonic,
-        HD_TEMP_CACHE_TTL,
-        || read_path_millidegrees_celsius(Some(path)),
-    )
+pub fn read_hd_temp(path: &Path) -> Option<i32> {
+    read_path_millidegrees_celsius(Some(path))
 }
 
-/// Reads a cached fan speed, refreshing every 30 seconds.
+/// Performs one fan-speed source read.
 #[must_use]
-pub fn read_fan_speed_cached(
-    state: &mut DiskState,
-    clock: ClockSnapshot,
-    label: &str,
-    path: &Path,
-) -> Option<i32> {
-    cached_by_label(
-        &mut state.fan_speed_cache,
-        label,
-        clock.monotonic,
-        FAN_SPEED_CACHE_TTL,
-        || read_path_int(Some(path)),
-    )
+pub fn read_fan_speed(path: &Path) -> Option<i32> {
+    read_path_int(Some(path))
 }
 
 /// Resolves the configured mountpoint list.
@@ -207,8 +270,34 @@ pub fn resolve_mounts(proc_root: &Path, cfg: &Config) -> Vec<String> {
 /// Resolves one mountpoint to the whole-disk device used for byte-rate reads.
 #[must_use]
 pub fn detect_disk_io_device(proc_root: &Path, sys_root: &Path, mount: &str) -> Option<String> {
-    let device = resolve_mount_device(proc_root, mount)?;
-    Some(whole_disk_of(sys_root, &device))
+    detect_disk_io_device_outcome(proc_root, sys_root, mount)
+        .ok()
+        .flatten()
+}
+
+/// Resolves disk-I/O identity while preserving procfs/sysfs boundary failures.
+pub(crate) fn detect_disk_io_device_outcome(
+    proc_root: &Path,
+    sys_root: &Path,
+    mount: &str,
+) -> io::Result<Option<String>> {
+    let Some(path) = mounts_path_outcome(proc_root)? else {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "mount enumeration is unavailable",
+        ));
+    };
+    let text = fs::read_to_string(path)?;
+    let source = parse_mounts_outcome(&text)?
+        .into_iter()
+        .find(|entry| entry.mountpoint == mount)
+        .map(|entry| entry.source);
+    source
+        .map(|source| {
+            let allow_missing = source.starts_with("/dev/mapper/");
+            whole_disk_of_outcome(sys_root, &device_basename(&source), allow_missing)
+        })
+        .transpose()
 }
 
 /// Discovers supported whole-disk identities from sysfs.
@@ -264,62 +353,67 @@ pub fn read_disk_io(
     device: &str,
     clock: ClockSnapshot,
 ) -> (Option<u64>, Option<u64>) {
+    match read_disk_io_once(proc_root, state, device, clock) {
+        DiskIoReadOutcome::Value(read, write) => (Some(read), Some(write)),
+        DiskIoReadOutcome::Baseline | DiskIoReadOutcome::NoDelta | DiskIoReadOutcome::Failed => {
+            (None, None)
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DiskIoReadOutcome {
+    Value(u64, u64),
+    Baseline,
+    NoDelta,
+    Failed,
+}
+
+/// Performs one disk-counter attempt and distinguishes a new baseline from an invalid same-source delta.
+pub(crate) fn read_disk_io_once(
+    proc_root: &Path,
+    state: &mut DiskState,
+    device: &str,
+    clock: ClockSnapshot,
+) -> DiskIoReadOutcome {
     let Some((read_bytes, write_bytes)) = read_disk_bytes(proc_root, device) else {
-        return (None, None);
+        return DiskIoReadOutcome::Failed;
     };
 
     let same_device = state.rate_device.as_deref() == Some(device);
-    let previous_read = state.prev_read_bytes;
-    let previous_write = state.prev_write_bytes;
-    let previous_sample_at = state.rate_sample_at;
+    if !same_device {
+        state.rate_device = Some(device.to_owned());
+        state.prev_read_bytes = read_bytes;
+        state.prev_write_bytes = write_bytes;
+        state.rate_sample_at = Some(clock.monotonic);
+        return DiskIoReadOutcome::Baseline;
+    }
+    let Some(previous_sample_at) = state.rate_sample_at else {
+        state.prev_read_bytes = read_bytes;
+        state.prev_write_bytes = write_bytes;
+        state.rate_sample_at = Some(clock.monotonic);
+        return DiskIoReadOutcome::Baseline;
+    };
+    if read_bytes < state.prev_read_bytes || write_bytes < state.prev_write_bytes {
+        state.prev_read_bytes = read_bytes;
+        state.prev_write_bytes = write_bytes;
+        state.rate_sample_at = Some(clock.monotonic);
+        return DiskIoReadOutcome::Baseline;
+    }
+    let Some(elapsed) = clock.monotonic.checked_sub(previous_sample_at) else {
+        return DiskIoReadOutcome::NoDelta;
+    };
+    let elapsed_nanos = elapsed.as_nanos();
+    if elapsed_nanos == 0 {
+        return DiskIoReadOutcome::NoDelta;
+    }
 
-    state.rate_device = Some(device.to_owned());
+    let read_bps = rate_per_second(read_bytes - state.prev_read_bytes, elapsed_nanos);
+    let write_bps = rate_per_second(write_bytes - state.prev_write_bytes, elapsed_nanos);
     state.prev_read_bytes = read_bytes;
     state.prev_write_bytes = write_bytes;
     state.rate_sample_at = Some(clock.monotonic);
-
-    if !same_device {
-        return (None, None);
-    }
-    let Some(previous_sample_at) = previous_sample_at else {
-        return (None, None);
-    };
-    if read_bytes < previous_read || write_bytes < previous_write {
-        return (None, None);
-    }
-
-    let elapsed = clock.monotonic.saturating_sub(previous_sample_at);
-    let elapsed_nanos = elapsed.as_nanos();
-    if elapsed_nanos == 0 {
-        return (None, None);
-    }
-
-    let read_bps = rate_per_second(read_bytes - previous_read, elapsed_nanos);
-    let write_bps = rate_per_second(write_bytes - previous_write, elapsed_nanos);
-    (Some(read_bps), Some(write_bps))
-}
-
-fn cached_by_label<T: Copy>(
-    cache: &mut BTreeMap<String, CachedReading<T>>,
-    label: &str,
-    now: Duration,
-    ttl: Duration,
-    read_fn: impl FnOnce() -> Option<T>,
-) -> Option<T> {
-    if let Some(cached) = cache.get(label)
-        && now.saturating_sub(cached.sampled_at) < ttl
-    {
-        return cached.value;
-    }
-    let value = read_fn();
-    cache.insert(
-        label.to_owned(),
-        CachedReading {
-            value,
-            sampled_at: now,
-        },
-    );
-    value
+    DiskIoReadOutcome::Value(read_bps, write_bps)
 }
 
 fn load_mounts(proc_root: &Path) -> Option<Vec<MountEntry>> {
@@ -360,6 +454,33 @@ fn parse_mounts(text: &str) -> Vec<MountEntry> {
     mounts
 }
 
+fn parse_mounts_outcome(text: &str) -> io::Result<Vec<MountEntry>> {
+    let mut mounts = Vec::new();
+    for line in text.lines() {
+        let mut fields = line.split_whitespace();
+        let Some(source) = fields.next() else {
+            continue;
+        };
+        let Some(mountpoint) = fields.next() else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "malformed mount entry",
+            ));
+        };
+        if fields.count() != 4 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "malformed mount entry",
+            ));
+        }
+        mounts.push(MountEntry {
+            source: source.to_owned(),
+            mountpoint: decode_mount_field(mountpoint),
+        });
+    }
+    Ok(mounts)
+}
+
 fn decode_mount_field(value: &str) -> String {
     let bytes = value.as_bytes();
     let mut decoded = String::with_capacity(value.len());
@@ -381,11 +502,13 @@ fn decode_mount_field(value: &str) -> String {
     decoded
 }
 
-fn resolve_mount_device(proc_root: &Path, mount: &str) -> Option<String> {
-    load_mounts(proc_root)?
-        .into_iter()
-        .find(|entry| entry.mountpoint == mount)
-        .map(|entry| device_basename(&entry.source))
+fn mounts_path_outcome(proc_root: &Path) -> io::Result<Option<PathBuf>> {
+    let mounts = proc_root.join("mounts");
+    if mounts.try_exists()? {
+        return Ok(Some(mounts));
+    }
+    let self_mounts = proc_root.join("self/mounts");
+    Ok(self_mounts.try_exists()?.then_some(self_mounts))
 }
 
 fn device_basename(source: &str) -> String {
@@ -395,19 +518,27 @@ fn device_basename(source: &str) -> String {
         .unwrap_or_else(|| source.to_owned())
 }
 
-fn whole_disk_of(sys_root: &Path, device: &str) -> String {
+fn whole_disk_of_outcome(sys_root: &Path, device: &str, allow_missing: bool) -> io::Result<String> {
     let node = sys_root.join("class/block").join(device);
-    if !node.join("partition").exists() {
-        return device.to_owned();
+    if !node.try_exists()? {
+        return if allow_missing {
+            Ok(device.to_owned())
+        } else {
+            Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "block device is unavailable in sysfs",
+            ))
+        };
     }
-    match fs::canonicalize(node) {
-        Ok(real) => real
-            .parent()
-            .and_then(Path::file_name)
-            .map(|name| name.to_string_lossy().into_owned())
-            .unwrap_or_else(|| device.to_owned()),
-        Err(_) => device.to_owned(),
+    if !node.join("partition").try_exists()? {
+        return Ok(device.to_owned());
     }
+    let real = fs::canonicalize(node)?;
+    real.parent()
+        .and_then(Path::file_name)
+        .and_then(|name| name.to_str())
+        .map(str::to_owned)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "invalid block parent"))
 }
 
 fn disk_kind_for_label(label: &str) -> Option<DiskKind> {
@@ -421,9 +552,18 @@ fn disk_kind_for_label(label: &str) -> Option<DiskKind> {
 }
 
 pub(crate) fn is_rotational(sys_root: &Path, label: &str) -> bool {
-    fs::read_to_string(sys_root.join("block").join(label).join("queue/rotational"))
-        .ok()
-        .is_some_and(|value| value.trim() == "1")
+    is_rotational_outcome(sys_root, label).unwrap_or(false)
+}
+
+pub(crate) fn is_rotational_outcome(sys_root: &Path, label: &str) -> io::Result<bool> {
+    match fs::read_to_string(sys_root.join("block").join(label).join("queue/rotational"))?.trim() {
+        "0" => Ok(false),
+        "1" => Ok(true),
+        _ => Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "malformed rotational flag",
+        )),
+    }
 }
 
 fn hwmon_device_label(sys_root: &Path, hwmon: &Path) -> String {
@@ -570,434 +710,4 @@ fn round_half_even_ratio(numerator: u128, denominator: u128) -> u128 {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    use std::fs;
-    use std::os::unix::fs::symlink;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    fn clock_at(seconds: u64) -> ClockSnapshot {
-        ClockSnapshot {
-            monotonic: Duration::from_secs(seconds),
-            wall: UNIX_EPOCH + Duration::from_secs(seconds),
-        }
-    }
-
-    struct TempTree {
-        root: PathBuf,
-    }
-
-    impl TempTree {
-        fn new() -> Self {
-            let unique = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or(Duration::ZERO)
-                .as_nanos();
-            let root = std::env::temp_dir()
-                .join(format!("plasma-top-disk-{}-{unique}", std::process::id()));
-            if let Err(error) = fs::create_dir_all(&root) {
-                panic!("failed to create temp root {}: {error}", root.display());
-            }
-            Self { root }
-        }
-
-        fn path(&self) -> &Path {
-            &self.root
-        }
-
-        fn write(&self, relative: &str, content: &str) {
-            let path = self.root.join(relative);
-            if let Some(parent) = path.parent()
-                && let Err(error) = fs::create_dir_all(parent)
-            {
-                panic!("failed to create {}: {error}", parent.display());
-            }
-            if let Err(error) = fs::write(&path, content) {
-                panic!("failed to write {}: {error}", path.display());
-            }
-        }
-
-        fn mkdir(&self, relative: &str) {
-            let path = self.root.join(relative);
-            if let Err(error) = fs::create_dir_all(&path) {
-                panic!("failed to create {}: {error}", path.display());
-            }
-        }
-
-        fn symlink_dir(&self, target_relative: &str, link_relative: &str) {
-            let target = self.root.join(target_relative);
-            let link = self.root.join(link_relative);
-            if let Some(parent) = link.parent()
-                && let Err(error) = fs::create_dir_all(parent)
-            {
-                panic!("failed to create {}: {error}", parent.display());
-            }
-            if let Err(error) = symlink(&target, &link) {
-                panic!(
-                    "failed to symlink {} -> {}: {error}",
-                    link.display(),
-                    target.display()
-                );
-            }
-        }
-    }
-
-    impl Drop for TempTree {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.root);
-        }
-    }
-
-    #[test]
-    fn resolve_mounts_explicit_list_used_as_is() {
-        let mut cfg = Config::default();
-        cfg.disks.mounts = Mounts::Explicit(vec![String::from("/"), String::from("/data")]);
-
-        assert_eq!(resolve_mounts(Path::new("/ignored"), &cfg), ["/", "/data"]);
-    }
-
-    #[test]
-    fn resolve_mounts_auto_filters_to_roots_and_orders() {
-        let tmp = TempTree::new();
-        tmp.write(
-            "proc/mounts",
-            "/dev/root / ext4 rw 0 0\n\
-             tmpfs /boot tmpfs rw 0 0\n\
-             /dev/sdb1 /run/media/user/Backup ext4 rw 0 0\n\
-             /dev/sdc1 /mnt/data ext4 rw 0 0\n\
-             /dev/sdd1 /media/x ext4 rw 0 0\n\
-             proc /proc proc rw 0 0\n",
-        );
-
-        let cfg = Config::default();
-        assert_eq!(
-            resolve_mounts(&tmp.path().join("proc"), &cfg),
-            ["/", "/media/x", "/mnt/data", "/run/media/user/Backup"]
-        );
-    }
-
-    #[test]
-    fn resolve_mounts_auto_root_only_when_nothing_under_auto_roots() {
-        let tmp = TempTree::new();
-        tmp.write(
-            "proc/mounts",
-            "/dev/root / ext4 rw 0 0\n/dev/sda1 /boot/efi vfat rw 0 0\n",
-        );
-
-        assert_eq!(
-            resolve_mounts(&tmp.path().join("proc"), &Config::default()),
-            ["/"]
-        );
-    }
-
-    #[test]
-    fn resolve_mounts_auto_ignores_bare_root_dirs() {
-        let tmp = TempTree::new();
-        tmp.write(
-            "proc/mounts",
-            "/dev/root / ext4 rw 0 0\n/dev/sda1 /mnt ext4 rw 0 0\n",
-        );
-
-        assert_eq!(
-            resolve_mounts(&tmp.path().join("proc"), &Config::default()),
-            ["/"]
-        );
-    }
-
-    #[test]
-    fn resolve_mounts_decodes_escaped_mount_paths() {
-        let tmp = TempTree::new();
-        tmp.write(
-            "proc/mounts",
-            "/dev/sdb1 /run/media/user/My\\040Drive ext4 rw 0 0\n/dev/root / ext4 rw 0 0\n",
-        );
-
-        assert_eq!(
-            resolve_mounts(&tmp.path().join("proc"), &Config::default()),
-            ["/", "/run/media/user/My Drive"]
-        );
-    }
-
-    #[test]
-    fn find_hd_temp_paths_prefers_manual_overrides_before_autodetect() {
-        let tmp = TempTree::new();
-        tmp.mkdir("sys/class/nvme/nvme1/nvme1n1");
-        tmp.mkdir("sys/devices/pci0000:00/0000:00:01.0/nvme/nvme0/2:0:0:0/block/sda");
-        tmp.mkdir("sys/devices/pci0000:00/0000:00:02.0/nvme/nvme1/hwmon1");
-        tmp.write(
-            "sys/devices/pci0000:00/0000:00:02.0/nvme/nvme1/hwmon1/name",
-            "nvme\n",
-        );
-        tmp.write(
-            "sys/devices/pci0000:00/0000:00:02.0/nvme/nvme1/hwmon1/temp3_input",
-            "44000\n",
-        );
-        tmp.symlink_dir(
-            "sys/devices/pci0000:00/0000:00:02.0/nvme/nvme1/hwmon1",
-            "sys/class/hwmon/hwmon1",
-        );
-
-        tmp.mkdir("sys/devices/pci0000:00/0000:00:01.0/nvme/nvme0/hwmon0");
-        tmp.write(
-            "sys/devices/pci0000:00/0000:00:01.0/nvme/nvme0/hwmon0/name",
-            "nvme\n",
-        );
-        tmp.write(
-            "sys/devices/pci0000:00/0000:00:01.0/nvme/nvme0/hwmon0/temp1_input",
-            "39000\n",
-        );
-        tmp.symlink_dir(
-            "sys/devices/pci0000:00/0000:00:01.0/nvme/nvme0/hwmon0",
-            "sys/class/hwmon/hwmon0",
-        );
-
-        let overrides = SensorOverrides {
-            hd1_temp: Some(String::from("nvme|temp3_input")),
-            ..SensorOverrides::default()
-        };
-
-        let paths = find_hd_temp_paths(&tmp.path().join("sys"), &overrides);
-
-        assert_eq!(paths.len(), 1);
-        assert_eq!(
-            paths.get("nvme1n1"),
-            Some(&tmp.path().join("sys/class/hwmon/hwmon1/temp3_input"))
-        );
-    }
-
-    #[test]
-    fn find_hd_temp_paths_autodetects_nvme_and_scsi_drivetemp_labels() {
-        let tmp = TempTree::new();
-        tmp.mkdir("sys/class/nvme/nvme0/nvme0n1");
-        tmp.mkdir("sys/devices/pci0000:00/0000:00:01.0/nvme/nvme0/hwmon0");
-        tmp.write(
-            "sys/devices/pci0000:00/0000:00:01.0/nvme/nvme0/hwmon0/name",
-            "nvme\n",
-        );
-        tmp.write(
-            "sys/devices/pci0000:00/0000:00:01.0/nvme/nvme0/hwmon0/temp1_input",
-            "39000\n",
-        );
-        tmp.symlink_dir(
-            "sys/devices/pci0000:00/0000:00:01.0/nvme/nvme0/hwmon0",
-            "sys/class/hwmon/hwmon0",
-        );
-
-        tmp.mkdir("sys/devices/pci0000:00/0000:00:02.0/ata1/host2/target2:0:0/2:0:0:0/block/sda");
-        tmp.mkdir(
-            "sys/devices/pci0000:00/0000:00:02.0/ata1/host2/target2:0:0/2:0:0:0/hwmon/hwmon1",
-        );
-        tmp.write(
-            "sys/devices/pci0000:00/0000:00:02.0/ata1/host2/target2:0:0/2:0:0:0/hwmon/hwmon1/name",
-            "drivetemp\n",
-        );
-        tmp.write(
-            "sys/devices/pci0000:00/0000:00:02.0/ata1/host2/target2:0:0/2:0:0:0/hwmon/hwmon1/temp1_input",
-            "31000\n",
-        );
-        tmp.symlink_dir(
-            "sys/devices/pci0000:00/0000:00:02.0/ata1/host2/target2:0:0/2:0:0:0/hwmon/hwmon1",
-            "sys/class/hwmon/hwmon1",
-        );
-        tmp.symlink_dir(
-            "sys/devices/pci0000:00/0000:00:02.0/ata1/host2/target2:0:0/2:0:0:0/block/sda",
-            "sys/class/block/sda",
-        );
-
-        let paths = find_hd_temp_paths(&tmp.path().join("sys"), &SensorOverrides::default());
-
-        assert_eq!(
-            paths.get("nvme0n1"),
-            Some(&tmp.path().join("sys/class/hwmon/hwmon0/temp1_input"))
-        );
-        assert_eq!(
-            paths.get("sda"),
-            Some(&tmp.path().join("sys/class/hwmon/hwmon1/temp1_input"))
-        );
-    }
-
-    #[test]
-    fn find_fan_speed_paths_stops_after_first_missing_slot() {
-        let tmp = TempTree::new();
-        tmp.mkdir("sys/class/hwmon/hwmon0");
-        tmp.write("sys/class/hwmon/hwmon0/name", "nct6775\n");
-        tmp.write("sys/class/hwmon/hwmon0/fan2_input", "1550\n");
-
-        let overrides = SensorOverrides {
-            fan2_speed: Some(String::from("nct6775|fan2_input")),
-            ..SensorOverrides::default()
-        };
-
-        assert!(find_fan_speed_paths(&tmp.path().join("sys"), &overrides).is_empty());
-    }
-
-    #[test]
-    fn read_hd_temp_cached_honors_ttl() {
-        let tmp = TempTree::new();
-        tmp.write("sys/temp", "35000\n");
-        let path = tmp.path().join("sys/temp");
-        let mut state = DiskState::default();
-
-        let first = read_hd_temp_cached(&mut state, clock_at(0), "nvme0n1", &path);
-        tmp.write("sys/temp", "39000\n");
-        let cached = read_hd_temp_cached(&mut state, clock_at(5), "nvme0n1", &path);
-        let refreshed = read_hd_temp_cached(&mut state, clock_at(31), "nvme0n1", &path);
-
-        assert_eq!(first, Some(35));
-        assert_eq!(cached, Some(35));
-        assert_eq!(refreshed, Some(39));
-    }
-
-    #[test]
-    fn read_fan_speed_cached_honors_ttl() {
-        let tmp = TempTree::new();
-        tmp.write("sys/fan", "1500\n");
-        let path = tmp.path().join("sys/fan");
-        let mut state = DiskState::default();
-
-        let first = read_fan_speed_cached(&mut state, clock_at(0), "1", &path);
-        tmp.write("sys/fan", "1700\n");
-        let cached = read_fan_speed_cached(&mut state, clock_at(10), "1", &path);
-        let refreshed = read_fan_speed_cached(&mut state, clock_at(31), "1", &path);
-
-        assert_eq!(first, Some(1500));
-        assert_eq!(cached, Some(1500));
-        assert_eq!(refreshed, Some(1700));
-    }
-
-    #[test]
-    fn detect_disk_io_device_walks_partition_to_whole_disk() {
-        let tmp = TempTree::new();
-        tmp.write("proc/mounts", "/dev/nvme0n1p2 / ext4 rw 0 0\n");
-        tmp.mkdir("sys/devices/pci0000:00/0000:00:01.0/nvme/nvme0/nvme0n1/nvme0n1p2");
-        tmp.write(
-            "sys/devices/pci0000:00/0000:00:01.0/nvme/nvme0/nvme0n1/nvme0n1p2/partition",
-            "2\n",
-        );
-        tmp.symlink_dir(
-            "sys/devices/pci0000:00/0000:00:01.0/nvme/nvme0/nvme0n1/nvme0n1p2",
-            "sys/class/block/nvme0n1p2",
-        );
-
-        assert_eq!(
-            detect_disk_io_device(&tmp.path().join("proc"), &tmp.path().join("sys"), "/"),
-            Some(String::from("nvme0n1"))
-        );
-    }
-
-    #[test]
-    fn detect_disk_io_device_keeps_mapper_name_when_no_single_parent_exists() {
-        let tmp = TempTree::new();
-        tmp.write("proc/mounts", "/dev/mapper/vg-root / ext4 rw 0 0\n");
-
-        assert_eq!(
-            detect_disk_io_device(&tmp.path().join("proc"), &tmp.path().join("sys"), "/"),
-            Some(String::from("vg-root"))
-        );
-    }
-
-    #[test]
-    fn detect_disks_finds_supported_whole_disks_and_rotational_flags() {
-        let tmp = TempTree::new();
-        tmp.write("sys/block/nvme0n1/queue/rotational", "0\n");
-        tmp.write("sys/block/sda/queue/rotational", "1\n");
-        tmp.write("sys/block/sr0/queue/rotational", "1\n");
-        tmp.write("sys/block/loop0/queue/rotational", "0\n");
-
-        assert_eq!(
-            detect_disks(&tmp.path().join("sys")),
-            vec![
-                DiskIdentity {
-                    label: String::from("nvme0n1"),
-                    kind: DiskKind::Nvme,
-                    rotational: false,
-                },
-                DiskIdentity {
-                    label: String::from("sda"),
-                    kind: DiskKind::Ata,
-                    rotational: true,
-                },
-            ]
-        );
-    }
-
-    #[test]
-    fn read_disk_io_needs_two_samples_and_resets_on_device_change() {
-        let tmp = TempTree::new();
-        tmp.write(
-            "proc/diskstats",
-            "259 0 nvme0n1 0 0 8 0 0 0 4 0 0 0 0 0 0 0 0 0\n\
-             8 0 sda 0 0 2 0 0 0 2 0 0 0 0 0 0 0 0 0\n",
-        );
-
-        let mut state = DiskState::default();
-        assert_eq!(
-            read_disk_io(&tmp.path().join("proc"), &mut state, "nvme0n1", clock_at(0)),
-            (None, None)
-        );
-
-        tmp.write(
-            "proc/diskstats",
-            "259 0 nvme0n1 0 0 24 0 0 0 20 0 0 0 0 0 0 0 0 0\n\
-             8 0 sda 0 0 2 0 0 0 2 0 0 0 0 0 0 0 0 0\n",
-        );
-        assert_eq!(
-            read_disk_io(&tmp.path().join("proc"), &mut state, "nvme0n1", clock_at(2)),
-            (Some(4096), Some(4096))
-        );
-
-        assert_eq!(
-            read_disk_io(&tmp.path().join("proc"), &mut state, "sda", clock_at(3)),
-            (None, None)
-        );
-    }
-
-    #[test]
-    fn read_disk_io_resets_on_counter_rollback_and_zero_dt() {
-        let tmp = TempTree::new();
-        tmp.write(
-            "proc/diskstats",
-            "259 0 nvme0n1 0 0 10 0 0 0 12 0 0 0 0 0 0 0 0 0\n",
-        );
-
-        let mut state = DiskState::default();
-        let _ = read_disk_io(&tmp.path().join("proc"), &mut state, "nvme0n1", clock_at(0));
-
-        tmp.write(
-            "proc/diskstats",
-            "259 0 nvme0n1 0 0 12 0 0 0 14 0 0 0 0 0 0 0 0 0\n",
-        );
-        assert_eq!(
-            read_disk_io(&tmp.path().join("proc"), &mut state, "nvme0n1", clock_at(0)),
-            (None, None)
-        );
-
-        tmp.write(
-            "proc/diskstats",
-            "259 0 nvme0n1 0 0 2 0 0 0 3 0 0 0 0 0 0 0 0 0\n",
-        );
-        assert_eq!(
-            read_disk_io(&tmp.path().join("proc"), &mut state, "nvme0n1", clock_at(1)),
-            (None, None)
-        );
-    }
-
-    #[test]
-    fn read_disk_usage_returns_none_for_missing_mount() {
-        assert_eq!(read_disk_usage(Path::new("/definitely/not/here")), None);
-    }
-
-    #[test]
-    fn disk_usage_formula_matches_df_style_percent_and_half_even_rounding() {
-        let gib = BYTES_PER_GIB;
-        let usage = disk_usage_from_bytes(5 * gib, gib + gib / 2, gib / 2);
-
-        assert_eq!(usage.percent, 87);
-        assert_eq!(usage.used_gb, 4);
-        assert_eq!(usage.total_gb, 5);
-
-        let half_even = disk_usage_from_bytes(5 * gib, 2 * gib + gib / 2, gib / 2);
-        assert_eq!(half_even.used_gb, 2);
-    }
-}
+mod tests;

@@ -2,7 +2,7 @@
 
 ## Problem and goal
 
-PlasmaTop replaced a shell script that repeatedly started processes for every sensor and render. That design cost roughly 2 W on the original machine. The current system keeps discovery, readings, history, formatting, and cache state in one synchronous Rust daemon. Plasma receives ready-to-display HTML rather than owning sensor logic or another polling clock.
+PlasmaTop replaced a shell script that repeatedly started processes for every sensor and render. That design cost roughly 2 W on the original machine. The current system keeps hardware inventory, metric samples, histories, formatting, and owner state in one synchronous Rust daemon. Plasma receives ready-to-display HTML rather than owning sensor logic or another polling clock.
 
 Compatibility drives the shape: the Rust backend preserves the applet, config, runtime files, CLI, sensor formulas, rendering, and graceful absence behavior.
 
@@ -16,7 +16,7 @@ src/
   adapters.rs                host clock, commands, D-Bus, notifications
   domain/                    forms, metrics, tokens, readings, state, boundaries
   config/                    typed TOML, merges, assets, geometry
-  sensors/                   discovery, collection, per-family caches/history
+  sensors/                   discovery, one-attempt reads, synchronous sampling orchestration
   render/                    cells, dispatch, formatter, mono layout, pages, chart
   runtime/                   paths, atomic publication, locked page state
 
@@ -71,11 +71,13 @@ An item is a validated `metric[:form]` token, not a flat implementation name.
 - `domain/registry.rs` derives capabilities and placement.
 - `render/registry.rs` and `render/formatter.rs` select rendered rows.
 
-Real placement is the intersection of metric and form surfaces. Collection is demand-driven from the final configured item set, enabled pages, and notification requirements. A new form does not create a second sensor implementation.
+Real placement is the intersection of metric and form surfaces. The current demand set is derived from the final configured panel and tooltip items, notification requirements, configured graph history, and selected-page work. A new form does not create a second sensor implementation.
 
 ## Readings and state
 
-`HardwareSnapshot` contains discovered paths, devices, and feature flags. `ReadingsSnapshot` is the typed value set produced for one poll. Persistent diffs, histories, timestamps, and caches live in `CollectorState` and `DaemonStateSnapshot` rather than module globals.
+`HardwareInventory` contains the latest discovered paths, devices, and feature flags and is owned by discovery in `src/sensors/discovery.rs`. `DisplaySnapshot` is the typed value set assembled for one publication after all included metric samples are merged. CPU, memory, network, disk, process, power, NVIDIA, Intel GPU, external-file, and GPU-history state live as separate values at daemon or diagnostic composition scope. Each matching sensor module owns its cache reconciliation and source invalidation rules. `src/sensors/coordinator.rs` provides only the short-lived borrowed `OwnerRefs` and collection boundaries; it owns no domain state. `src/sensors/collect.rs` preserves synchronous order and freshness budgets, while notification latches remain separate in `src/domain/state.rs`.
+
+Each independently captured value can be represented as a `MetricSample` with its own monotonic capture time, so sample age is not inferred from `DisplaySnapshot::assembled_at`. Collection is synchronous and publication follows each completed pass.
 
 Sensor modules read explicit `/proc` and `/sys` roots and use injected command, D-Bus, clock, notification, and HID boundaries. Missing hardware, unavailable services, malformed files, command failures, and permission errors degrade to absent readings where the compatibility contract requires it; one failed sensor must not block later families.
 
@@ -93,19 +95,19 @@ Graphs are raster PNGs built in `render/chart.rs` with a small pure-Rust pixel p
 
 ## Tooltip pages
 
-Page zero is the full tooltip. Configured deep pages are `processes`, `cpu_cores`, `connections`, `fastfetch`, and `graphs`. Only the active page body is built. Commands, process scans, and chart rasterization therefore cost nothing while their page is inactive.
+Page zero is the full tooltip. Configured deep pages are `processes`, `cpu_cores`, `connections`, `fastfetch`, and `graphs`. Only the selected page body is built. Commands, process scans, and chart rasterization therefore cost nothing while another page is selected.
 
-Wheel and click actions run `plasma-top page next|prev` and `plasma-top click`. The daemon checks page state in 100 ms sleep steps and republishes only the tooltip on a page change, without running a full sensor poll. Middle-click pinning remains QML-owned.
+Wheel and click actions run `plasma-top page next|prev` and `plasma-top click`. The daemon checks selected-page state in 100 ms sleep steps and republishes only the tooltip on a page change, without running a full synchronous sampling pass. Middle-click pinning remains QML-owned. The protocol does not report whether a tooltip is presented, so selected-page work is governed by page selection rather than presentation state.
 
 ## Daemon lifecycle
 
-Startup resolves config/assets, creates runtime directories, publishes page metadata, discovers hardware, performs a fast first collection, computes canonical width, and writes the first panel/tooltip pair. The normal loop then:
+Startup resolves config/assets, creates runtime directories, publishes page metadata, discovers hardware, performs a fast first sampling pass, assembles a display snapshot, computes canonical width, and writes the first panel/tooltip pair. The normal loop then:
 
 1. checks config/style/theme/geometry changes;
 2. rescans timed hardware boundaries when due;
-3. collects one fresh readings snapshot;
+3. borrows each domain owner for synchronous sampling and assembles one display snapshot from completed metric samples;
 4. evaluates notifications;
-5. renders panel and active tooltip page;
+5. renders the panel and selected tooltip page;
 6. atomically publishes changed output;
 7. sleeps in page-aware steps until the next poll.
 

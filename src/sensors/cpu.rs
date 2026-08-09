@@ -13,6 +13,7 @@ use std::time::Duration;
 
 use crate::config::{BRAILLE_LENGTH_MULTIPLIER, Config, SensorOverrides};
 use crate::domain::boundary::ClockSnapshot;
+use crate::domain::readings::{LoadAverage, RetainedMetricSample};
 
 const CPU_TEMPERATURE_CHIPS: [&str; 3] = ["coretemp", "k10temp", "zenpower"];
 
@@ -23,13 +24,25 @@ pub struct CpuPaths {
     pub cpu_temp_path: Option<PathBuf>,
     /// `cpu0` frequency path, when the cpufreq sysfs interface exists.
     pub cpu_freq_path: Option<PathBuf>,
+    /// Active turbo/boost control file, when one exists.
+    pub cpu_turbo_path: Option<PathBuf>,
     /// Whether either turbo/boost sysfs knob exists.
     pub cpu_turbo_supported: bool,
 }
 
 /// Mutable CPU diff/history state that persists between polls.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct CpuState {
+    pub(super) usage: RetainedMetricSample<i32>,
+    pub(super) core_usage: RetainedMetricSample<Vec<i32>>,
+    pub(super) temperature: RetainedMetricSample<i32>,
+    pub(super) temperature_source: Option<PathBuf>,
+    pub(super) frequency_mhz: RetainedMetricSample<f64>,
+    pub(super) frequency_source: Option<PathBuf>,
+    pub(super) turbo: RetainedMetricSample<bool>,
+    pub(super) turbo_source: Option<PathBuf>,
+    pub(super) uptime_seconds: RetainedMetricSample<i64>,
+    pub(super) load_average: RetainedMetricSample<LoadAverage>,
     /// Previous aggregate `/proc/stat` counters.
     pub cpu_prev_times: Vec<u64>,
     /// Aggregate CPU-usage history shared by sparks/braille/graphs.
@@ -44,13 +57,27 @@ pub struct CpuState {
     pub cpu_core_history_sample_at: Option<Duration>,
 }
 
+impl CpuState {
+    pub(crate) fn reconcile_core_page(&mut self, configured: bool) {
+        if configured {
+            return;
+        }
+        self.core_usage.invalidate();
+        self.cpu_core_prev_times.clear();
+        self.cpu_core_history.clear();
+        self.cpu_core_history_sample_at = None;
+    }
+}
+
 /// Discovers the CPU lane's static sysfs paths under `sys_root`.
 #[must_use]
 pub fn discover_cpu_paths(sys_root: &Path, overrides: &SensorOverrides) -> CpuPaths {
+    let cpu_turbo_path = find_cpu_turbo_path(sys_root);
     CpuPaths {
         cpu_temp_path: find_cpu_temp_path(sys_root, overrides),
         cpu_freq_path: find_cpu_freq_path(sys_root),
-        cpu_turbo_supported: detect_cpu_turbo_supported(sys_root),
+        cpu_turbo_supported: cpu_turbo_path.is_some(),
+        cpu_turbo_path,
     }
 }
 
@@ -81,14 +108,24 @@ pub fn find_cpu_freq_path(sys_root: &Path) -> Option<PathBuf> {
 /// Returns `true` when either turbo/boost sysfs knob exists.
 #[must_use]
 pub fn detect_cpu_turbo_supported(sys_root: &Path) -> bool {
-    intel_pstate_path(sys_root).exists() || cpufreq_boost_path(sys_root).exists()
+    find_cpu_turbo_path(sys_root).is_some()
+}
+
+/// Returns the preferred turbo/boost control path exposed by the kernel.
+#[must_use]
+pub fn find_cpu_turbo_path(sys_root: &Path) -> Option<PathBuf> {
+    let intel = intel_pstate_path(sys_root);
+    if intel.exists() {
+        return Some(intel);
+    }
+    let boost = cpufreq_boost_path(sys_root);
+    boost.exists().then_some(boost)
 }
 
 /// Reads aggregate CPU usage from `/proc/stat` and updates shared history.
 ///
-/// Mirrors `src/sensors.py::_read_cpu_usage`: the first sample returns `0`,
-/// later samples diff jiffies against the previous counters, cap the visible
-/// percentage at `99`, and append into the shared history buffer only when the
+/// The first counter read establishes a baseline and returns `None`. Later comparable reads cap
+/// the visible percentage at `99` and append into the shared history buffer only when the
 /// configured history cadence elapses.
 #[must_use]
 pub fn read_cpu_usage(
@@ -96,16 +133,10 @@ pub fn read_cpu_usage(
     state: &mut CpuState,
     cfg: &Config,
     clock: ClockSnapshot,
-) -> i32 {
-    let Ok(text) = fs::read_to_string(proc_root.join("stat")) else {
-        return 0;
+) -> Option<i32> {
+    let CpuUsageReadOutcome::Value(usage) = read_cpu_usage_once(proc_root, state) else {
+        return None;
     };
-    let Some(current) = parse_cpu_totals_line(&text) else {
-        return 0;
-    };
-
-    let usage = usage_from_diff(&state.cpu_prev_times, &current);
-    state.cpu_prev_times = current;
     maybe_append_history(
         &mut state.cpu_history,
         &mut state.cpu_history_sample_at,
@@ -114,7 +145,52 @@ pub fn read_cpu_usage(
         aggregate_history_len(cfg),
         usage,
     );
-    usage
+    Some(usage)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CpuUsageReadOutcome {
+    Value(i32),
+    Baseline,
+    InvalidDelta,
+    Failed,
+}
+
+/// Performs one aggregate CPU counter attempt without history cadence policy.
+#[must_use]
+pub(crate) fn read_cpu_usage_once(proc_root: &Path, state: &mut CpuState) -> CpuUsageReadOutcome {
+    let Ok(text) = fs::read_to_string(proc_root.join("stat")) else {
+        return CpuUsageReadOutcome::Failed;
+    };
+    let Some(current) = parse_cpu_totals_line(&text) else {
+        return CpuUsageReadOutcome::Failed;
+    };
+
+    if state.cpu_prev_times.is_empty() || state.cpu_prev_times.len() != current.len() {
+        state.cpu_prev_times = current;
+        state.cpu_history.clear();
+        state.cpu_history_sample_at = None;
+        return CpuUsageReadOutcome::Baseline;
+    }
+
+    let usage = usage_from_diff(&state.cpu_prev_times, &current);
+    state.cpu_prev_times = current;
+    usage.map_or(
+        CpuUsageReadOutcome::InvalidDelta,
+        CpuUsageReadOutcome::Value,
+    )
+}
+
+/// Appends one aggregate CPU history point after synchronous collection marks it due.
+pub(crate) fn append_cpu_history(
+    state: &mut CpuState,
+    cfg: &Config,
+    captured_at: Duration,
+    usage: i32,
+) {
+    state.cpu_history_sample_at = Some(captured_at);
+    state.cpu_history.push(usage);
+    trim_to_len(&mut state.cpu_history, aggregate_history_len(cfg));
 }
 
 /// Reads per-core CPU usage from `/proc/stat` and updates per-core histories.
@@ -129,40 +205,75 @@ pub fn read_cpu_cores(
     cfg: &Config,
     clock: ClockSnapshot,
 ) -> Option<Vec<i32>> {
-    let text = fs::read_to_string(proc_root.join("stat")).ok()?;
-    let cores = parse_per_core_totals(&text)?;
-    if cores.is_empty() {
+    let CpuCoreReadOutcome::Value(usage) = read_cpu_cores_once(proc_root, state) else {
         return None;
-    }
-
-    if state.cpu_core_prev_times.len() != cores.len() {
-        state.cpu_core_prev_times = vec![Vec::new(); cores.len()];
-        state.cpu_core_history = vec![Vec::new(); cores.len()];
-    }
-
-    let usage: Vec<i32> = cores
-        .iter()
-        .zip(state.cpu_core_prev_times.iter())
-        .map(|(current, previous)| usage_from_diff(previous, current))
-        .collect();
-
-    for (slot, current) in state.cpu_core_prev_times.iter_mut().zip(cores) {
-        *slot = current;
-    }
-
+    };
     if history_due(
         &mut state.cpu_core_history_sample_at,
         clock.monotonic,
         history_interval(cfg),
     ) {
-        let max_len = per_core_history_len(cfg);
-        for (history, sample) in state.cpu_core_history.iter_mut().zip(&usage) {
-            history.push(*sample);
-            trim_to_len(history, max_len);
-        }
+        append_cpu_core_history(state, cfg, clock.monotonic, &usage);
+    }
+    Some(usage)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum CpuCoreReadOutcome {
+    Value(Vec<i32>),
+    Baseline,
+    InvalidDelta,
+    Failed,
+}
+
+/// Performs one per-core CPU counter attempt without history cadence policy.
+#[must_use]
+pub(crate) fn read_cpu_cores_once(proc_root: &Path, state: &mut CpuState) -> CpuCoreReadOutcome {
+    let Ok(text) = fs::read_to_string(proc_root.join("stat")) else {
+        return CpuCoreReadOutcome::Failed;
+    };
+    let Some(cores) = parse_per_core_totals(&text) else {
+        return CpuCoreReadOutcome::Failed;
+    };
+    if cores.is_empty() {
+        return CpuCoreReadOutcome::Failed;
     }
 
-    Some(usage)
+    let same_shape = state.cpu_core_prev_times.len() == cores.len()
+        && state
+            .cpu_core_prev_times
+            .iter()
+            .zip(&cores)
+            .all(|(previous, current)| !previous.is_empty() && previous.len() == current.len());
+    if !same_shape {
+        state.cpu_core_prev_times = cores;
+        state.cpu_core_history = vec![Vec::new(); state.cpu_core_prev_times.len()];
+        state.cpu_core_history_sample_at = None;
+        return CpuCoreReadOutcome::Baseline;
+    }
+
+    let usage: Option<Vec<i32>> = cores
+        .iter()
+        .zip(state.cpu_core_prev_times.iter())
+        .map(|(current, previous)| usage_from_diff(previous, current))
+        .collect();
+    state.cpu_core_prev_times = cores;
+    usage.map_or(CpuCoreReadOutcome::InvalidDelta, CpuCoreReadOutcome::Value)
+}
+
+/// Appends per-core history after synchronous collection marks it due.
+pub(crate) fn append_cpu_core_history(
+    state: &mut CpuState,
+    cfg: &Config,
+    captured_at: Duration,
+    usage: &[i32],
+) {
+    state.cpu_core_history_sample_at = Some(captured_at);
+    let max_len = per_core_history_len(cfg);
+    for (history, sample) in state.cpu_core_history.iter_mut().zip(usage) {
+        history.push(*sample);
+        trim_to_len(history, max_len);
+    }
 }
 
 /// Reads system uptime from `/proc/uptime`, truncating fractional seconds.
@@ -211,19 +322,21 @@ pub fn read_cpu_frequency_mhz(proc_root: &Path, freq_path: Option<&Path>) -> Opt
 /// therefore evaluate to `Some(false)`.
 #[must_use]
 pub fn read_cpu_turbo(sys_root: &Path) -> Option<bool> {
-    let intel = intel_pstate_path(sys_root);
-    if intel.exists() {
-        return fs::read_to_string(intel)
-            .ok()
-            .map(|text| text.trim() == "0");
-    }
-    let boost = cpufreq_boost_path(sys_root);
-    if boost.exists() {
-        return fs::read_to_string(boost)
-            .ok()
-            .map(|text| text.trim() == "1");
-    }
-    None
+    read_cpu_turbo_path(find_cpu_turbo_path(sys_root).as_deref())
+}
+
+/// Reads one discovered turbo/boost control path.
+#[must_use]
+pub fn read_cpu_turbo_path(path: Option<&Path>) -> Option<bool> {
+    let path = path?;
+    let enabled_value = if path.file_name().is_some_and(|name| name == "no_turbo") {
+        "0"
+    } else {
+        "1"
+    };
+    fs::read_to_string(path)
+        .ok()
+        .map(|text| text.trim() == enabled_value)
 }
 
 fn hwmon_dirs_matching(sys_root: &Path, chip_substr: &str) -> Vec<PathBuf> {
@@ -302,33 +415,32 @@ fn parse_per_core_totals(text: &str) -> Option<Vec<Vec<u64>>> {
     (!cores.is_empty()).then_some(cores)
 }
 
-fn usage_from_diff(previous: &[u64], current: &[u64]) -> i32 {
+fn usage_from_diff(previous: &[u64], current: &[u64]) -> Option<i32> {
     if previous.is_empty() || previous.len() != current.len() || current.len() <= 4 {
-        return 0;
+        return None;
     }
-    let total_current: u64 = current.iter().sum();
-    let total_previous: u64 = previous.iter().sum();
-    let Some(total_delta) = total_current.checked_sub(total_previous) else {
-        return 0;
-    };
+    let total_current = current
+        .iter()
+        .try_fold(0_u64, |sum, value| sum.checked_add(*value))?;
+    let total_previous = previous
+        .iter()
+        .try_fold(0_u64, |sum, value| sum.checked_add(*value))?;
+    let total_delta = total_current.checked_sub(total_previous)?;
     if total_delta == 0 {
-        return 0;
+        return None;
     }
-    let idle_current = current[3].saturating_add(current[4]);
-    let idle_previous = previous[3].saturating_add(previous[4]);
-    let Some(idle_delta) = idle_current.checked_sub(idle_previous) else {
-        return 0;
-    };
-    let used = 100_u64.saturating_sub(idle_delta.saturating_mul(100) / total_delta);
-    used.min(99) as i32
+    let idle_current = current[3].checked_add(current[4])?;
+    let idle_previous = previous[3].checked_add(previous[4])?;
+    let idle_delta = idle_current.checked_sub(idle_previous)?;
+    if idle_delta > total_delta {
+        return None;
+    }
+    let idle_percent = idle_delta.checked_mul(100)? / total_delta;
+    Some(100_u64.saturating_sub(idle_percent).min(99) as i32)
 }
 
 fn history_interval(cfg: &Config) -> Duration {
-    if cfg.display.history_interval <= 0.0 {
-        Duration::ZERO
-    } else {
-        Duration::from_secs_f64(cfg.display.history_interval)
-    }
+    cfg.display.history_interval.duration()
 }
 
 fn aggregate_history_len(cfg: &Config) -> usize {
@@ -415,355 +527,4 @@ fn parse_cpuinfo_frequency_mhz(text: &str) -> Option<f64> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    use std::fs;
-    use std::path::PathBuf;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    fn fixtures_root() -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
-    }
-
-    fn fixture_proc() -> PathBuf {
-        fixtures_root().join("proc")
-    }
-
-    fn fixture_sys() -> PathBuf {
-        fixtures_root().join("sys")
-    }
-
-    fn clock_at(seconds: u64) -> ClockSnapshot {
-        ClockSnapshot {
-            monotonic: Duration::from_secs(seconds),
-            wall: UNIX_EPOCH + Duration::from_secs(seconds),
-        }
-    }
-
-    fn config_with_history_interval(seconds: f64) -> Config {
-        let mut cfg = Config::default();
-        cfg.display.history_interval = seconds;
-        cfg
-    }
-
-    struct TempTree {
-        root: PathBuf,
-    }
-
-    impl TempTree {
-        fn new() -> Self {
-            let unique = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or(Duration::ZERO)
-                .as_nanos();
-            let root = std::env::temp_dir()
-                .join(format!("plasma-top-cpu-{}-{unique}", std::process::id()));
-            if let Err(error) = fs::create_dir_all(&root) {
-                panic!("failed to create temp root {}: {error}", root.display());
-            }
-            Self { root }
-        }
-
-        fn path(&self) -> &Path {
-            &self.root
-        }
-
-        fn write(&self, relative: &str, content: &str) {
-            let path = self.root.join(relative);
-            if let Some(parent) = path.parent()
-                && let Err(error) = fs::create_dir_all(parent)
-            {
-                panic!("failed to create {}: {error}", parent.display());
-            }
-            if let Err(error) = fs::write(&path, content) {
-                panic!("failed to write {}: {error}", path.display());
-            }
-        }
-    }
-
-    impl Drop for TempTree {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.root);
-        }
-    }
-
-    #[test]
-    fn discover_cpu_paths_collects_all_cpu_discovery_outputs() {
-        let tmp = TempTree::new();
-        tmp.write("sys/class/hwmon/hwmon0/name", "coretemp\n");
-        tmp.write("sys/class/hwmon/hwmon0/temp1_input", "55000\n");
-        tmp.write(
-            "sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq",
-            "3200000\n",
-        );
-        tmp.write("sys/devices/system/cpu/intel_pstate/no_turbo", "0\n");
-
-        let paths = discover_cpu_paths(&tmp.path().join("sys"), &SensorOverrides::default());
-
-        assert_eq!(
-            paths.cpu_temp_path,
-            Some(tmp.path().join("sys/class/hwmon/hwmon0/temp1_input"))
-        );
-        assert_eq!(
-            paths.cpu_freq_path,
-            Some(
-                tmp.path()
-                    .join("sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq")
-            )
-        );
-        assert!(paths.cpu_turbo_supported);
-    }
-
-    #[test]
-    fn find_cpu_temp_path_prefers_override_before_autodetect() {
-        let tmp = TempTree::new();
-        tmp.write("sys/class/hwmon/hwmon0/name", "coretemp\n");
-        tmp.write("sys/class/hwmon/hwmon0/temp1_input", "55000\n");
-        tmp.write("sys/class/hwmon/hwmon1/name", "zenpower\n");
-        tmp.write("sys/class/hwmon/hwmon1/temp3_input", "44000\n");
-
-        let overrides = SensorOverrides {
-            cpu_temp: Some(String::from("zenpower|temp3_input")),
-            ..SensorOverrides::default()
-        };
-
-        let found = find_cpu_temp_path(&tmp.path().join("sys"), &overrides);
-
-        assert_eq!(
-            found,
-            Some(tmp.path().join("sys/class/hwmon/hwmon1/temp3_input"))
-        );
-    }
-
-    #[test]
-    fn find_cpu_temp_path_autodetects_supported_fixture_chip() {
-        let found = find_cpu_temp_path(&fixture_sys(), &SensorOverrides::default());
-
-        assert_eq!(
-            found,
-            Some(fixture_sys().join("class/hwmon/hwmon0/temp1_input"))
-        );
-    }
-
-    #[test]
-    fn find_cpu_freq_path_and_turbo_support_follow_sysfs_presence() {
-        let tmp = TempTree::new();
-        assert_eq!(find_cpu_freq_path(&tmp.path().join("sys")), None);
-        assert!(!detect_cpu_turbo_supported(&tmp.path().join("sys")));
-
-        tmp.write(
-            "sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq",
-            "3200000\n",
-        );
-        tmp.write("sys/devices/system/cpu/cpufreq/boost", "1\n");
-
-        assert_eq!(
-            find_cpu_freq_path(&tmp.path().join("sys")),
-            Some(
-                tmp.path()
-                    .join("sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq")
-            )
-        );
-        assert!(detect_cpu_turbo_supported(&tmp.path().join("sys")));
-    }
-
-    #[test]
-    fn read_cpu_usage_first_sample_is_zero_and_seeds_history() {
-        let mut state = CpuState::default();
-        let cfg = Config::default();
-
-        let usage = read_cpu_usage(&fixture_proc(), &mut state, &cfg, clock_at(0));
-
-        assert_eq!(usage, 0);
-        assert_eq!(state.cpu_history, vec![0]);
-        assert_eq!(state.cpu_prev_times.len(), 10);
-    }
-
-    #[test]
-    fn read_cpu_usage_computes_delta_caps_at_ninety_nine_and_trims_history() {
-        let tmp = TempTree::new();
-        tmp.write("proc/stat", "cpu 10 0 10 80 0 0 0 0 0 0\n");
-
-        let mut cfg = config_with_history_interval(1.0);
-        cfg.spark_panel.cpu_spark_length = 1;
-        cfg.spark_tooltip.cpu_spark_length = 1;
-        cfg.braille_panel.cpu_braille_length = 1;
-        cfg.braille_tooltip.cpu_braille_length = 1;
-        cfg.pages.order = vec![String::from("graphs")];
-        cfg.pages.graph_history_length = 2;
-
-        let proc_root = tmp.path().join("proc");
-        let mut state = CpuState::default();
-        assert_eq!(read_cpu_usage(&proc_root, &mut state, &cfg, clock_at(0)), 0);
-
-        tmp.write("proc/stat", "cpu 50 0 50 80 0 0 0 0 0 0\n");
-        assert_eq!(
-            read_cpu_usage(&proc_root, &mut state, &cfg, clock_at(2)),
-            99
-        );
-
-        tmp.write("proc/stat", "cpu 51 0 51 80 0 0 0 0 0 0\n");
-        assert_eq!(
-            read_cpu_usage(&proc_root, &mut state, &cfg, clock_at(4)),
-            99
-        );
-        assert_eq!(state.cpu_history, vec![99, 99]);
-    }
-
-    #[test]
-    fn read_cpu_usage_skips_history_until_interval_elapses_and_handles_reset() {
-        let tmp = TempTree::new();
-        tmp.write("proc/stat", "cpu 10 0 10 80 0 0 0 0 0 0\n");
-
-        let cfg = config_with_history_interval(5.0);
-        let proc_root = tmp.path().join("proc");
-        let mut state = CpuState::default();
-        assert_eq!(read_cpu_usage(&proc_root, &mut state, &cfg, clock_at(0)), 0);
-
-        tmp.write("proc/stat", "cpu 30 0 20 90 0 0 0 0 0 0\n");
-        assert_eq!(
-            read_cpu_usage(&proc_root, &mut state, &cfg, clock_at(1)),
-            75
-        );
-        assert_eq!(state.cpu_history, vec![0]);
-
-        tmp.write("proc/stat", "cpu 1 0 1 8 0 0 0 0 0 0\n");
-        assert_eq!(read_cpu_usage(&proc_root, &mut state, &cfg, clock_at(6)), 0);
-        assert_eq!(state.cpu_history, vec![0, 0]);
-    }
-
-    #[test]
-    fn read_cpu_cores_reads_fixture_rows_and_tracks_history() {
-        let mut cfg = Config::default();
-        cfg.display.history_interval = 1.0;
-        cfg.braille_tooltip.cpu_braille_length = 2;
-        cfg.display.tooltip_width = 3;
-
-        let mut state = CpuState::default();
-        let first = read_cpu_cores(&fixture_proc(), &mut state, &cfg, clock_at(0));
-
-        assert_eq!(first, Some(vec![0; 8]));
-        assert_eq!(state.cpu_core_history.len(), 8);
-        assert!(state.cpu_core_history.iter().all(|history| history == &[0]));
-    }
-
-    #[test]
-    fn read_cpu_cores_resets_on_core_count_change() {
-        let tmp = TempTree::new();
-        tmp.write(
-            "proc/stat",
-            "cpu 20 0 20 160 0 0 0 0 0 0\n\
-             cpu0 10 0 10 80 0 0 0 0 0 0\n\
-             cpu1 10 0 10 80 0 0 0 0 0 0\n",
-        );
-
-        let cfg = config_with_history_interval(1.0);
-        let proc_root = tmp.path().join("proc");
-        let mut state = CpuState::default();
-        assert_eq!(
-            read_cpu_cores(&proc_root, &mut state, &cfg, clock_at(0)),
-            Some(vec![0, 0])
-        );
-
-        tmp.write(
-            "proc/stat",
-            "cpu 60 0 40 180 0 0 0 0 0 0\n\
-             cpu0 30 0 20 90 0 0 0 0 0 0\n\
-             cpu1 30 0 20 90 0 0 0 0 0 0\n",
-        );
-        assert_eq!(
-            read_cpu_cores(&proc_root, &mut state, &cfg, clock_at(2)),
-            Some(vec![75, 75])
-        );
-
-        tmp.write(
-            "proc/stat",
-            "cpu 90 0 60 210 0 0 0 0 0 0\n\
-             cpu0 30 0 20 90 0 0 0 0 0 0\n\
-             cpu1 30 0 20 90 0 0 0 0 0 0\n\
-             cpu2 30 0 20 90 0 0 0 0 0 0\n",
-        );
-        assert_eq!(
-            read_cpu_cores(&proc_root, &mut state, &cfg, clock_at(4)),
-            Some(vec![0, 0, 0])
-        );
-        assert_eq!(state.cpu_core_history.len(), 3);
-        assert!(state.cpu_core_history.iter().all(|history| history == &[0]));
-    }
-
-    #[test]
-    fn read_cpu_cores_returns_none_for_malformed_stat() {
-        let tmp = TempTree::new();
-        tmp.write("proc/stat", "cpu x y z\n");
-
-        let mut state = CpuState::default();
-        assert_eq!(
-            read_cpu_cores(
-                &tmp.path().join("proc"),
-                &mut state,
-                &Config::default(),
-                clock_at(0)
-            ),
-            None
-        );
-        assert!(state.cpu_core_prev_times.is_empty());
-    }
-
-    #[test]
-    fn read_uptime_and_load_average_parse_fixture_proc_files() {
-        assert_eq!(read_uptime_seconds(&fixture_proc()), Some(12345));
-        assert_eq!(read_load_average(&fixture_proc()), Some((1.20, 0.90, 0.70)));
-    }
-
-    #[test]
-    fn read_uptime_and_load_average_return_none_for_malformed_files() {
-        let tmp = TempTree::new();
-        tmp.write("proc/uptime", "nope\n");
-        tmp.write("proc/loadavg", "1.0 broken\n");
-
-        assert_eq!(read_uptime_seconds(&tmp.path().join("proc")), None);
-        assert_eq!(read_load_average(&tmp.path().join("proc")), None);
-    }
-
-    #[test]
-    fn read_cpu_frequency_prefers_sysfs_and_falls_back_to_cpuinfo() {
-        let freq_path = fixture_sys().join("devices/system/cpu/cpu0/cpufreq/scaling_cur_freq");
-        assert_eq!(
-            read_cpu_frequency_mhz(&fixture_proc(), Some(&freq_path)),
-            Some(3200.0)
-        );
-
-        let tmp = TempTree::new();
-        tmp.write(
-            "proc/cpuinfo",
-            &fs::read_to_string(fixture_proc().join("cpuinfo")).unwrap_or_default(),
-        );
-        tmp.write(
-            "sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq",
-            "bogus\n",
-        );
-        assert_eq!(
-            read_cpu_frequency_mhz(
-                &tmp.path().join("proc"),
-                Some(
-                    &tmp.path()
-                        .join("sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq")
-                )
-            ),
-            Some(2195.104)
-        );
-    }
-
-    #[test]
-    fn read_cpu_turbo_handles_inversion_and_boost_fallback() {
-        assert_eq!(read_cpu_turbo(&fixture_sys()), Some(true));
-
-        let tmp = TempTree::new();
-        tmp.write("sys/devices/system/cpu/cpufreq/boost", "1\n");
-        assert_eq!(read_cpu_turbo(&tmp.path().join("sys")), Some(true));
-
-        tmp.write("sys/devices/system/cpu/cpufreq/boost", "bogus\n");
-        assert_eq!(read_cpu_turbo(&tmp.path().join("sys")), Some(false));
-    }
-}
+mod tests;

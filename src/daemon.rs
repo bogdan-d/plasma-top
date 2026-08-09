@@ -24,22 +24,26 @@ use crate::config::{
 use crate::domain::boundary::{
     ClockSnapshot, CommandRunner, DbusFacade, FilesystemRoots, NotificationFacade,
 };
-use crate::domain::readings::{HardwareSnapshot, ReadingsSnapshot};
-use crate::domain::state::{DaemonStateSnapshot, NotificationState};
+use crate::domain::readings::{DisplaySnapshot, HardwareInventory};
+use crate::domain::state::NotificationState;
 use crate::error::{Error, Result};
 use crate::notify::check_and_notify;
 use crate::page_commands::{
     CommandLookup, Page, PageCommandCache, PageCommandContext, PageEnvironment, PageRenderKind,
-    PageSource, build_pages, default_click, page_inner, pager_html, title_html,
+    PageSource, build_pages, default_click, page_inner_with_clock, pager_html, title_html,
 };
 use crate::render::{PageFormatter, PanelFormatter};
 use crate::runtime::{self, atomic::write_atomic as write_atomic_bytes};
 use crate::sensors::gpu_nvidia::NvmlFacade;
 use crate::sensors::hid::BoltHidFacade;
 use crate::sensors::power::BoltBatteryFacade;
-use crate::sensors::process::read_top_process_page;
+use crate::sensors::process::{ProcessState, read_top_process_page};
 use crate::sensors::{
-    CollectCtx, CollectorState, collect, discover_hardware, needs_periph_rescan, rescan_peripherals,
+    CollectCtx, OwnerRefs, PeripheralDiscoveryState, collect, collect_with_notifications,
+    discover_hardware, discover_hardware_attempt, needs_periph_rescan, rescan_peripherals,
+};
+use crate::sensors::{
+    cpu, disk, external, gpu_history, gpu_intel, gpu_nvidia, memory, network, power,
 };
 
 /// Periodic retry cadence for peripherals absent at startup.
@@ -245,6 +249,28 @@ fn publish_pages(paths: &DaemonPaths, cfg: &Config) -> Result<Vec<Page>> {
     Ok(pages)
 }
 
+fn replace_page_registry(
+    paths: &DaemonPaths,
+    cfg: &Config,
+    active: &mut Vec<Page>,
+    command_cache: &mut PageCommandCache,
+    process: &mut ProcessState,
+) -> Result<()> {
+    let pages = publish_pages(paths, cfg)?;
+    command_cache.retain_pages(&pages);
+    let removed_process_page = active
+        .iter()
+        .any(|page| page.render() == Some(PageRenderKind::TopProcess))
+        && !pages
+            .iter()
+            .any(|page| page.render() == Some(PageRenderKind::TopProcess));
+    if removed_process_page {
+        process.reset_page();
+    }
+    *active = pages;
+    Ok(())
+}
+
 pub(crate) fn executable_lookup() -> CommandLookup {
     let mut lookup = CommandLookup::new();
     for name in ["ss", "fastfetch", "script"] {
@@ -263,18 +289,19 @@ fn find_executable(name: &str) -> Option<PathBuf> {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn render_page(
+pub(crate) fn render_page_with_clock(
     cfg: &Config,
-    hw: &HardwareSnapshot,
-    readings: &ReadingsSnapshot,
+    hw: &HardwareInventory,
+    readings: &DisplaySnapshot,
     css: &str,
     active: &[Page],
     index: usize,
     runner: &mut dyn CommandRunner,
     command_lookup: &CommandLookup,
     command_cache: &mut PageCommandCache,
-    now: Duration,
+    cadence_at: Duration,
     proc_root: &Path,
+    capture_clock: &mut impl FnMut() -> Duration,
 ) -> String {
     let index = index % active.len().max(1);
     if index == 0 {
@@ -301,7 +328,7 @@ pub(crate) fn render_page(
                 proc_root: proc_root.to_path_buf(),
                 services_text: None,
             };
-            let inner = page_inner(
+            let inner = page_inner_with_clock(
                 &page,
                 index,
                 active.len(),
@@ -310,9 +337,10 @@ pub(crate) fn render_page(
                 PageCommandContext {
                     commands: command_lookup,
                     cache: command_cache,
-                    now,
+                    now: cadence_at,
                     environment: &environment,
                 },
+                capture_clock,
             );
             formatter.format_page(&inner, css, &header, "")
         }
@@ -363,7 +391,7 @@ fn clock_unix(snapshot: ClockSnapshot) -> u64 {
 }
 
 fn log_boot_ready(
-    readings: &ReadingsSnapshot,
+    readings: &DisplaySnapshot,
     pending: &mut BTreeSet<&'static str>,
     boot: Duration,
     now: Duration,
@@ -398,6 +426,18 @@ fn log_boot_ready(
     }
 }
 
+/// Merges one selected process-page sample and stamps the completed display snapshot afterward.
+pub(crate) fn merge_process_page_sample(
+    readings: &mut DisplaySnapshot,
+    proc_root: &Path,
+    process: &mut ProcessState,
+    clock: &mut dyn FnMut() -> ClockSnapshot,
+) {
+    let captured_at = clock();
+    readings.top_process_full = read_top_process_page(proc_root, process, captured_at);
+    readings.assembled_at = clock();
+}
+
 /// Runs daemon against explicit roots and adapters. `poll_limit` bounds tests;
 /// production passes `None`.
 #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
@@ -426,8 +466,17 @@ pub fn run_daemon_with(
         cpu_count,
     );
     let mut active = publish_pages(paths, &cfg)?;
-    let mut state = DaemonStateSnapshot::default();
-    let mut collector = CollectorState::default();
+    let mut cpu_owner = cpu::CpuState::default();
+    let mut memory_owner = memory::MemoryState::default();
+    let mut network_owner = network::NetworkState::default();
+    let mut disk_owner = disk::DiskState::default();
+    let mut process_owner = ProcessState::default();
+    let mut intel_gpu_owner = gpu_intel::IntelGpuState::default();
+    let mut power_owner = power::PowerState::default();
+    let mut nvidia_owner = gpu_nvidia::NvidiaState::default();
+    let mut gpu_history_owner = gpu_history::GpuHistoryState::default();
+    let mut external_owner = external::ExternalState::default();
+    let mut peripheral_discovery = PeripheralDiscoveryState::default();
     let mut notifications = NotificationState::default();
     let mut command_cache = PageCommandCache::new();
     let command_lookup = executable_lookup();
@@ -470,18 +519,29 @@ pub fn run_daemon_with(
     let mut css = read_css(&css_path, overlay_path.as_deref());
 
     let first_clock = control.snapshot();
+    let mut capture_clock = || control.snapshot();
     let mut first_ctx = CollectCtx::new(
         roots,
         &mut *boundaries.commands,
         &mut *boundaries.dbus,
-        first_clock,
+        &mut capture_clock,
     );
     first_ctx.skip_slow = true;
     first_ctx.nvml = boundaries.nvml.take();
     first_ctx.bolt = boundaries.bolt.take();
-    let first = collect(
-        &mut collector,
-        &mut state,
+    let mut first = collect(
+        OwnerRefs {
+            cpu: &mut cpu_owner,
+            memory: &mut memory_owner,
+            network: &mut network_owner,
+            disk: &mut disk_owner,
+            process: &mut process_owner,
+            intel_gpu: &mut intel_gpu_owner,
+            power: &mut power_owner,
+            nvidia: &mut nvidia_owner,
+            gpu_history: &mut gpu_history_owner,
+            external: &mut external_owner,
+        },
         &mut hw,
         &cfg,
         &mut first_ctx,
@@ -489,6 +549,16 @@ pub fn run_daemon_with(
     );
     boundaries.nvml = first_ctx.nvml.take();
     boundaries.bolt = first_ctx.bolt.take();
+    let first_index = page_index(paths, active.len());
+    if active[first_index].render() == Some(PageRenderKind::TopProcess) {
+        let mut process_clock = || control.snapshot();
+        merge_process_page_sample(
+            &mut first,
+            &roots.proc_root,
+            &mut process_owner,
+            &mut process_clock,
+        );
+    }
     let first_width = PanelFormatter::new(&cfg, &hw).canonical_width(&first);
     apply_canonical_width(&mut cfg, i32::try_from(first_width).unwrap_or(i32::MAX));
     write_atomic(
@@ -496,8 +566,9 @@ pub fn run_daemon_with(
         &PanelFormatter::with_now_unix(&cfg, &hw, clock_unix(first_clock))
             .format_panel(&first, &css),
     )?;
-    let first_index = page_index(paths, active.len());
-    let tooltip = render_page(
+    let page_cadence_at = control.snapshot().monotonic;
+    let mut command_capture_clock = || control.snapshot().monotonic;
+    let tooltip = render_page_with_clock(
         &cfg,
         &hw,
         &first,
@@ -507,8 +578,9 @@ pub fn run_daemon_with(
         boundaries.commands,
         &command_lookup,
         &mut command_cache,
-        first_clock.monotonic,
+        page_cadence_at,
         &roots.proc_root,
+        &mut command_capture_clock,
     );
     write_atomic(&paths.tooltip, &tooltip)?;
     println!(
@@ -540,7 +612,7 @@ pub fn run_daemon_with(
             machine_stamps = new_machine_stamps;
             match load_config(config_path, None) {
                 Ok(new_cfg) => {
-                    let new_hw = discover_hardware(
+                    let discovery = discover_hardware_attempt(
                         &roots.sys_root,
                         &roots.proc_root,
                         &new_cfg,
@@ -549,8 +621,14 @@ pub fn run_daemon_with(
                         cpu_count,
                     );
                     cfg = new_cfg;
-                    hw = new_hw;
-                    active = publish_pages(paths, &cfg)?;
+                    discovery.merge_into(&mut hw);
+                    replace_page_registry(
+                        paths,
+                        &cfg,
+                        &mut active,
+                        &mut command_cache,
+                        &mut process_owner,
+                    )?;
                 }
                 Err(error) => eprintln!("[reload] config reload failed, keeping previous: {error}"),
             }
@@ -565,7 +643,13 @@ pub fn run_daemon_with(
             match load_config(config_path, None) {
                 Ok(new_cfg) => {
                     cfg = new_cfg;
-                    active = publish_pages(paths, &cfg)?;
+                    replace_page_registry(
+                        paths,
+                        &cfg,
+                        &mut active,
+                        &mut command_cache,
+                        &mut process_owner,
+                    )?;
                 }
                 Err(error) => {
                     eprintln!("[reload] plasma-triggered reload failed, keeping previous: {error}")
@@ -605,29 +689,61 @@ pub fn run_daemon_with(
             css = read_css(&css_path, overlay_path.as_deref());
         }
 
-        if needs_periph_rescan(&hw, &cfg)
-            && hw
-                .periph_scan_at
-                .is_none_or(|last| start.monotonic.saturating_sub(last) >= PERIPH_RESCAN_INTERVAL)
-        {
-            rescan_peripherals(&mut hw, &cfg, boundaries.dbus, boundaries.commands, start);
+        if needs_periph_rescan(&hw, &cfg) {
+            let decision_at = control.snapshot().monotonic;
+            if peripheral_discovery
+                .sampled_at
+                .is_none_or(|last| decision_at.saturating_sub(last) >= PERIPH_RESCAN_INTERVAL)
+            {
+                rescan_peripherals(&mut hw, &cfg, boundaries.dbus, boundaries.commands);
+                peripheral_discovery.sampled_at = Some(decision_at);
+            }
         }
 
+        let mut capture_clock = || control.snapshot();
         let mut ctx = CollectCtx::new(
             roots,
             &mut *boundaries.commands,
             &mut *boundaries.dbus,
-            start,
+            &mut capture_clock,
         );
         ctx.nvml = boundaries.nvml.take();
         ctx.bolt = boundaries.bolt.take();
-        let mut readings = collect(&mut collector, &mut state, &mut hw, &cfg, &mut ctx, None);
+        let collected = collect_with_notifications(
+            OwnerRefs {
+                cpu: &mut cpu_owner,
+                memory: &mut memory_owner,
+                network: &mut network_owner,
+                disk: &mut disk_owner,
+                process: &mut process_owner,
+                intel_gpu: &mut intel_gpu_owner,
+                power: &mut power_owner,
+                nvidia: &mut nvidia_owner,
+                gpu_history: &mut gpu_history_owner,
+                external: &mut external_owner,
+            },
+            &mut hw,
+            &cfg,
+            &mut ctx,
+            None,
+        );
+        let mut readings = collected.display;
         boundaries.nvml = ctx.nvml.take();
         boundaries.bolt = ctx.bolt.take();
+        let index = page_index(paths, active.len());
+        if active[index].render() == Some(PageRenderKind::TopProcess) {
+            let mut process_clock = || control.snapshot();
+            merge_process_page_sample(
+                &mut readings,
+                &roots.proc_root,
+                &mut process_owner,
+                &mut process_clock,
+            );
+        }
         let canonical_width = PanelFormatter::new(&cfg, &hw).canonical_width(&readings);
         apply_canonical_width(&mut cfg, i32::try_from(canonical_width).unwrap_or(i32::MAX));
         let report = check_and_notify(
-            &readings,
+            &collected.notifications,
             &cfg,
             &mut notifications,
             &hw,
@@ -644,20 +760,16 @@ pub fn run_daemon_with(
             start.monotonic,
         );
 
-        let index = page_index(paths, active.len());
-        if active[index].render() == Some(PageRenderKind::TopProcess) {
-            readings.top_process_full =
-                read_top_process_page(&roots.proc_root, &mut collector.process, start)
-                    .or(readings.top_process_full);
-        }
         write_atomic(
             &paths.panel,
             &PanelFormatter::with_now_unix(&cfg, &hw, clock_unix(start))
                 .format_panel(&readings, &css),
         )?;
+        let page_cadence_at = control.snapshot().monotonic;
+        let mut command_capture_clock = || control.snapshot().monotonic;
         write_atomic(
             &paths.tooltip,
-            &render_page(
+            &render_page_with_clock(
                 &cfg,
                 &hw,
                 &readings,
@@ -667,12 +779,13 @@ pub fn run_daemon_with(
                 boundaries.commands,
                 &command_lookup,
                 &mut command_cache,
-                start.monotonic,
+                page_cadence_at,
                 &roots.proc_root,
+                &mut command_capture_clock,
             ),
         )?;
 
-        let interval = Duration::from_secs_f64(cfg.display.poll_interval.max(0.0));
+        let interval = cfg.display.poll_interval.duration();
         let mut remaining =
             interval.saturating_sub(control.snapshot().monotonic.saturating_sub(start.monotonic));
         let mut last_page = page_index(paths, active.len());
@@ -684,15 +797,19 @@ pub fn run_daemon_with(
             if page != last_page {
                 last_page = page;
                 if active[page].render() == Some(PageRenderKind::TopProcess) {
-                    let now = control.snapshot();
-                    readings.top_process_full =
-                        read_top_process_page(&roots.proc_root, &mut collector.process, now)
-                            .or(readings.top_process_full);
+                    let mut process_clock = || control.snapshot();
+                    merge_process_page_sample(
+                        &mut readings,
+                        &roots.proc_root,
+                        &mut process_owner,
+                        &mut process_clock,
+                    );
                 }
-                let now = control.snapshot();
+                let page_cadence_at = control.snapshot().monotonic;
+                let mut command_capture_clock = || control.snapshot().monotonic;
                 write_atomic(
                     &paths.tooltip,
-                    &render_page(
+                    &render_page_with_clock(
                         &cfg,
                         &hw,
                         &readings,
@@ -702,8 +819,9 @@ pub fn run_daemon_with(
                         boundaries.commands,
                         &command_lookup,
                         &mut command_cache,
-                        now.monotonic,
+                        page_cadence_at,
                         &roots.proc_root,
+                        &mut command_capture_clock,
                     ),
                 )?;
             }
@@ -739,7 +857,7 @@ pub fn run_daemon(config_path: Option<&Path>) -> Result<()> {
     let mut notifications = ProductionNotificationFacade::default();
     let mut bolt = BoltHidFacade::default();
     #[cfg(feature = "nvml")]
-    let mut nvml = crate::sensors::gpu_nvidia::ProductionNvml::new();
+    let mut nvml = gpu_nvidia::ProductionNvml::new();
     let mut boundaries = DaemonBoundaries {
         commands: &mut commands,
         dbus: &mut dbus,
@@ -809,216 +927,4 @@ pub const fn render_page_id(page: RenderPage) -> &'static str {
 }
 
 #[cfg(test)]
-mod tests {
-    #![allow(clippy::expect_used)]
-    use super::*;
-    use crate::domain::boundary::{
-        BoundaryError, CommandOutput, DbusOutput, DbusRequest, NotificationError,
-        NotificationPayload,
-    };
-    use std::cell::Cell;
-
-    #[test]
-    fn rgb_and_luma_match_python_boundaries() {
-        assert_eq!(parse_rgb("1, 2,3,255"), Some((1, 2, 3)));
-        assert_eq!(parse_rgb("bad"), None);
-        assert!(!is_light_rgb((127, 127, 127)));
-        assert!(is_light_rgb((255, 255, 255)));
-    }
-
-    #[test]
-    fn css_comments_and_whitespace_are_stripped() {
-        let dir = std::env::temp_dir().join(format!("plasma-top-css-{}", std::process::id()));
-        let _ = fs::create_dir_all(&dir);
-        let path = dir.join("style.css");
-        fs::write(&path, "/* note */\n.a {\n color: red;\n}").expect("write fixture");
-        assert_eq!(read_css_file(&path), ".a { color: red; }");
-        let _ = fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    fn footer_is_inserted_inside_tooltip_root() {
-        assert_eq!(
-            insert_before_tooltip_close("<div class=\"tooltip\">x</div>".into(), "p"),
-            "<div class=\"tooltip\">xp</div>"
-        );
-    }
-
-    struct AbsentCommand {
-        calls: Cell<usize>,
-    }
-
-    impl CommandRunner for AbsentCommand {
-        fn run(
-            &mut self,
-            program: &Path,
-            args: &[OsString],
-            _timeout: Duration,
-        ) -> std::result::Result<CommandOutput, BoundaryError> {
-            self.calls.set(self.calls.get().saturating_add(1));
-            Err(BoundaryError::CommandFailed {
-                program: program.to_path_buf(),
-                args: args.to_vec(),
-                detail: "fixture absent".into(),
-            })
-        }
-    }
-
-    struct AbsentDbus;
-
-    impl DbusFacade for AbsentDbus {
-        fn call(&mut self, request: DbusRequest) -> std::result::Result<DbusOutput, BoundaryError> {
-            Err(BoundaryError::DbusCallFailed {
-                bus: request.bus,
-                service: request.service,
-                path: request.object_path,
-                interface: request.interface,
-                member: request.member,
-                detail: "fixture absent".into(),
-            })
-        }
-    }
-
-    struct RecordingNotifications;
-
-    impl NotificationFacade for RecordingNotifications {
-        fn send(
-            &mut self,
-            _payload: &NotificationPayload,
-        ) -> std::result::Result<(), NotificationError> {
-            Ok(())
-        }
-    }
-
-    struct FakeControl {
-        now: Duration,
-        paths: DaemonPaths,
-        config: PathBuf,
-        sleeps: usize,
-        saw_panel: bool,
-        saw_tooltip: bool,
-        saw_page_one: bool,
-    }
-
-    impl LoopControl for FakeControl {
-        fn snapshot(&mut self) -> ClockSnapshot {
-            ClockSnapshot {
-                monotonic: self.now,
-                wall: UNIX_EPOCH + self.now,
-            }
-        }
-
-        fn sleep(&mut self, duration: Duration) {
-            self.now = self.now.saturating_add(duration);
-            self.sleeps = self.sleeps.saturating_add(1);
-            self.saw_panel |= fs::read_to_string(&self.paths.panel)
-                .is_ok_and(|html| html.contains("class=\"panel"));
-            self.saw_tooltip |= fs::read_to_string(&self.paths.tooltip)
-                .is_ok_and(|html| html.contains("class=\"tooltip"));
-            if self.sleeps == 1 {
-                fs::write(&self.paths.page, "1").expect("step fixture page");
-                fs::write(&self.config, "not = [valid").expect("break hot config");
-            } else if fs::read_to_string(&self.paths.tooltip)
-                .is_ok_and(|html| html.contains("CPU CORES"))
-            {
-                self.saw_page_one = true;
-            }
-        }
-
-        fn should_stop(&self) -> bool {
-            false
-        }
-    }
-
-    fn integration_tree() -> (PathBuf, FilesystemRoots, DaemonPaths, PathBuf) {
-        let root = std::env::temp_dir().join(format!(
-            "plasma-top-daemon-{}-{:?}",
-            std::process::id(),
-            thread::current().id()
-        ));
-        let proc_root = root.join("proc");
-        let sys_root = root.join("sys");
-        fs::create_dir_all(&proc_root).expect("proc fixture root");
-        fs::create_dir_all(&sys_root).expect("sys fixture root");
-        fs::write(proc_root.join("stat"), "cpu  1 0 1 8 0 0 0 0\n").expect("proc stat");
-        fs::write(
-            proc_root.join("meminfo"),
-            "MemTotal: 1024000 kB\nMemAvailable: 512000 kB\nSwapTotal: 0 kB\nSwapFree: 0 kB\n",
-        )
-        .expect("meminfo");
-        let runtime = root.join("run/plasma-top");
-        let state = runtime.join("state");
-        let paths = DaemonPaths {
-            runtime: runtime.clone(),
-            state: state.clone(),
-            panel: runtime.join("panel.html"),
-            tooltip: runtime.join("tooltip.html"),
-            page: state.join("page"),
-            npages: state.join("npages"),
-            geom: state.join("geom"),
-            plasma_config: root.join("appletsrc"),
-            kdeglobals: root.join("kdeglobals"),
-        };
-        let config = root.join("config.toml");
-        fs::write(
-            &config,
-            "[display]\npoll_interval = 0.25\n[panel]\norder = []\n[tooltip]\norder = []\n[pages]\norder = [\"cpu_cores\"]\n",
-        )
-        .expect("config fixture");
-        let roots = FilesystemRoots {
-            runtime_root: Some(runtime),
-            cache_root: Some(root.join("cache")),
-            config_root: Some(root.join("config")),
-            proc_root,
-            sys_root,
-        };
-        (root, roots, paths, config)
-    }
-
-    #[test]
-    fn isolated_lifecycle_paints_wakes_keeps_last_good_and_cleans_up() {
-        let (root, roots, paths, config) = integration_tree();
-        let mut commands = AbsentCommand {
-            calls: Cell::new(0),
-        };
-        let mut dbus = AbsentDbus;
-        let mut notifications = RecordingNotifications;
-        let mut boundaries = DaemonBoundaries {
-            commands: &mut commands,
-            dbus: &mut dbus,
-            notifications: &mut notifications,
-            nvml: None,
-            bolt: None,
-        };
-        let mut control = FakeControl {
-            now: Duration::ZERO,
-            paths: paths.clone(),
-            config: config.clone(),
-            sleeps: 0,
-            saw_panel: false,
-            saw_tooltip: false,
-            saw_page_one: false,
-        };
-
-        let result = run_daemon_with(
-            Some(&config),
-            &roots,
-            &paths,
-            &mut boundaries,
-            &mut control,
-            Some(2),
-        );
-
-        assert!(result.is_ok(), "{result:?}");
-        assert!(control.saw_panel && control.saw_tooltip);
-        assert!(control.saw_page_one, "page wake did not republish tooltip");
-        assert!(
-            commands.calls.get() > 0,
-            "production call path not exercised"
-        );
-        for path in [&paths.panel, &paths.tooltip, &paths.page, &paths.npages] {
-            assert!(!path.exists(), "cleanup left {}", path.display());
-        }
-        let _ = fs::remove_dir_all(root);
-    }
-}
+mod tests;

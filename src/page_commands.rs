@@ -6,7 +6,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use crate::domain::boundary::{BoundaryError, CommandRunner};
+use crate::domain::boundary::{BoundaryError, CommandRunner, CommandStatus};
+use crate::domain::readings::MetricSample;
 
 const CLICK_SYSTEM_MONITOR: &[&str] = &["plasma-systemmonitor"];
 const PROCESS_PAGE_ROWS: usize = 15;
@@ -55,7 +56,7 @@ pub enum PageColorizer {
     Connections,
 }
 
-/// One tooltip page in the active registry.
+/// One tooltip page in the configured registry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Page {
     /// Stable page slug.
@@ -104,7 +105,7 @@ pub enum PageSource {
 pub struct PageCommandSpec {
     /// Command argv.
     pub argv: &'static [&'static str],
-    /// Cache TTL for the rendered command text.
+    /// Freshness budget for the rendered command text sample.
     pub ttl: Duration,
     /// Maximum number of visible lines kept from the command output.
     pub max_lines: usize,
@@ -112,6 +113,23 @@ pub struct PageCommandSpec {
     pub pty: bool,
     /// Optional semantic colorizer applied to the command output.
     pub colorize: Option<PageColorizer>,
+}
+
+/// Result of one cadence-free command-page execution and parsing attempt.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PageCommandAttempt {
+    /// The command ran and its visible output was parsed successfully.
+    Completed(String),
+    /// The command could not be dispatched; the string is suitable for display.
+    Unavailable(String),
+}
+
+impl PageCommandAttempt {
+    fn text(&self) -> &str {
+        match self {
+            Self::Completed(text) | Self::Unavailable(text) => text,
+        }
+    }
 }
 
 /// Page-environment inputs that are deliberately fixtureable in tests.
@@ -158,35 +176,96 @@ impl CommandLookup {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct CachedCommandText {
-    cached_at: Duration,
-    text: String,
+/// Status of the most recent command-page owner decision.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PageCommandStatus {
+    /// No command attempt has completed yet.
+    #[default]
+    NeverAttempted,
+    /// The most recent real attempt completed successfully.
+    Captured,
+    /// The most recent real attempt failed.
+    Failed,
+    /// The compatibility wrapper reused a successful sample within its freshness budget.
+    Cached,
 }
 
-/// In-memory TTL cache for command-backed page text.
+/// Retained state owned by one command-backed page.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct PageCommandOwnerState {
+    /// Latest successful parsed output, retained across failures and independent of cadence policy.
+    pub latest: Option<MetricSample<String>>,
+    /// Time of the most recent real attempt.
+    pub attempted_at: Option<Duration>,
+    /// Time of the most recent failed real attempt.
+    pub failed_at: Option<Duration>,
+    /// Most recent failure text retained for diagnostics.
+    pub last_failure: Option<String>,
+    /// Current owner status.
+    pub status: PageCommandStatus,
+}
+
+impl PageCommandOwnerState {
+    fn record(&mut self, attempt: &PageCommandAttempt, attempted_at: Duration) {
+        self.attempted_at = Some(attempted_at);
+        match attempt {
+            PageCommandAttempt::Completed(text) => {
+                self.latest = Some(MetricSample::new(text.clone(), attempted_at));
+                self.status = PageCommandStatus::Captured;
+            }
+            PageCommandAttempt::Unavailable(detail) => {
+                self.failed_at = Some(attempted_at);
+                self.last_failure = Some(detail.clone());
+                self.status = PageCommandStatus::Failed;
+            }
+        }
+    }
+
+    fn display_text(&self, fallback: &str) -> String {
+        self.latest
+            .as_ref()
+            .map_or_else(|| fallback.to_owned(), |sample| sample.value.clone())
+    }
+}
+
+/// Command-page owner states and synchronous freshness decisions.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct PageCommandCache {
-    entries: BTreeMap<&'static str, CachedCommandText>,
+    entries: BTreeMap<&'static str, PageCommandOwnerState>,
 }
 
 /// Injected state needed while formatting one command-backed page.
 pub struct PageCommandContext<'a> {
     /// Resolved executables available to page commands.
     pub commands: &'a CommandLookup,
-    /// Shared command-output TTL cache.
+    /// Shared command-page owner state.
     pub cache: &'a mut PageCommandCache,
-    /// Current monotonic time used by the cache.
+    /// Fresh monotonic time used for this job's freshness decision.
     pub now: Duration,
     /// Fixtureable procfs and service-name inputs.
     pub environment: &'a PageEnvironment,
 }
 
 impl PageCommandCache {
-    /// Creates an empty cache.
+    /// Creates empty command-page owner state.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Returns diagnostics for one command-backed page after its first scheduling decision.
+    #[must_use]
+    pub fn state(&self, page_id: &str) -> Option<&PageCommandOwnerState> {
+        self.entries.get(page_id)
+    }
+
+    /// Removes owner state for command pages no longer present in the registry.
+    pub(crate) fn retain_pages(&mut self, pages: &[Page]) {
+        self.entries.retain(|page_id, _| {
+            pages
+                .iter()
+                .any(|page| page.id == *page_id && page.command().is_some())
+        });
     }
 }
 
@@ -259,7 +338,7 @@ const REGISTRY: &[Page] = &[
     GRAPHS_PAGE,
 ];
 
-/// Returns the active page list: page 0 plus the configured deep-dive pages.
+/// Returns the selectable page list: page 0 plus the configured deep-dive pages.
 #[must_use]
 pub fn build_pages(page_ids: &[String]) -> Vec<Page> {
     let mut pages = Vec::with_capacity(page_ids.len() + 1);
@@ -281,22 +360,90 @@ pub fn run_command(
     cache: &mut PageCommandCache,
     now: Duration,
 ) -> String {
+    run_command_with_clock(page, runner, commands, cache, now, &mut || now)
+}
+
+/// Runs a command-backed page using separate cadence-decision and completion clocks.
+#[must_use]
+pub fn run_command_with_clock(
+    page: &Page,
+    runner: &mut impl CommandRunner,
+    commands: &CommandLookup,
+    cache: &mut PageCommandCache,
+    cadence_at: Duration,
+    capture_clock: &mut impl FnMut() -> Duration,
+) -> String {
     let Some(spec) = page.command() else {
         return String::new();
     };
 
-    if !spec.ttl.is_zero()
-        && let Some(hit) = cache.entries.get(page.id)
-        && now.saturating_sub(hit.cached_at) < spec.ttl
-    {
-        return hit.text.clone();
+    if !spec.ttl.is_zero() {
+        let fresh = cache
+            .entries
+            .get(page.id)
+            .and_then(|state| state.latest.as_ref())
+            .is_some_and(|sample| cadence_at.saturating_sub(sample.captured_at) < spec.ttl);
+        if fresh && let Some(state) = cache.entries.get_mut(page.id) {
+            state.status = PageCommandStatus::Cached;
+            return state.display_text("");
+        }
     }
 
+    let attempt =
+        attempt_command_with_state_and_clock(page, runner, commands, cache, capture_clock);
+    cache.entries.get(page.id).map_or_else(
+        || attempt.text().to_owned(),
+        |state| state.display_text(attempt.text()),
+    )
+}
+
+/// Performs exactly one cadence-free command-page attempt and records its owner state.
+#[must_use]
+pub fn attempt_command_with_state(
+    page: &Page,
+    runner: &mut impl CommandRunner,
+    commands: &CommandLookup,
+    cache: &mut PageCommandCache,
+    now: Duration,
+) -> PageCommandAttempt {
+    attempt_command_with_state_and_clock(page, runner, commands, cache, &mut || now)
+}
+
+/// Performs one cadence-free command-page attempt and timestamps it at completion.
+#[must_use]
+pub fn attempt_command_with_state_and_clock(
+    page: &Page,
+    runner: &mut impl CommandRunner,
+    commands: &CommandLookup,
+    cache: &mut PageCommandCache,
+    capture_clock: &mut impl FnMut() -> Duration,
+) -> PageCommandAttempt {
+    let attempt = attempt_command(page, runner, commands);
+    let completed_at = capture_clock();
+    cache
+        .entries
+        .entry(page.id)
+        .or_default()
+        .record(&attempt, completed_at);
+    attempt
+}
+
+/// Performs exactly one command-page execution and parsing attempt without applying freshness policy.
+#[must_use]
+pub fn attempt_command(
+    page: &Page,
+    runner: &mut impl CommandRunner,
+    commands: &CommandLookup,
+) -> PageCommandAttempt {
+    let Some(spec) = page.command() else {
+        return PageCommandAttempt::Unavailable(String::new());
+    };
+
     let Some((&exe, args)) = spec.argv.split_first() else {
-        return String::new();
+        return PageCommandAttempt::Unavailable(String::new());
     };
     let Some(program_path) = commands.resolve(exe) else {
-        return format!("{exe}: not found");
+        return PageCommandAttempt::Unavailable(format!("{exe}: not found"));
     };
 
     let command_result = if spec.pty {
@@ -318,9 +465,23 @@ pub fn run_command(
 
     let output = match command_result {
         Ok(output) => output,
-        Err(BoundaryError::CommandFailed { detail, .. }) => return format!("{exe}: {detail}"),
-        Err(error) => return format!("{exe}: {error}"),
+        Err(BoundaryError::CommandFailed { detail, .. }) => {
+            return PageCommandAttempt::Unavailable(format!("{exe}: {detail}"));
+        }
+        Err(error) => return PageCommandAttempt::Unavailable(format!("{exe}: {error}")),
     };
+
+    match output.status {
+        CommandStatus::Exit(0) => {}
+        CommandStatus::Exit(code) => {
+            return PageCommandAttempt::Unavailable(format!("{exe}: exited with status {code}"));
+        }
+        CommandStatus::Signal(signal) => {
+            return PageCommandAttempt::Unavailable(format!(
+                "{exe}: terminated by signal {signal}"
+            ));
+        }
+    }
 
     let raw = if output.stdout.is_empty() {
         String::from_utf8_lossy(&output.stderr).into_owned()
@@ -341,17 +502,7 @@ pub fn run_command(
     if lines.is_empty() {
         lines.push(format!("{exe}: no output"));
     }
-    let text = lines.join("\n");
-    if !spec.ttl.is_zero() {
-        cache.entries.insert(
-            page.id,
-            CachedCommandText {
-                cached_at: now,
-                text: text.clone(),
-            },
-        );
-    }
-    text
+    PageCommandAttempt::Completed(lines.join("\n"))
 }
 
 /// Escapes command output for Qt RichText monospace display.
@@ -478,7 +629,29 @@ pub fn page_inner(
     runner: &mut impl CommandRunner,
     context: PageCommandContext<'_>,
 ) -> String {
-    let text = run_command(page, runner, context.commands, context.cache, context.now);
+    let now = context.now;
+    page_inner_with_clock(page, idx, total, min_width, runner, context, &mut || now)
+}
+
+/// Returns command-page HTML while timestamping a completed refresh from an injected clock.
+#[must_use]
+pub fn page_inner_with_clock(
+    page: &Page,
+    idx: usize,
+    total: usize,
+    min_width: usize,
+    runner: &mut impl CommandRunner,
+    context: PageCommandContext<'_>,
+    capture_clock: &mut impl FnMut() -> Duration,
+) -> String {
+    let text = run_command_with_clock(
+        page,
+        runner,
+        context.commands,
+        context.cache,
+        context.now,
+        capture_clock,
+    );
     let Some(spec) = page.command() else {
         return String::new();
     };
@@ -753,476 +926,4 @@ fn parse_service_name(port: u16, services: &str) -> Option<String> {
 }
 
 #[cfg(all(test, feature = "test-support"))]
-mod tests {
-    #![allow(clippy::expect_used)]
-
-    use super::*;
-    use crate::domain::boundary::{CommandOutput, CommandStatus};
-    use crate::test_support::FakeCommandRunner;
-    use std::process;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    fn temp_dir(label: &str) -> PathBuf {
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("time")
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!(
-            "plasma-top-page-tests-{label}-{}-{unique}",
-            process::id()
-        ));
-        fs::create_dir_all(&path).expect("create temp dir");
-        path
-    }
-
-    fn ok_output(program: &str, stdout: &[u8]) -> CommandOutput {
-        CommandOutput {
-            program: PathBuf::from(program),
-            args: Vec::new(),
-            status: CommandStatus::Exit(0),
-            stdout: stdout.to_vec(),
-            stderr: Vec::new(),
-        }
-    }
-
-    fn output(program: &str, status: CommandStatus, stdout: &[u8], stderr: &[u8]) -> CommandOutput {
-        CommandOutput {
-            program: PathBuf::from(program),
-            args: Vec::new(),
-            status,
-            stdout: stdout.to_vec(),
-            stderr: stderr.to_vec(),
-        }
-    }
-
-    #[test]
-    fn build_pages_keeps_full_and_skips_unknown_ids() {
-        let pages = build_pages(&[
-            String::from("processes"),
-            String::from("nope"),
-            String::from("graphs"),
-            String::from("processes"),
-        ]);
-
-        assert_eq!(pages[0], FULL_PAGE);
-        assert_eq!(pages[1].id, "processes");
-        assert_eq!(pages[2].id, "graphs");
-        assert_eq!(pages[3].id, "processes");
-        assert_eq!(pages.len(), 4);
-    }
-
-    #[test]
-    fn registry_matches_python_page_metadata() {
-        let pages = build_pages(
-            &[
-                "processes",
-                "connections",
-                "fastfetch",
-                "cpu_cores",
-                "graphs",
-            ]
-            .map(String::from),
-        );
-
-        assert_eq!(
-            pages.iter().map(|page| page.id).collect::<Vec<_>>(),
-            [
-                "full",
-                "processes",
-                "connections",
-                "fastfetch",
-                "cpu_cores",
-                "graphs",
-            ]
-        );
-        let connections = pages[2].command().expect("connections command");
-        assert_eq!(connections.argv, &["ss", "-4tlnp"]);
-        assert_eq!(connections.max_lines, 20);
-        assert_eq!(connections.colorize, Some(PageColorizer::Connections));
-        let fastfetch = pages[3].command().expect("fastfetch command");
-        assert_eq!(fastfetch.ttl, Duration::from_secs(30));
-        assert!(fastfetch.pty);
-        assert_eq!(pages[1].render(), Some(PageRenderKind::TopProcess));
-        assert_eq!(pages[4].render(), Some(PageRenderKind::CpuCores));
-        assert_eq!(pages[5].render(), Some(PageRenderKind::Graphs));
-    }
-
-    #[test]
-    fn run_command_returns_not_found_without_lookup_hit() {
-        let mut runner = FakeCommandRunner::new();
-        let mut cache = PageCommandCache::new();
-
-        let text = run_command(
-            &CONNECTIONS_PAGE,
-            &mut runner,
-            &CommandLookup::new(),
-            &mut cache,
-            Duration::from_secs(5),
-        );
-
-        assert_eq!(text, "ss: not found");
-        assert!(runner.call_trace().is_empty());
-    }
-
-    #[test]
-    fn run_command_uses_script_when_pty_and_script_available() {
-        let mut runner = FakeCommandRunner::new();
-        runner.enqueue(
-            "/usr/bin/script",
-            [
-                "-qec",
-                "fastfetch --logo none --structure OS:Kernel:Loadavg:Uptime:Separator:Chassis:Board:Bios:CPU:GPU:Display:BluetoothRadio:Separator:Memory:Disk:Battery:PowerAdapter:Wifi:LocalIP:DNS:Separator:InitSystem:Shell:LM:DE:WM",
-                "/dev/null",
-            ],
-            ok_output("/usr/bin/script", b"hello\n"),
-        );
-        let mut commands = CommandLookup::new();
-        commands
-            .insert("fastfetch", "/usr/bin/fastfetch")
-            .insert("script", "/usr/bin/script");
-        let mut cache = PageCommandCache::new();
-
-        let text = run_command(
-            &FASTFETCH_PAGE,
-            &mut runner,
-            &commands,
-            &mut cache,
-            Duration::from_secs(1),
-        );
-
-        assert_eq!(text, "hello");
-        assert_eq!(runner.call_trace().len(), 1);
-        assert_eq!(
-            runner.call_trace()[0].program,
-            PathBuf::from("/usr/bin/script")
-        );
-        assert_eq!(runner.call_trace()[0].timeout, COMMAND_TIMEOUT);
-    }
-
-    #[test]
-    fn run_command_falls_back_to_plain_execution_without_script() {
-        let mut runner = FakeCommandRunner::new();
-        runner.enqueue(
-            "/usr/bin/fastfetch",
-            ["--logo", "none", "--structure", "OS:Kernel:Loadavg:Uptime:Separator:Chassis:Board:Bios:CPU:GPU:Display:BluetoothRadio:Separator:Memory:Disk:Battery:PowerAdapter:Wifi:LocalIP:DNS:Separator:InitSystem:Shell:LM:DE:WM"],
-            ok_output("/usr/bin/fastfetch", b"plain\n"),
-        );
-        let mut commands = CommandLookup::new();
-        commands.insert("fastfetch", "/usr/bin/fastfetch");
-        let mut cache = PageCommandCache::new();
-
-        let text = run_command(
-            &FASTFETCH_PAGE,
-            &mut runner,
-            &commands,
-            &mut cache,
-            Duration::from_secs(1),
-        );
-
-        assert_eq!(text, "plain");
-        assert_eq!(
-            runner.call_trace()[0].program,
-            PathBuf::from("/usr/bin/fastfetch")
-        );
-        assert_eq!(runner.call_trace()[0].timeout, COMMAND_TIMEOUT);
-    }
-
-    #[test]
-    fn run_command_ttl_cache_skips_second_invocation() {
-        let mut runner = FakeCommandRunner::new();
-        runner.enqueue(
-            "/usr/bin/fastfetch",
-            ["--logo", "none", "--structure", "OS:Kernel:Loadavg:Uptime:Separator:Chassis:Board:Bios:CPU:GPU:Display:BluetoothRadio:Separator:Memory:Disk:Battery:PowerAdapter:Wifi:LocalIP:DNS:Separator:InitSystem:Shell:LM:DE:WM"],
-            ok_output("/usr/bin/fastfetch", b"cached\n"),
-        );
-        let mut commands = CommandLookup::new();
-        commands.insert("fastfetch", "/usr/bin/fastfetch");
-        let mut cache = PageCommandCache::new();
-
-        let first = run_command(
-            &FASTFETCH_PAGE,
-            &mut runner,
-            &commands,
-            &mut cache,
-            Duration::from_secs(5),
-        );
-        let second = run_command(
-            &FASTFETCH_PAGE,
-            &mut runner,
-            &commands,
-            &mut cache,
-            Duration::from_secs(10),
-        );
-
-        assert_eq!(first, "cached");
-        assert_eq!(second, "cached");
-        assert_eq!(runner.call_trace().len(), 1);
-    }
-
-    #[test]
-    fn run_command_refreshes_at_ttl_boundary() {
-        let mut runner = FakeCommandRunner::new();
-        let spec = FASTFETCH_PAGE.command().expect("fastfetch command");
-        runner.enqueue(
-            "/usr/bin/fastfetch",
-            spec.argv[1..].iter().copied(),
-            ok_output("/usr/bin/fastfetch", b"first\n"),
-        );
-        runner.enqueue(
-            "/usr/bin/fastfetch",
-            spec.argv[1..].iter().copied(),
-            ok_output("/usr/bin/fastfetch", b"second\n"),
-        );
-        let mut commands = CommandLookup::new();
-        commands.insert("fastfetch", "/usr/bin/fastfetch");
-        let mut cache = PageCommandCache::new();
-
-        let first = run_command(
-            &FASTFETCH_PAGE,
-            &mut runner,
-            &commands,
-            &mut cache,
-            Duration::ZERO,
-        );
-        let second = run_command(
-            &FASTFETCH_PAGE,
-            &mut runner,
-            &commands,
-            &mut cache,
-            Duration::from_secs(30),
-        );
-
-        assert_eq!((first.as_str(), second.as_str()), ("first", "second"));
-        assert_eq!(runner.call_trace().len(), 2);
-    }
-
-    #[test]
-    fn run_command_surfaces_adapter_failure_with_page_executable() {
-        let mut runner = FakeCommandRunner::new();
-        runner.enqueue_error(
-            "/usr/bin/ss",
-            ["-4tlnp"],
-            BoundaryError::CommandFailed {
-                program: PathBuf::from("/usr/bin/ss"),
-                args: vec![OsString::from("-4tlnp")],
-                detail: String::from("timed out"),
-            },
-        );
-        let mut commands = CommandLookup::new();
-        commands.insert("ss", "/usr/bin/ss");
-
-        let text = run_command(
-            &CONNECTIONS_PAGE,
-            &mut runner,
-            &commands,
-            &mut PageCommandCache::new(),
-            Duration::ZERO,
-        );
-
-        assert_eq!(text, "ss: timed out");
-        assert_eq!(runner.call_trace()[0].timeout, Duration::from_secs(5));
-    }
-
-    #[test]
-    fn run_command_uses_stderr_strips_terminal_noise_and_preserves_sgr() {
-        let mut runner = FakeCommandRunner::new();
-        runner.enqueue(
-            "/usr/bin/ss",
-            ["-4tlnp"],
-            output(
-                "/usr/bin/ss",
-                CommandStatus::Exit(1),
-                b"",
-                b"\r\x1b]0;title\x07\x1b[2K\x1b[31merror\x1b[0m\n\n",
-            ),
-        );
-        let mut commands = CommandLookup::new();
-        commands.insert("ss", "/usr/bin/ss");
-
-        let text = run_command(
-            &CONNECTIONS_PAGE,
-            &mut runner,
-            &commands,
-            &mut PageCommandCache::new(),
-            Duration::ZERO,
-        );
-
-        assert_eq!(text, "\x1b[31merror\x1b[0m");
-    }
-
-    #[test]
-    fn run_command_reports_empty_output_and_truncates_visible_lines() {
-        let page = Page {
-            id: "limited",
-            label: "Limited",
-            source: PageSource::Command(PageCommandSpec {
-                argv: &["limited"],
-                ttl: Duration::ZERO,
-                max_lines: 2,
-                pty: false,
-                colorize: None,
-            }),
-            click: CLICK_SYSTEM_MONITOR,
-        };
-        let mut runner = FakeCommandRunner::new();
-        runner.enqueue(
-            "/usr/bin/limited",
-            Option::<&str>::None,
-            ok_output("/usr/bin/limited", b"a\nb\nc\n"),
-        );
-        runner.enqueue(
-            "/usr/bin/limited",
-            Option::<&str>::None,
-            ok_output("/usr/bin/limited", b"\n"),
-        );
-        let mut commands = CommandLookup::new();
-        commands.insert("limited", "/usr/bin/limited");
-        let mut cache = PageCommandCache::new();
-
-        let limited = run_command(&page, &mut runner, &commands, &mut cache, Duration::ZERO);
-        let empty = run_command(&page, &mut runner, &commands, &mut cache, Duration::ZERO);
-
-        assert_eq!(limited, "a\nb");
-        assert_eq!(empty, "limited: no output");
-    }
-
-    #[test]
-    fn text_to_mono_html_escapes_html_and_preserves_spaces() {
-        assert_eq!(text_to_mono_html("a < b\n"), "a&nbsp;&lt;&nbsp;b<br>&nbsp;");
-        assert_eq!(ellipsize("abcd", 0), "a…");
-        assert_eq!(ellipsize("abcd", 3), "ab…");
-    }
-
-    #[test]
-    fn text_width_ignores_sgr_sequences() {
-        assert_eq!(text_width("\u{1b}[31mred\u{1b}[0m\nwide"), 4);
-    }
-
-    #[test]
-    fn format_connections_resolves_interpreter_cmdline_and_services() {
-        let proc_root = temp_dir("proc");
-        let pid_dir = proc_root.join("1234");
-        fs::create_dir_all(&pid_dir).expect("pid dir");
-        fs::write(
-            pid_dir.join("cmdline"),
-            b"python3\0/home/user/app.py\0--flag\0",
-        )
-        .expect("cmdline");
-        let env = PageEnvironment {
-            proc_root,
-            services_text: Some(String::from("http-alt 8080/tcp\n")),
-        };
-        let text = concat!(
-            "State Recv-Q Send-Q Local Address:Port Peer Address:Port Process\n",
-            "LISTEN 0 128 127.0.0.1:8080 0.0.0.0:* users:((\"python3\",pid=1234,fd=5))\n",
-            "LISTEN 0 128 0.0.0.0:5432 0.0.0.0:* -\n",
-            "LISTEN 0 128 127.0.0.1:8080 0.0.0.0:* -\n"
-        );
-
-        let (html, width) = format_connections(text, 24, &env);
-
-        assert_eq!(
-            (html.as_str(), width),
-            (
-                r#"<span class="active">app</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;127.0.0.1:8080&nbsp;<br><span class="warn">postgres</span>&nbsp;&nbsp;&nbsp;&nbsp;<span class="warn">0.0.0.0:5432&nbsp;</span><br><span class="label">http-alt</span>&nbsp;&nbsp;127.0.0.1:8080&nbsp;"#,
-                25,
-            )
-        );
-    }
-
-    #[test]
-    fn connection_helpers_degrade_for_missing_process_and_unknown_service() {
-        let env = PageEnvironment {
-            proc_root: temp_dir("missing-proc"),
-            services_text: Some(String::new()),
-        };
-
-        assert_eq!(proc_name("python3", 9999, &env.proc_root), "python3");
-        assert_eq!(service_for_port("127.0.0.1:49152", &env), None);
-        assert_eq!(
-            format_connections("malformed\n", 30, &env),
-            (text_to_mono_html("no listening sockets"), 30)
-        );
-    }
-
-    #[test]
-    fn page_inner_wraps_connections_page_with_pager() {
-        let mut runner = FakeCommandRunner::new();
-        runner.enqueue(
-            "/usr/bin/ss",
-            ["-4tlnp"],
-            ok_output(
-                "/usr/bin/ss",
-                b"State Recv-Q Send-Q Local Address:Port Peer Address:Port Process\n",
-            ),
-        );
-        let mut commands = CommandLookup::new();
-        commands.insert("ss", "/usr/bin/ss");
-        let mut cache = PageCommandCache::new();
-
-        let html = page_inner(
-            &CONNECTIONS_PAGE,
-            1,
-            3,
-            20,
-            &mut runner,
-            PageCommandContext {
-                commands: &commands,
-                cache: &mut cache,
-                now: Duration::ZERO,
-                environment: &PageEnvironment::default(),
-            },
-        );
-
-        assert!(html.starts_with(r#"<div class="page">"#));
-        assert!(html.contains(r#"<div class="pager">"#));
-    }
-
-    #[test]
-    fn page_inner_fastfetch_matches_python_text_shell() {
-        let mut runner = FakeCommandRunner::new();
-        let spec = FASTFETCH_PAGE.command().expect("fastfetch command");
-        runner.enqueue(
-            "/usr/bin/fastfetch",
-            spec.argv[1..].iter().copied(),
-            ok_output("/usr/bin/fastfetch", b"OS:  Arch\nKernel: Linux\n"),
-        );
-        let mut commands = CommandLookup::new();
-        commands.insert("fastfetch", "/usr/bin/fastfetch");
-        let mut cache = PageCommandCache::new();
-
-        let html = page_inner(
-            &FASTFETCH_PAGE,
-            2,
-            4,
-            30,
-            &mut runner,
-            PageCommandContext {
-                commands: &commands,
-                cache: &mut cache,
-                now: Duration::ZERO,
-                environment: &PageEnvironment::default(),
-            },
-        );
-
-        assert_eq!(
-            html,
-            r#"<div class="page">OS:&nbsp;&nbsp;Arch<br>Kernel:&nbsp;Linux</div><div class="pager">&nbsp;&nbsp;&nbsp;<span class="off">●</span>&nbsp;<span class="off">●</span>&nbsp;<span class="on">●</span>&nbsp;<span class="off">●</span></div>"#
-        );
-    }
-
-    #[test]
-    fn title_and_pager_match_python_shell() {
-        assert_eq!(default_click(), &["plasma-systemmonitor"]);
-        assert_eq!(top_process_page_rows(), 15);
-        assert_eq!(
-            title_html(&FASTFETCH_PAGE),
-            r#"<div><span class="title">SYSTEM INFO</span></div><div width="100%" class="title-rule">&nbsp;</div>"#
-        );
-        assert_eq!(pager_html(0, 5, 1), "");
-        assert_eq!(
-            pager_html(1, 11, 3),
-            r#"<div class="pager">&nbsp;&nbsp;&nbsp;<span class="off">●</span>&nbsp;<span class="on">●</span>&nbsp;<span class="off">●</span></div>"#
-        );
-    }
-}
+mod tests;

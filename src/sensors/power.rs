@@ -1,6 +1,6 @@
 //! UPower/UDisks2 battery and SMART readings.
 //!
-//! Ports the POWER-owned half of `src/sensors.py`:
+//! Ports the battery boundaries and UDisks2 SMART boundary from `src/sensors.py`:
 //!
 //! - [`upower_enumerate`] / [`find_battery_sys`] discover UPower device object
 //!   paths (replaces the `upower -e` subprocess).
@@ -8,12 +8,11 @@
 //!   `GetManagedObjects` (replaces the sysfs-only [`crate::sensors::disk::
 //!   detect_disks`] which exposes label/kind/rotational but not the drive
 //!   object path or SMART interface).
-//! - `read_disk_smart` / [`read_disk_smart_cached`] query ATA/NVMe SMART
-//!   health via UDisks2 `SmartUpdate` + `Properties.Get`.
-//! - [`read_battery_sys`] reads system batteries via sysfs first, falling back
+//! - `read_disk_smart` queries ATA/NVMe SMART health via UDisks2 `SmartUpdate` + `Properties.Get`.
+//! - [`read_battery_sys_once`] reads system batteries via sysfs first, falling back
 //!   to UPower when `/sys/class/power_supply` is unavailable for a battery.
-//! - [`read_battery_periph`] reads a peripheral battery via UPower properties.
-//! - [`read_battery_bolt`] reads a Logitech Bolt receiver battery through
+//! - [`read_battery_periph_once`] reads a peripheral battery via UPower properties.
+//! - [`read_battery_bolt_once`] reads a Logitech Bolt receiver battery through
 //!   [`BoltBatteryFacade`]; `sensors::hid` provides production hidraw I/O.
 //!
 //! All D-Bus work flows through the shared [`DbusFacade`] trait, and every sysfs
@@ -30,11 +29,10 @@ use std::time::Duration;
 use crate::domain::boundary::{
     BoundaryError, BusKind, ClockSnapshot, DbusArgument, DbusFacade, DbusRequest,
 };
+use crate::domain::metric::Capability;
 use crate::domain::readings::{
-    BatteryPeripheralReading, BatteryState, BatterySystemReading, DiskSmartInterface, SmartDisk,
-};
-use crate::domain::state::{
-    BatteryPeripheralCache, BatterySystemCache, DaemonStateSnapshot, TimedValue,
+    BatteryPeripheralReading, BatteryState, BatterySystemReading, DiskSmartInterface,
+    HardwareInventory, SmartDisk,
 };
 
 use super::disk::is_rotational;
@@ -69,21 +67,118 @@ const UDISKS_ATA: &str = "org.freedesktop.UDisks2.Drive.Ata";
 /// object chunk (avoids a second map layer in the flat body).
 const BLOCK_DRIVE_PREFIX: &str = "Block.Drive=";
 
-// ── Cache TTLs (mirror `src/sensors.py`) ─────────────────────────────────────
+// ── Compatibility freshness budgets ─────────────────────────────────────────
 
-/// System-battery sysfs/UPower refresh TTL.
-const BAT_CACHE_TTL: Duration = Duration::from_secs(30);
-/// Peripheral-battery UPower refresh TTL.
-const PERIPH_CACHE_TTL: Duration = Duration::from_secs(30);
-/// Bolt-receiver refresh TTL — a keyboard's charge changes over days, and every
-/// Bolt query wakes the device from deep sleep (~900ms round-trip), so polling
-/// it often buys nothing and needlessly drains the keyboard's own battery.
-const BOLT_CACHE_TTL: Duration = Duration::from_secs(3600);
+/// System-battery sysfs/UPower freshness budget.
+pub(super) const BAT_CACHE_TTL: Duration = Duration::from_secs(30);
+/// Peripheral-battery UPower freshness budget.
+pub(super) const PERIPH_CACHE_TTL: Duration = Duration::from_secs(30);
+/// Bolt-receiver freshness budget; a keyboard's charge changes over days, and every Bolt query wakes the device from deep sleep (~900ms round-trip), so frequent sampling buys nothing and needlessly drains the keyboard's own battery.
+pub(super) const BOLT_CACHE_TTL: Duration = Duration::from_secs(3600);
 /// `SmartUpdate` is a real ioctl on the drive (slow on ATA).
 const SMART_UPDATE_TIMEOUT: Duration = Duration::from_millis(15_000);
 
 /// 1×10⁶ microwatts per watt, matching `/sys/class/power_supply/.../power_now`.
 const MICROWATTS_PER_WATT: u128 = 1_000_000;
+
+/// Cached system-battery reading retained by the power owner.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct BatterySystemCache {
+    /// Visible charge percentage.
+    pub charge_percent: Option<i32>,
+    /// Rounded power rate in watts.
+    pub rate_watts: i32,
+    /// Current charging state.
+    pub state: BatteryState,
+    /// Configured charge limit when known.
+    pub charge_limit_percent: Option<i32>,
+    /// Monotonic instant of the cached sample.
+    pub sampled_at: Option<Duration>,
+    /// Monotonic instant of the latest attempt, successful or not.
+    pub attempted_at: Option<Duration>,
+    /// Monotonic instant of the latest failed attempt, cleared by success.
+    pub failed_at: Option<Duration>,
+}
+
+/// Cached peripheral-battery reading retained by the power owner.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct BatteryPeripheralCache {
+    /// Human-readable peripheral model name.
+    pub name: String,
+    /// Visible charge percentage.
+    pub charge_percent: Option<i32>,
+    /// Monotonic instant of the cached sample.
+    pub sampled_at: Option<Duration>,
+    /// Monotonic instant of the latest attempt, successful or not.
+    pub attempted_at: Option<Duration>,
+    /// Monotonic instant of the latest failed attempt, cleared by a completed query.
+    pub failed_at: Option<Duration>,
+    /// Monotonic instant of the latest completed Bolt query, including a confirmed unsupported battery feature.
+    pub bolt_completed_at: Option<Duration>,
+    /// Hardware/config identity that produced the retained sample.
+    pub source: Option<String>,
+}
+
+/// Mutable cache state owned by power-domain reads.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct PowerState {
+    /// Cached system batteries keyed by stable id.
+    pub battery_sys_cache: BTreeMap<String, BatterySystemCache>,
+    /// Cached mouse battery.
+    pub battery_mouse_cache: BatteryPeripheralCache,
+    /// Cached keyboard battery.
+    pub battery_kbd_cache: BatteryPeripheralCache,
+}
+
+impl PowerState {
+    pub(crate) fn reconcile_sources(
+        &mut self,
+        hw: &HardwareInventory,
+        cfg: &crate::config::Config,
+        capabilities: &std::collections::BTreeSet<Capability>,
+    ) {
+        if capabilities.contains(&Capability::BatterySystem) {
+            self.battery_sys_cache
+                .retain(|id, _| hw.battery_sys_ids.contains(id));
+        } else {
+            self.battery_sys_cache.clear();
+        }
+
+        reconcile_peripheral_source(
+            &mut self.battery_mouse_cache,
+            capabilities.contains(&Capability::BatteryMouse),
+            hw.battery_mouse_id.as_deref(),
+            cfg.battery.mouse_bolt,
+        );
+        reconcile_peripheral_source(
+            &mut self.battery_kbd_cache,
+            capabilities.contains(&Capability::BatteryKeyboard),
+            hw.battery_kbd_id.as_deref(),
+            cfg.battery.kbd_bolt,
+        );
+    }
+}
+
+fn reconcile_peripheral_source(
+    cache: &mut BatteryPeripheralCache,
+    demanded: bool,
+    upower_id: Option<&str>,
+    bolt_index: Option<i32>,
+) {
+    let source = if demanded {
+        upower_id
+            .map(|id| format!("upower:{id}"))
+            .or_else(|| bolt_index.map(|index| format!("bolt:{index}")))
+    } else {
+        None
+    };
+    if cache.source != source {
+        *cache = BatteryPeripheralCache {
+            source,
+            ..BatteryPeripheralCache::default()
+        };
+    }
+}
 
 /// Decoded UPower device properties retained for battery reads.
 #[derive(Debug, Clone, PartialEq)]
@@ -208,6 +303,18 @@ fn dbus_call(
     arguments: Vec<DbusArgument>,
     timeout: Option<Duration>,
 ) -> Option<Vec<String>> {
+    dbus_call_result(dbus, service, path, iface, member, arguments, timeout).ok()
+}
+
+fn dbus_call_result(
+    dbus: &mut dyn DbusFacade,
+    service: &str,
+    path: &str,
+    iface: &str,
+    member: &str,
+    arguments: Vec<DbusArgument>,
+    timeout: Option<Duration>,
+) -> Result<Vec<String>, BoundaryError> {
     dbus.call(DbusRequest {
         bus: BusKind::System,
         service: service.to_owned(),
@@ -217,7 +324,6 @@ fn dbus_call(
         arguments,
         timeout,
     })
-    .ok()
     .map(|output| output.body)
 }
 
@@ -226,12 +332,14 @@ fn dbus_call(
 /// Enumerates UPower device object paths (replaces `upower -e`).
 ///
 /// Issues `EnumerateDevices` on the system bus and decodes the
-/// `[path1, path2, ...]` reply body. Returns an empty list when the bus,
-/// UPower service, or the call is unavailable — matching Python's silent
-/// degradation.
-#[must_use]
-pub fn upower_enumerate(dbus: &mut dyn DbusFacade) -> Vec<String> {
-    let Some(body) = dbus_call(
+/// `[path1, path2, ...]` reply body.
+///
+/// # Errors
+///
+/// Returns the D-Bus boundary failure so inventory owners do not confuse an
+/// unavailable service with a successful empty enumeration.
+pub fn upower_enumerate(dbus: &mut dyn DbusFacade) -> Result<Vec<String>, BoundaryError> {
+    let body = dbus_call_result(
         dbus,
         UPOWER_NAME,
         UPOWER_PATH,
@@ -239,10 +347,8 @@ pub fn upower_enumerate(dbus: &mut dyn DbusFacade) -> Vec<String> {
         "EnumerateDevices",
         Vec::new(),
         None,
-    ) else {
-        return Vec::new();
-    };
-    parse_object_paths(&body)
+    )?;
+    Ok(parse_object_paths(&body))
 }
 
 /// Reads the requested UPower device properties for one object path.
@@ -256,7 +362,14 @@ pub(crate) fn upower_device_props(
     dbus: &mut dyn DbusFacade,
     path: &str,
 ) -> Option<UpowerDeviceProps> {
-    let body = dbus_call(
+    upower_device_props_result(dbus, path).ok()
+}
+
+pub(crate) fn upower_device_props_result(
+    dbus: &mut dyn DbusFacade,
+    path: &str,
+) -> Result<UpowerDeviceProps, BoundaryError> {
+    let body = dbus_call_result(
         dbus,
         UPOWER_NAME,
         path,
@@ -266,7 +379,7 @@ pub(crate) fn upower_device_props(
         None,
     )?;
     let map = parse_property_map(&body);
-    Some(UpowerDeviceProps {
+    Ok(UpowerDeviceProps {
         percentage: map
             .get("Percentage")
             .and_then(|v| v.trim().parse::<f64>().ok()),
@@ -280,14 +393,13 @@ pub(crate) fn upower_device_props(
 }
 
 /// Returns sorted UPower object paths containing `/battery_BAT`.
-#[must_use]
-pub fn find_battery_sys(dbus: &mut dyn DbusFacade) -> Vec<String> {
-    let mut paths: Vec<String> = upower_enumerate(dbus)
+pub fn find_battery_sys(dbus: &mut dyn DbusFacade) -> Result<Vec<String>, BoundaryError> {
+    let mut paths: Vec<String> = upower_enumerate(dbus)?
         .into_iter()
         .filter(|p| p.contains("/battery_BAT"))
         .collect();
     paths.sort();
-    paths
+    Ok(paths)
 }
 
 // ── UDisks2 SMART discovery ──────────────────────────────────────────────────
@@ -306,13 +418,12 @@ pub fn find_battery_sys(dbus: &mut dyn DbusFacade) -> Vec<String> {
 ///
 /// The rotational flag is read from sysfs (`queue/rotational`), matching
 /// Python's `_is_rotational` call.
-#[must_use]
 pub fn detect_smart_disks(
     dbus: &mut dyn DbusFacade,
     sys_root: &Path,
-) -> BTreeMap<String, SmartDisk> {
+) -> Result<BTreeMap<String, SmartDisk>, BoundaryError> {
     let mut result = BTreeMap::new();
-    let Some(body) = dbus_call(
+    let body = dbus_call_result(
         dbus,
         UDISKS_NAME,
         UDISKS_PATH,
@@ -320,9 +431,7 @@ pub fn detect_smart_disks(
         "GetManagedObjects",
         Vec::new(),
         None,
-    ) else {
-        return result;
-    };
+    )?;
     let objects = parse_managed_objects(&body);
 
     for obj in &objects {
@@ -365,7 +474,7 @@ pub fn detect_smart_disks(
             },
         );
     }
-    result
+    Ok(result)
 }
 
 // ── Disk SMART health ────────────────────────────────────────────────────────
@@ -398,11 +507,8 @@ fn udisks_get(
 
 /// Reads SMART health for one drive.
 ///
-/// Returns `Some(true)` = healthy, `Some(false)` = failing, `None` = D-Bus call
-/// failed or unsupported. NVMe reads `SmartCriticalWarning` (healthy iff
-/// empty); ATA reads `SmartFailing` (healthy iff false). A `SmartUpdate` ioctl
-/// is triggered first so the values are current.
-fn read_disk_smart(
+/// Returns `Some(true)` = healthy, `Some(false)` = failing, `None` = D-Bus call failed or unsupported. NVMe reads `SmartCriticalWarning` (healthy iff the decoded warning array is empty); ATA reads `SmartFailing` (healthy iff false). A `SmartUpdate` ioctl is triggered first so the values are current.
+pub(super) fn read_disk_smart(
     dbus: &mut dyn DbusFacade,
     drive_path: &str,
     kind: DiskSmartInterface,
@@ -425,7 +531,7 @@ fn read_disk_smart(
     match kind {
         DiskSmartInterface::Nvme => {
             let warning = udisks_get(dbus, drive_path, iface, "SmartCriticalWarning")?;
-            Some(warning.is_empty())
+            nvme_warning_is_empty(&warning)
         }
         DiskSmartInterface::Ata => {
             let raw = udisks_get(dbus, drive_path, iface, "SmartFailing")?;
@@ -435,47 +541,16 @@ fn read_disk_smart(
     }
 }
 
-/// Cached SMART read keyed by label. `ttl` is per-drive: spinning HDDs use the
-/// longer interval because their `SmartUpdate` is slow and wakes the disk.
-#[must_use]
-pub fn read_disk_smart_cached(
-    state: &mut DaemonStateSnapshot,
-    dbus: &mut dyn DbusFacade,
-    label: &str,
-    drive_path: &str,
-    kind: DiskSmartInterface,
-    now: Duration,
-    ttl: Duration,
-) -> Option<bool> {
-    cached_smart(&mut state.disk_smart_cache, label, now, ttl, || {
-        read_disk_smart(dbus, drive_path, kind)
-    })
-}
-
-/// Label-keyed SMART cache helper mirroring Python's `_cached_by_label`.
-fn cached_smart(
-    cache: &mut BTreeMap<String, TimedValue<bool>>,
-    label: &str,
-    now: Duration,
-    ttl: Duration,
-    read_fn: impl FnOnce() -> Option<bool>,
-) -> Option<bool> {
-    let needs_refresh = cache
-        .get(label)
-        .and_then(|entry| entry.sampled_at)
-        .is_none_or(|previous| now.saturating_sub(previous) >= ttl);
-    if !needs_refresh {
-        return cache.get(label).and_then(|entry| entry.value);
+fn nvme_warning_is_empty(warning: &str) -> Option<bool> {
+    if warning.is_empty() {
+        return Some(true);
     }
-    let value = read_fn();
-    cache.insert(
-        label.to_owned(),
-        TimedValue {
-            value,
-            sampled_at: Some(now),
-        },
-    );
-    value
+    if !warning.starts_with('[') {
+        return Some(false);
+    }
+    serde_json::from_str::<Vec<String>>(warning)
+        .ok()
+        .map(|warnings| warnings.is_empty())
 }
 
 // ── System battery (sysfs with UPower fallback) ──────────────────────────────
@@ -557,45 +632,51 @@ fn sysfs_status_to_state(status: &str) -> BatteryState {
     }
 }
 
-/// Reads all system batteries using cached values where fresh.
-///
-/// For each battery id in `battery_sys_ids`:
-///
-/// 1. If the cache is older than `BAT_CACHE_TTL`, try sysfs first; on
-///    failure fall back to a UPower `GetAll` property read.
-/// 2. Append a [`BatterySystemReading`] only when a non-empty charge is known
-///    (matches Python's `if cache.perc:` truthiness gate).
-///
-/// `state.battery_sys_cache` is updated in place.
-#[must_use]
-pub fn read_battery_sys(
-    state: &mut DaemonStateSnapshot,
+/// Performs one system-battery source attempt.
+pub(super) fn refresh_battery_sys(
+    cache: &mut BatterySystemCache,
     dbus: &mut dyn DbusFacade,
-    battery_sys_ids: &[String],
+    battery_id: &str,
+    sys_root: &Path,
+    clock: ClockSnapshot,
+) -> bool {
+    let succeeded = refresh_battery_sys_cache(cache, battery_id, dbus, sys_root, clock.monotonic);
+    cache.failed_at = (!succeeded).then_some(clock.monotonic);
+    succeeded
+}
+
+/// Performs one source attempt for every requested system battery.
+#[must_use]
+pub fn read_battery_sys_once(
+    state: &mut PowerState,
+    dbus: &mut dyn DbusFacade,
+    battery_ids: &[String],
     sys_root: &Path,
     clock: ClockSnapshot,
 ) -> Vec<BatterySystemReading> {
-    let now = clock.monotonic;
-    let mut result = Vec::new();
-    for bat_id in battery_sys_ids {
-        let cache = state.battery_sys_cache.entry(bat_id.clone()).or_default();
-        let stale = cache
-            .sampled_at
-            .is_none_or(|previous| now.saturating_sub(previous) >= BAT_CACHE_TTL);
-        if stale {
-            refresh_battery_sys_cache(cache, bat_id, dbus, sys_root, now);
-        }
-        if let Some(charge) = cache.charge_percent {
-            result.push(BatterySystemReading {
-                id: bat_id.clone(),
-                charge_percent: charge,
-                rate_watts: cache.rate_watts,
-                state: cache.state,
-                charge_limit_percent: cache.charge_limit_percent,
-            });
+    let mut readings = Vec::new();
+    for id in battery_ids {
+        let cache = state.battery_sys_cache.entry(id.clone()).or_default();
+        let _ = refresh_battery_sys(cache, dbus, id, sys_root, clock);
+        if let Some(reading) = battery_sys_from_cache(id, cache) {
+            readings.push(reading);
         }
     }
-    result
+    readings
+}
+
+/// Converts one retained system-battery cache into its display reading.
+pub(super) fn battery_sys_from_cache(
+    battery_id: &str,
+    cache: &BatterySystemCache,
+) -> Option<BatterySystemReading> {
+    Some(BatterySystemReading {
+        id: battery_id.to_owned(),
+        charge_percent: cache.charge_percent?,
+        rate_watts: cache.rate_watts,
+        state: cache.state,
+        charge_limit_percent: cache.charge_limit_percent,
+    })
 }
 
 /// Refreshes one system-battery cache entry: sysfs first, UPower on failure.
@@ -605,21 +686,22 @@ fn refresh_battery_sys_cache(
     dbus: &mut dyn DbusFacade,
     sys_root: &Path,
     now: Duration,
-) {
+) -> bool {
+    cache.attempted_at = Some(now);
     if let Some((capacity, rate, state)) = sysfs_bat_read(sys_root, bat_id) {
         cache.charge_percent = Some(capacity);
         cache.rate_watts = rate;
         cache.state = state;
         cache.charge_limit_percent = sysfs_bat_charge_limit(sys_root, bat_id);
         cache.sampled_at = Some(now);
-        return;
+        return true;
     }
     // sysfs unavailable: fall back to UPower over GDBus.
     let Some(props) = upower_device_props(dbus, bat_id) else {
-        return;
+        return false;
     };
     if props.percentage.is_none() {
-        return;
+        return false;
     }
     let percentage = props.percentage.unwrap_or(0.0);
     cache.charge_percent = Some(percentage as i32);
@@ -636,28 +718,41 @@ fn refresh_battery_sys_cache(
     cache.rate_watts = rate;
     cache.charge_limit_percent = sysfs_bat_charge_limit(sys_root, bat_id);
     cache.sampled_at = Some(now);
+    true
 }
 
 // ── Peripheral battery (UPower) ──────────────────────────────────────────────
 
-/// Reads one peripheral-battery reading via UPower, cached for
-/// `PERIPH_CACHE_TTL`. Returns `None` when the charge is empty/missing so
-/// the row disappears from the tooltip.
+/// Performs one peripheral-battery UPower attempt.
 #[must_use]
-pub fn read_battery_periph(
+pub fn read_battery_periph_once(
     cache: &mut BatteryPeripheralCache,
     dbus: &mut dyn DbusFacade,
     upower_path: &str,
     name_override: Option<&str>,
     clock: ClockSnapshot,
 ) -> Option<BatteryPeripheralReading> {
+    attempt_battery_periph_once(cache, dbus, upower_path, name_override, clock).0
+}
+
+pub(super) fn attempt_battery_periph_once(
+    cache: &mut BatteryPeripheralCache,
+    dbus: &mut dyn DbusFacade,
+    upower_path: &str,
+    name_override: Option<&str>,
+    clock: ClockSnapshot,
+) -> (Option<BatteryPeripheralReading>, bool) {
     let now = clock.monotonic;
-    let stale = cache
-        .sampled_at
-        .is_none_or(|previous| now.saturating_sub(previous) >= PERIPH_CACHE_TTL);
-    if stale {
-        refresh_periph_cache(cache, dbus, upower_path, now);
-    }
+    let succeeded = refresh_periph_cache(cache, dbus, upower_path, now);
+    (battery_periph_from_cache(cache, name_override), succeeded)
+}
+
+/// Converts retained peripheral state into its display reading.
+#[must_use]
+pub(super) fn battery_periph_from_cache(
+    cache: &BatteryPeripheralCache,
+    name_override: Option<&str>,
+) -> Option<BatteryPeripheralReading> {
     let charge = cache.charge_percent?;
     Some(BatteryPeripheralReading {
         name: name_override
@@ -673,12 +768,12 @@ fn refresh_periph_cache(
     dbus: &mut dyn DbusFacade,
     upower_path: &str,
     now: Duration,
-) {
+) -> bool {
     let props = upower_device_props(dbus, upower_path);
-    cache.sampled_at = Some(now);
+    cache.attempted_at = Some(now);
     let Some(props) = props else {
-        cache.charge_percent = None;
-        return;
+        cache.failed_at = Some(now);
+        return false;
     };
     if cache.name.is_empty() {
         if let Some(model) = props.model.as_deref() {
@@ -693,6 +788,9 @@ fn refresh_periph_cache(
         .percentage
         .filter(|&pct| pct > 0.0)
         .map(|pct| pct as i32);
+    cache.sampled_at = Some(now);
+    cache.failed_at = None;
+    true
 }
 
 // ── Bolt receiver battery ────────────────────────────────────────────────────
@@ -709,13 +807,13 @@ pub struct BoltBattery {
 /// Facade for the Logitech Bolt HID++ battery query.
 ///
 /// `sensors::hid` owns production hidraw I/O; this module owns cache and retry
-/// semantics in [`read_battery_bolt`]. Tests use a trivial fake. Mirrors
+/// semantics in [`read_battery_bolt_once`]. Tests use a trivial fake. Mirrors
 /// Python's `_bolt_query(dev_idx, want_name)` contract.
 pub trait BoltBatteryFacade {
     /// Queries the Bolt receiver at `dev_idx`, optionally fetching the device
-    /// name. Returns `Ok(None)` when HID++ yields no battery level, including
-    /// unsupported-feature, timeout, short-response, and mismatched-response
-    /// cases. Returns `Err` when discovery, open, or report write fails.
+    /// name. Returns `Ok(None)` only when HID++ confirms that the battery
+    /// feature is unsupported. Transport and no-response outcomes return
+    /// `Err` so cadence owners can retry them.
     ///
     /// # Errors
     ///
@@ -727,54 +825,70 @@ pub trait BoltBatteryFacade {
     ) -> Result<Option<BoltBattery>, BoundaryError>;
 }
 
-/// Reads one peripheral-battery reading via a Bolt receiver, cached for
-/// `BOLT_CACHE_TTL`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum BoltAttemptOutcome {
+    Captured,
+    Unsupported,
+    Failed,
+}
+
+/// Performs one peripheral-battery Bolt attempt.
 ///
-/// Mirrors Python's `_read_battery_bolt`: the device name is fetched only until
-/// cached (it costs ~10× the battery read), and a `level=None` response still
-/// advances the cache timestamp so the slow wake-up doesn't retry every poll.
+/// The device name is fetched only until cached because it costs substantially more than the battery read. `Ok(None)` confirms an unsupported battery feature, clears any retained reading, and completes the normal Bolt cadence.
 #[must_use]
-pub fn read_battery_bolt(
+pub fn read_battery_bolt_once(
     cache: &mut BatteryPeripheralCache,
     bolt: &mut dyn BoltBatteryFacade,
     dev_idx: i32,
     name_override: Option<&str>,
     clock: ClockSnapshot,
 ) -> Option<BatteryPeripheralReading> {
+    attempt_battery_bolt_once(cache, bolt, dev_idx, name_override, clock).0
+}
+
+pub(super) fn attempt_battery_bolt_once(
+    cache: &mut BatteryPeripheralCache,
+    bolt: &mut dyn BoltBatteryFacade,
+    dev_idx: i32,
+    name_override: Option<&str>,
+    clock: ClockSnapshot,
+) -> (Option<BatteryPeripheralReading>, BoltAttemptOutcome) {
     let now = clock.monotonic;
-    let stale = cache
-        .sampled_at
-        .is_none_or(|previous| now.saturating_sub(previous) >= BOLT_CACHE_TTL);
-    if stale {
-        let want_name = name_override.is_none() && cache.name.is_empty();
-        match bolt.query(dev_idx, want_name) {
-            Ok(Some(battery)) => {
-                cache.name = name_override
-                    .map(String::from)
-                    .or_else(|| (!battery.name.is_empty()).then_some(battery.name))
-                    .unwrap_or_else(|| cache.name.clone());
-                cache.charge_percent = Some(i32::from(battery.level));
-                cache.sampled_at = Some(now);
-            }
-            Ok(None) => {
-                // Query succeeded but device has no battery: advance the
-                // timestamp to suppress the wake-up cost until the TTL elapses.
-                cache.sampled_at = Some(now);
-                return None;
-            }
-            Err(_) => {
-                // HID failure: do NOT advance the timestamp (retry next poll).
-                return None;
-            }
+    cache.attempted_at = Some(now);
+    let want_name = name_override.is_none() && cache.name.is_empty();
+    match bolt.query(dev_idx, want_name) {
+        Ok(Some(battery)) => {
+            cache.name = name_override
+                .map(String::from)
+                .or_else(|| (!battery.name.is_empty()).then_some(battery.name))
+                .unwrap_or_else(|| cache.name.clone());
+            cache.charge_percent = Some(i32::from(battery.level));
+            cache.sampled_at = Some(now);
+            cache.bolt_completed_at = Some(now);
+            cache.failed_at = None;
+        }
+        Ok(None) => {
+            cache.charge_percent = None;
+            cache.sampled_at = None;
+            cache.bolt_completed_at = Some(now);
+            cache.failed_at = None;
+            return (
+                battery_periph_from_cache(cache, name_override),
+                BoltAttemptOutcome::Unsupported,
+            );
+        }
+        Err(_) => {
+            cache.failed_at = Some(now);
+            return (
+                battery_periph_from_cache(cache, name_override),
+                BoltAttemptOutcome::Failed,
+            );
         }
     }
-    let charge = cache.charge_percent?;
-    Some(BatteryPeripheralReading {
-        name: name_override
-            .map(String::from)
-            .unwrap_or_else(|| cache.name.clone()),
-        charge_percent: charge,
-    })
+    (
+        battery_periph_from_cache(cache, name_override),
+        BoltAttemptOutcome::Captured,
+    )
 }
 
 // ── Small numeric helpers ────────────────────────────────────────────────────
@@ -847,1201 +961,4 @@ fn round_half_even_f64(value: f64) -> i32 {
 }
 
 #[cfg(all(test, feature = "test-support"))]
-mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
-    use super::*;
-    use crate::domain::boundary::{BusKind, DbusOutput};
-    use crate::test_support::FakeDbus;
-    use std::path::PathBuf;
-    use std::time::{Duration, SystemTime};
-
-    /// Helper to build a `DbusOutput` body tagged with the call signature so
-    /// the fake can echo it. Production adapters build this from `busctl` JSON
-    /// replies.
-    fn dbus_body(
-        bus: BusKind,
-        service: &str,
-        path: &str,
-        iface: &str,
-        member: &str,
-        body: Vec<String>,
-    ) -> DbusOutput {
-        DbusOutput {
-            bus,
-            service: service.to_owned(),
-            object_path: path.to_owned(),
-            interface: iface.to_owned(),
-            member: member.to_owned(),
-            body,
-        }
-    }
-
-    const SYSTEM: BusKind = BusKind::System;
-
-    /// monotonic(t) → ClockSnapshot with a zero wall clock (tests only use
-    /// monotonic time for TTL gates).
-    fn clock(seconds: u64) -> ClockSnapshot {
-        ClockSnapshot {
-            monotonic: Duration::from_secs(seconds),
-            wall: SystemTime::UNIX_EPOCH,
-        }
-    }
-
-    fn upath(member: &str, body: Vec<String>) -> DbusOutput {
-        dbus_body(
-            SYSTEM,
-            UPOWER_NAME,
-            "/org/freedesktop/UPower",
-            UPOWER_IFACE,
-            member,
-            body,
-        )
-    }
-
-    fn battery_props_reply(path: &str, props: &[(&str, &str)]) -> DbusOutput {
-        let body: Vec<String> = props
-            .iter()
-            .flat_map(|(k, v)| [(*k).to_owned(), (*v).to_owned()])
-            .collect();
-        dbus_body(
-            SYSTEM,
-            UPOWER_NAME,
-            path,
-            "org.freedesktop.DBus.Properties",
-            "GetAll",
-            body,
-        )
-    }
-
-    /// In-memory fake Bolt facade with FIFO replies keyed by `(dev_idx,
-    /// want_name)`. Each call pops the next queued reply.
-    #[derive(Default)]
-    struct FakeBolt {
-        ok_replies: Vec<(i32, bool, Option<BoltBattery>)>,
-        err_replies: Vec<(i32, bool)>,
-        calls: Vec<(i32, bool)>,
-    }
-
-    impl FakeBolt {
-        fn push_ok(
-            &mut self,
-            dev_idx: i32,
-            want_name: bool,
-            battery: Option<BoltBattery>,
-        ) -> &mut Self {
-            self.ok_replies.push((dev_idx, want_name, battery));
-            self
-        }
-
-        fn push_err(&mut self, dev_idx: i32, want_name: bool) -> &mut Self {
-            self.err_replies.push((dev_idx, want_name));
-            self
-        }
-
-        fn calls(&self) -> &[(i32, bool)] {
-            &self.calls
-        }
-    }
-
-    impl BoltBatteryFacade for FakeBolt {
-        fn query(
-            &mut self,
-            dev_idx: i32,
-            want_name: bool,
-        ) -> Result<Option<BoltBattery>, BoundaryError> {
-            self.calls.push((dev_idx, want_name));
-            if let Some(idx) = self
-                .err_replies
-                .iter()
-                .position(|(d, w)| *d == dev_idx && *w == want_name)
-            {
-                self.err_replies.swap_remove(idx);
-                return Err(BoundaryError::DbusCallFailed {
-                    bus: BusKind::Session,
-                    service: "bolt".to_owned(),
-                    path: "/dev/hidraw0".to_owned(),
-                    interface: "HIDPP".to_owned(),
-                    member: "query".to_owned(),
-                    detail: "hid read timeout".to_owned(),
-                });
-            }
-            if let Some(idx) = self
-                .ok_replies
-                .iter()
-                .position(|(d, w, _)| *d == dev_idx && *w == want_name)
-            {
-                let (_, _, battery) = self.ok_replies.swap_remove(idx);
-                Ok(battery)
-            } else {
-                Ok(None)
-            }
-        }
-    }
-
-    /// Minimal temp-directory helper for sysfs fixture trees (mirrors
-    /// `sensors::disk::tests::TempTree`).
-    struct TempTree {
-        root: PathBuf,
-    }
-
-    impl TempTree {
-        fn new() -> Self {
-            let unique = SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .map(|d| d.as_nanos())
-                .unwrap_or(0);
-            let root = std::env::temp_dir()
-                .join(format!("plasma-top-power-{}-{unique}", std::process::id(),));
-            fs::create_dir_all(&root).expect("temp root");
-            Self { root }
-        }
-
-        fn sys(&self) -> PathBuf {
-            self.root.join("sys")
-        }
-
-        fn write(&self, relative: &str, content: &str) {
-            let path = self.root.join(relative);
-            if let Some(parent) = path.parent() {
-                fs::create_dir_all(parent).expect("parent");
-            }
-            fs::write(&path, content).expect("write");
-        }
-    }
-
-    impl Drop for TempTree {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.root);
-        }
-    }
-
-    // ── parse helpers ────────────────────────────────────────────────────────
-
-    #[test]
-    fn parse_object_paths_skips_empty_strings() {
-        let paths = parse_object_paths(&["/a".to_owned(), String::new(), "/b".to_owned()]);
-
-        assert_eq!(paths, ["/a", "/b"]);
-    }
-
-    #[test]
-    fn parse_property_map_decodes_interleaved_pairs() {
-        let map = parse_property_map(&[
-            "Percentage".to_owned(),
-            "85".to_owned(),
-            "State".to_owned(),
-            "2".to_owned(),
-        ]);
-
-        assert_eq!(map.get("Percentage").map(String::as_str), Some("85"));
-        assert_eq!(map.get("State").map(String::as_str), Some("2"));
-    }
-
-    #[test]
-    fn parse_property_map_ignores_stray_trailing_key() {
-        let map = parse_property_map(&["Orphan".to_owned()]);
-
-        assert!(map.is_empty());
-    }
-
-    #[test]
-    fn parse_managed_objects_splits_on_empty_strings() {
-        let objects = parse_managed_objects(&[
-            "/block_devices/nvme0n1".to_owned(),
-            UDISKS_BLOCK.to_owned(),
-            format!("{BLOCK_DRIVE_PREFIX}/drives/NVMe_1"),
-            String::new(),
-            "/drives/NVMe_1".to_owned(),
-            UDISKS_NVME.to_owned(),
-        ]);
-
-        assert_eq!(objects.len(), 2);
-        assert!(objects[0].is_block);
-        assert_eq!(objects[0].drive_path.as_deref(), Some("/drives/NVMe_1"));
-        assert!(objects[1].has_nvme);
-    }
-
-    // ── upower_enumerate ─────────────────────────────────────────────────────
-
-    #[test]
-    fn upower_enumerate_returns_paths_on_success() {
-        let mut dbus = FakeDbus::new();
-        dbus.enqueue(
-            SYSTEM,
-            UPOWER_NAME,
-            UPOWER_PATH,
-            UPOWER_IFACE,
-            "EnumerateDevices",
-            upath(
-                "EnumerateDevices",
-                vec!["/battery_BAT0".to_owned(), "/battery_BAT1".to_owned()],
-            ),
-        );
-
-        let paths = upower_enumerate(&mut dbus);
-
-        assert_eq!(
-            paths,
-            ["/battery_BAT0".to_owned(), "/battery_BAT1".to_owned()]
-        );
-    }
-
-    #[test]
-    fn upower_enumerate_empty_when_bus_unavailable() {
-        let mut dbus = FakeDbus::new();
-
-        let paths = upower_enumerate(&mut dbus);
-
-        assert!(paths.is_empty());
-    }
-
-    // ── find_battery_sys ─────────────────────────────────────────────────────
-
-    #[test]
-    fn find_battery_sys_filters_and_sorts_battery_paths() {
-        let mut dbus = FakeDbus::new();
-        dbus.enqueue(
-            SYSTEM,
-            UPOWER_NAME,
-            UPOWER_PATH,
-            UPOWER_IFACE,
-            "EnumerateDevices",
-            upath(
-                "EnumerateDevices",
-                vec![
-                    "/org/freedesktop/UPower/devices/battery_BAT1".to_owned(),
-                    "/org/freedesktop/UPower/devices/battery_hidpp_mouse".to_owned(),
-                    "/org/freedesktop/UPower/devices/battery_BAT0".to_owned(),
-                ],
-            ),
-        );
-
-        let batteries = find_battery_sys(&mut dbus);
-
-        assert_eq!(
-            batteries,
-            [
-                "/org/freedesktop/UPower/devices/battery_BAT0".to_owned(),
-                "/org/freedesktop/UPower/devices/battery_BAT1".to_owned(),
-            ]
-        );
-    }
-
-    // ── detect_smart_disks ───────────────────────────────────────────────────
-
-    fn managed_objects_reply(objects: &[Vec<&str>]) -> DbusOutput {
-        let mut body = Vec::new();
-        for (idx, obj) in objects.iter().enumerate() {
-            if idx > 0 {
-                body.push(String::new());
-            }
-            body.extend(obj.iter().map(|s| (*s).to_owned()));
-        }
-        dbus_body(
-            SYSTEM,
-            UDISKS_NAME,
-            UDISKS_PATH,
-            OBJ_MANAGER_IFACE,
-            "GetManagedObjects",
-            body,
-        )
-    }
-
-    fn write_rotational(sys: &TempTree, label: &str, rotational: bool) {
-        sys.write(
-            &format!("sys/block/{label}/queue/rotational"),
-            if rotational { "1" } else { "0" },
-        );
-    }
-
-    #[test]
-    fn detect_smart_disks_finds_nvme_and_ata_drives() {
-        let tmp = TempTree::new();
-        write_rotational(&tmp, "nvme0n1", false);
-        write_rotational(&tmp, "sda", true);
-        let mut dbus = FakeDbus::new();
-        dbus.enqueue(
-            SYSTEM,
-            UDISKS_NAME,
-            UDISKS_PATH,
-            OBJ_MANAGER_IFACE,
-            "GetManagedObjects",
-            managed_objects_reply(&[
-                vec![
-                    "/org/freedesktop/UDisks2/block_devices/nvme0n1",
-                    UDISKS_BLOCK,
-                    &format!("{BLOCK_DRIVE_PREFIX}/org/freedesktop/UDisks2/drives/NVMe_1234"),
-                ],
-                vec!["/org/freedesktop/UDisks2/drives/NVMe_1234", UDISKS_NVME],
-                vec![
-                    "/org/freedesktop/UDisks2/block_devices/sda",
-                    UDISKS_BLOCK,
-                    &format!("{BLOCK_DRIVE_PREFIX}/org/freedesktop/UDisks2/drives/SATA_1"),
-                ],
-                vec!["/org/freedesktop/UDisks2/drives/SATA_1", UDISKS_ATA],
-            ]),
-        );
-
-        let disks = detect_smart_disks(&mut dbus, &tmp.sys());
-
-        let nvme = disks.get("nvme0n1").expect("nvme present");
-        assert_eq!(
-            nvme.object_path,
-            "/org/freedesktop/UDisks2/drives/NVMe_1234"
-        );
-        assert_eq!(nvme.interface, DiskSmartInterface::Nvme);
-        assert!(!nvme.rotational);
-        let sata = disks.get("sda").expect("sata present");
-        assert_eq!(sata.interface, DiskSmartInterface::Ata);
-        assert!(sata.rotational);
-    }
-
-    #[test]
-    fn detect_smart_disks_skips_partitions() {
-        let tmp = TempTree::new();
-        write_rotational(&tmp, "nvme0n1", false);
-        write_rotational(&tmp, "nvme0n1p1", false);
-        let mut dbus = FakeDbus::new();
-        dbus.enqueue(
-            SYSTEM,
-            UDISKS_NAME,
-            UDISKS_PATH,
-            OBJ_MANAGER_IFACE,
-            "GetManagedObjects",
-            managed_objects_reply(&[
-                vec![
-                    "/org/freedesktop/UDisks2/block_devices/nvme0n1",
-                    UDISKS_BLOCK,
-                    &format!("{BLOCK_DRIVE_PREFIX}/org/freedesktop/UDisks2/drives/NVMe_1"),
-                ],
-                vec![
-                    "/org/freedesktop/UDisks2/block_devices/nvme0n1p1",
-                    UDISKS_BLOCK,
-                    UDISKS_PARTITION,
-                    &format!("{BLOCK_DRIVE_PREFIX}/org/freedesktop/UDisks2/drives/NVMe_1"),
-                ],
-                vec!["/org/freedesktop/UDisks2/drives/NVMe_1", UDISKS_NVME],
-            ]),
-        );
-
-        let disks = detect_smart_disks(&mut dbus, &tmp.sys());
-
-        assert_eq!(disks.len(), 1);
-        assert!(disks.contains_key("nvme0n1"));
-    }
-
-    #[test]
-    fn detect_smart_disks_skips_optical_and_missing_drive_and_unsupported() {
-        let tmp = TempTree::new();
-        write_rotational(&tmp, "sr0", false);
-        write_rotational(&tmp, "sdb", false);
-        write_rotational(&tmp, "sdc", false);
-        let mut dbus = FakeDbus::new();
-        dbus.enqueue(
-            SYSTEM,
-            UDISKS_NAME,
-            UDISKS_PATH,
-            OBJ_MANAGER_IFACE,
-            "GetManagedObjects",
-            managed_objects_reply(&[
-                // optical drive — skipped by sr* prefix
-                vec![
-                    "/org/freedesktop/UDisks2/block_devices/sr0",
-                    UDISKS_BLOCK,
-                    &format!("{BLOCK_DRIVE_PREFIX}/org/freedesktop/UDisks2/drives/Odd"),
-                ],
-                vec!["/org/freedesktop/UDisks2/drives/Odd", UDISKS_ATA],
-                // block with empty drive ref — skipped
-                vec![
-                    "/org/freedesktop/UDisks2/block_devices/sdb",
-                    UDISKS_BLOCK,
-                    &format!("{BLOCK_DRIVE_PREFIX}/"),
-                ],
-                // block whose drive is absent from the reply — skipped
-                vec![
-                    "/org/freedesktop/UDisks2/block_devices/sdc",
-                    UDISKS_BLOCK,
-                    &format!("{BLOCK_DRIVE_PREFIX}/org/freedesktop/UDisks2/drives/Ghost"),
-                ],
-            ]),
-        );
-
-        let disks = detect_smart_disks(&mut dbus, &tmp.sys());
-
-        assert!(disks.is_empty(), "no drive qualifies: {disks:?}");
-    }
-
-    #[test]
-    fn detect_smart_disks_empty_when_bus_unavailable() {
-        let tmp = TempTree::new();
-        let mut dbus = FakeDbus::new();
-
-        let disks = detect_smart_disks(&mut dbus, &tmp.sys());
-
-        assert!(disks.is_empty());
-    }
-
-    // ── read_disk_smart ──────────────────────────────────────────────────────
-
-    #[test]
-    fn read_disk_smart_nvme_healthy_when_warning_empty() {
-        let mut dbus = FakeDbus::new();
-        let drive = "/org/freedesktop/UDisks2/drives/NVMe_1";
-        dbus.enqueue(
-            SYSTEM,
-            UDISKS_NAME,
-            drive,
-            UDISKS_NVME,
-            "SmartUpdate",
-            dbus_body(
-                SYSTEM,
-                UDISKS_NAME,
-                drive,
-                UDISKS_NVME,
-                "SmartUpdate",
-                Vec::new(),
-            ),
-        );
-        dbus.enqueue(
-            SYSTEM,
-            UDISKS_NAME,
-            drive,
-            "org.freedesktop.DBus.Properties",
-            "Get",
-            dbus_body(
-                SYSTEM,
-                UDISKS_NAME,
-                drive,
-                "org.freedesktop.DBus.Properties",
-                "Get",
-                vec![String::new()],
-            ),
-        );
-
-        let health = read_disk_smart(&mut dbus, drive, DiskSmartInterface::Nvme);
-
-        assert_eq!(health, Some(true));
-        let trace = dbus.call_trace();
-        assert_eq!(trace[0].arguments, [DbusArgument::EmptyStringVariantDict]);
-        assert_eq!(trace[0].timeout, Some(SMART_UPDATE_TIMEOUT));
-        assert_eq!(trace[1].interface, "org.freedesktop.DBus.Properties");
-        assert_eq!(trace[1].member, "Get");
-        assert_eq!(
-            trace[1].arguments,
-            [
-                DbusArgument::String(UDISKS_NVME.to_owned()),
-                DbusArgument::String("SmartCriticalWarning".to_owned()),
-            ]
-        );
-    }
-
-    #[test]
-    fn read_disk_smart_nvme_failing_when_warning_present() {
-        let mut dbus = FakeDbus::new();
-        let drive = "/org/freedesktop/UDisks2/drives/NVMe_1";
-        dbus.enqueue(
-            SYSTEM,
-            UDISKS_NAME,
-            drive,
-            UDISKS_NVME,
-            "SmartUpdate",
-            dbus_body(
-                SYSTEM,
-                UDISKS_NAME,
-                drive,
-                UDISKS_NVME,
-                "SmartUpdate",
-                Vec::new(),
-            ),
-        );
-        dbus.enqueue(
-            SYSTEM,
-            UDISKS_NAME,
-            drive,
-            "org.freedesktop.DBus.Properties",
-            "Get",
-            dbus_body(
-                SYSTEM,
-                UDISKS_NAME,
-                drive,
-                "org.freedesktop.DBus.Properties",
-                "Get",
-                vec!["available spare".to_owned()],
-            ),
-        );
-
-        let health = read_disk_smart(&mut dbus, drive, DiskSmartInterface::Nvme);
-
-        assert_eq!(health, Some(false));
-    }
-
-    #[test]
-    fn read_disk_smart_ata_healthy_when_not_failing() {
-        let mut dbus = FakeDbus::new();
-        let drive = "/org/freedesktop/UDisks2/drives/SATA_1";
-        dbus.enqueue(
-            SYSTEM,
-            UDISKS_NAME,
-            drive,
-            UDISKS_ATA,
-            "SmartUpdate",
-            dbus_body(
-                SYSTEM,
-                UDISKS_NAME,
-                drive,
-                UDISKS_ATA,
-                "SmartUpdate",
-                Vec::new(),
-            ),
-        );
-        dbus.enqueue(
-            SYSTEM,
-            UDISKS_NAME,
-            drive,
-            "org.freedesktop.DBus.Properties",
-            "Get",
-            dbus_body(
-                SYSTEM,
-                UDISKS_NAME,
-                drive,
-                "org.freedesktop.DBus.Properties",
-                "Get",
-                vec!["false".to_owned()],
-            ),
-        );
-
-        let health = read_disk_smart(&mut dbus, drive, DiskSmartInterface::Ata);
-
-        assert_eq!(health, Some(true));
-    }
-
-    #[test]
-    fn read_disk_smart_ata_failing_when_smart_failing_true() {
-        let mut dbus = FakeDbus::new();
-        let drive = "/org/freedesktop/UDisks2/drives/SATA_1";
-        dbus.enqueue(
-            SYSTEM,
-            UDISKS_NAME,
-            drive,
-            UDISKS_ATA,
-            "SmartUpdate",
-            dbus_body(
-                SYSTEM,
-                UDISKS_NAME,
-                drive,
-                UDISKS_ATA,
-                "SmartUpdate",
-                Vec::new(),
-            ),
-        );
-        dbus.enqueue(
-            SYSTEM,
-            UDISKS_NAME,
-            drive,
-            "org.freedesktop.DBus.Properties",
-            "Get",
-            dbus_body(
-                SYSTEM,
-                UDISKS_NAME,
-                drive,
-                "org.freedesktop.DBus.Properties",
-                "Get",
-                vec!["true".to_owned()],
-            ),
-        );
-
-        let health = read_disk_smart(&mut dbus, drive, DiskSmartInterface::Ata);
-
-        assert_eq!(health, Some(false));
-    }
-
-    #[test]
-    fn read_disk_smart_returns_none_when_smart_update_unreachable() {
-        let mut dbus = FakeDbus::new();
-        let drive = "/org/freedesktop/UDisks2/drives/NVMe_1";
-
-        // SmartUpdate fails → no property read attempted → None.
-        let health = read_disk_smart(&mut dbus, drive, DiskSmartInterface::Nvme);
-
-        assert_eq!(health, None);
-    }
-
-    // ── read_disk_smart_cached ───────────────────────────────────────────────
-
-    #[test]
-    fn read_disk_smart_cached_refreshes_after_ttl_expires() {
-        let mut state = DaemonStateSnapshot::default();
-        let mut dbus = FakeDbus::new();
-        let drive = "/org/freedesktop/UDisks2/drives/NVMe_1";
-
-        let enqueue_reply = |dbus: &mut FakeDbus, healthy: bool| {
-            dbus.enqueue(
-                SYSTEM,
-                UDISKS_NAME,
-                drive,
-                UDISKS_NVME,
-                "SmartUpdate",
-                dbus_body(
-                    SYSTEM,
-                    UDISKS_NAME,
-                    drive,
-                    UDISKS_NVME,
-                    "SmartUpdate",
-                    Vec::new(),
-                ),
-            );
-            dbus.enqueue(
-                SYSTEM,
-                UDISKS_NAME,
-                drive,
-                "org.freedesktop.DBus.Properties",
-                "Get",
-                dbus_body(
-                    SYSTEM,
-                    UDISKS_NAME,
-                    drive,
-                    "org.freedesktop.DBus.Properties",
-                    "Get",
-                    vec![if healthy {
-                        String::new()
-                    } else {
-                        "available spare".to_owned()
-                    }],
-                ),
-            );
-        };
-
-        let ttl = Duration::from_secs(60);
-        enqueue_reply(&mut dbus, false);
-        let first = read_disk_smart_cached(
-            &mut state,
-            &mut dbus,
-            "nvme0n1",
-            drive,
-            DiskSmartInterface::Nvme,
-            Duration::from_secs(0),
-            ttl,
-        );
-        assert_eq!(first, Some(false));
-
-        // Within TTL: returns cached value, makes no D-Bus calls.
-        let cached = read_disk_smart_cached(
-            &mut state,
-            &mut dbus,
-            "nvme0n1",
-            drive,
-            DiskSmartInterface::Nvme,
-            Duration::from_secs(30),
-            ttl,
-        );
-        assert_eq!(cached, Some(false));
-        assert_eq!(dbus.call_trace().len(), 2);
-
-        // After TTL: refreshes with a new reply.
-        enqueue_reply(&mut dbus, true);
-        let refreshed = read_disk_smart_cached(
-            &mut state,
-            &mut dbus,
-            "nvme0n1",
-            drive,
-            DiskSmartInterface::Nvme,
-            Duration::from_secs(61),
-            ttl,
-        );
-        assert_eq!(refreshed, Some(true));
-    }
-
-    #[test]
-    fn read_disk_smart_cached_caches_failure_until_ttl_expires() {
-        let mut state = DaemonStateSnapshot::default();
-        let mut dbus = FakeDbus::new();
-        let drive = "/org/freedesktop/UDisks2/drives/NVMe_1";
-
-        // SmartUpdate unreachable: read returns None, but cached as a sampled
-        // None so the next call within TTL doesn't retry.
-        let first = read_disk_smart_cached(
-            &mut state,
-            &mut dbus,
-            "nvme0n1",
-            drive,
-            DiskSmartInterface::Nvme,
-            Duration::from_secs(0),
-            Duration::from_secs(60),
-        );
-        assert_eq!(first, None);
-
-        // Python stops immediately when SmartUpdate fails.
-        assert_eq!(dbus.call_trace().len(), 1);
-
-        let cached = read_disk_smart_cached(
-            &mut state,
-            &mut dbus,
-            "nvme0n1",
-            drive,
-            DiskSmartInterface::Nvme,
-            Duration::from_secs(10),
-            Duration::from_secs(60),
-        );
-        assert_eq!(cached, None);
-        // No additional calls: failure is cached until TTL elapses.
-        assert_eq!(dbus.call_trace().len(), 1);
-    }
-
-    // ── read_battery_sys ─────────────────────────────────────────────────────
-
-    #[test]
-    fn read_battery_sys_reads_sysfs_first() {
-        let tmp = TempTree::new();
-        tmp.write("sys/class/power_supply/BAT0/capacity", "85\n");
-        tmp.write("sys/class/power_supply/BAT0/status", "Discharging\n");
-        tmp.write("sys/class/power_supply/BAT0/power_now", "12500000\n");
-        tmp.write(
-            "sys/class/power_supply/BAT0/charge_control_end_threshold",
-            "80\n",
-        );
-
-        let mut state = DaemonStateSnapshot::default();
-        let mut dbus = FakeDbus::new();
-
-        let readings = read_battery_sys(
-            &mut state,
-            &mut dbus,
-            &["/org/freedesktop/UPower/devices/battery_BAT0".to_owned()],
-            &tmp.sys(),
-            clock(0),
-        );
-
-        let battery = readings.first().expect("battery read");
-        assert_eq!(battery.id, "/org/freedesktop/UPower/devices/battery_BAT0");
-        assert_eq!(battery.charge_percent, 85);
-        // 12_500_000 µW → 12.5 W → banker's rounding → 12.
-        assert_eq!(battery.rate_watts, 12);
-        assert_eq!(battery.state, BatteryState::Discharging);
-        assert_eq!(battery.charge_limit_percent, Some(80));
-        // No D-Bus calls: sysfs path succeeded.
-        assert!(dbus.call_trace().is_empty());
-    }
-
-    #[test]
-    fn read_battery_sys_falls_back_to_upower_when_sysfs_absent() {
-        let tmp = TempTree::new();
-        let mut state = DaemonStateSnapshot::default();
-        let mut dbus = FakeDbus::new();
-        let path = "/org/freedesktop/UPower/devices/battery_BAT0";
-        dbus.enqueue(
-            SYSTEM,
-            UPOWER_NAME,
-            path,
-            "org.freedesktop.DBus.Properties",
-            "GetAll",
-            battery_props_reply(
-                path,
-                &[("Percentage", "90"), ("State", "1"), ("EnergyRate", "15.5")],
-            ),
-        );
-
-        let readings = read_battery_sys(
-            &mut state,
-            &mut dbus,
-            &[path.to_owned()],
-            &tmp.sys(),
-            clock(0),
-        );
-
-        let battery = readings.first().expect("fallback battery");
-        assert_eq!(battery.charge_percent, 90);
-        assert_eq!(battery.state, BatteryState::Charging);
-        // 15.5 → banker's rounding → 16.
-        assert_eq!(battery.rate_watts, 16);
-        let request = dbus.call_trace().first().expect("GetAll request");
-        assert_eq!(request.interface, "org.freedesktop.DBus.Properties");
-        assert_eq!(request.member, "GetAll");
-        assert_eq!(
-            request.arguments,
-            [DbusArgument::String(UPOWER_DEV_IFACE.to_owned())]
-        );
-    }
-
-    #[test]
-    fn read_battery_sys_upower_zero_rate_falls_back_to_sysfs_power_now() {
-        let tmp = TempTree::new();
-        // Sysfs has no capacity (so the sysfs primary path fails and we drop to
-        // UPower), but power_now IS readable for the rate fallback.
-        tmp.write("sys/class/power_supply/BAT0/power_now", "5000000\n");
-        let mut state = DaemonStateSnapshot::default();
-        let mut dbus = FakeDbus::new();
-        let path = "/org/freedesktop/UPower/devices/battery_BAT0";
-        dbus.enqueue(
-            SYSTEM,
-            UPOWER_NAME,
-            path,
-            "org.freedesktop.DBus.Properties",
-            "GetAll",
-            battery_props_reply(
-                path,
-                &[("Percentage", "70"), ("State", "2"), ("EnergyRate", "0")],
-            ),
-        );
-
-        let readings = read_battery_sys(
-            &mut state,
-            &mut dbus,
-            &[path.to_owned()],
-            &tmp.sys(),
-            clock(0),
-        );
-
-        let battery = readings.first().expect("battery");
-        // EnergyRate 0 + discharging → fallback to sysfs 5_000_000 µW = 5 W.
-        assert_eq!(battery.rate_watts, 5);
-    }
-
-    #[test]
-    fn read_battery_sys_skips_batteries_without_percentage() {
-        let tmp = TempTree::new();
-        let mut state = DaemonStateSnapshot::default();
-        let mut dbus = FakeDbus::new();
-        let path = "/org/freedesktop/UPower/devices/battery_BAT0";
-        dbus.enqueue(
-            SYSTEM,
-            UPOWER_NAME,
-            path,
-            "org.freedesktop.DBus.Properties",
-            "GetAll",
-            battery_props_reply(path, &[("State", "2")]),
-        );
-
-        let readings = read_battery_sys(
-            &mut state,
-            &mut dbus,
-            &[path.to_owned()],
-            &tmp.sys(),
-            clock(0),
-        );
-
-        assert!(readings.is_empty(), "no percentage → no row");
-    }
-
-    #[test]
-    fn read_battery_sys_uses_cache_within_ttl() {
-        let tmp = TempTree::new();
-        tmp.write("sys/class/power_supply/BAT0/capacity", "50\n");
-        tmp.write("sys/class/power_supply/BAT0/status", "Charging\n");
-
-        let mut state = DaemonStateSnapshot::default();
-        let mut dbus = FakeDbus::new();
-
-        let _ = read_battery_sys(
-            &mut state,
-            &mut dbus,
-            &["/org/freedesktop/UPower/devices/battery_BAT0".to_owned()],
-            &tmp.sys(),
-            clock(0),
-        );
-
-        // Remove sysfs to prove the second read is cached.
-        let _ = fs::remove_file(tmp.sys().join("class/power_supply/BAT0/capacity"));
-
-        let readings = read_battery_sys(
-            &mut state,
-            &mut dbus,
-            &["/org/freedesktop/UPower/devices/battery_BAT0".to_owned()],
-            &tmp.sys(),
-            clock(10),
-        );
-
-        assert_eq!(readings.first().expect("cached").charge_percent, 50);
-    }
-
-    #[test]
-    fn read_battery_sys_charge_limit_100_treated_as_unset() {
-        let tmp = TempTree::new();
-        tmp.write("sys/class/power_supply/BAT0/capacity", "99\n");
-        tmp.write("sys/class/power_supply/BAT0/status", "Full\n");
-        tmp.write(
-            "sys/class/power_supply/BAT0/charge_control_end_threshold",
-            "100\n",
-        );
-
-        let mut state = DaemonStateSnapshot::default();
-        let mut dbus = FakeDbus::new();
-
-        let readings = read_battery_sys(
-            &mut state,
-            &mut dbus,
-            &["/org/freedesktop/UPower/devices/battery_BAT0".to_owned()],
-            &tmp.sys(),
-            clock(0),
-        );
-
-        assert_eq!(
-            readings.first().expect("battery").charge_limit_percent,
-            None
-        );
-    }
-
-    // ── read_battery_periph ──────────────────────────────────────────────────
-
-    #[test]
-    fn read_battery_periph_returns_reading_on_success() {
-        let mut cache = BatteryPeripheralCache::default();
-        let mut dbus = FakeDbus::new();
-        let path = "/org/freedesktop/UPower/devices/battery_hidpp_mouse";
-        dbus.enqueue(
-            SYSTEM,
-            UPOWER_NAME,
-            path,
-            "org.freedesktop.DBus.Properties",
-            "GetAll",
-            battery_props_reply(path, &[("Percentage", "75"), ("Model", "MX Master 3S")]),
-        );
-
-        let reading =
-            read_battery_periph(&mut cache, &mut dbus, path, None, clock(0)).expect("present");
-
-        assert_eq!(reading.name, "MX Master 3S");
-        assert_eq!(reading.charge_percent, 75);
-    }
-
-    #[test]
-    fn read_battery_periph_none_when_percentage_zero_or_missing() {
-        let mut cache = BatteryPeripheralCache::default();
-        let mut dbus = FakeDbus::new();
-        let path = "/org/freedesktop/UPower/devices/battery_hidpp_mouse";
-        dbus.enqueue(
-            SYSTEM,
-            UPOWER_NAME,
-            path,
-            "org.freedesktop.DBus.Properties",
-            "GetAll",
-            battery_props_reply(path, &[("Percentage", "0"), ("Model", "MX Keys")]),
-        );
-
-        let reading = read_battery_periph(&mut cache, &mut dbus, path, None, clock(0));
-
-        assert!(reading.is_none(), "0% → device disconnected");
-        // The name was still cached while we had the props.
-        assert_eq!(cache.name, "MX Keys");
-    }
-
-    #[test]
-    fn read_battery_periph_none_when_upower_unreachable() {
-        let mut cache = BatteryPeripheralCache::default();
-        let mut dbus = FakeDbus::new();
-        let path = "/org/freedesktop/UPower/devices/battery_hidpp_mouse";
-
-        let reading = read_battery_periph(&mut cache, &mut dbus, path, None, clock(0));
-
-        assert!(reading.is_none());
-    }
-
-    #[test]
-    fn read_battery_periph_name_override_wins_over_cached_model() {
-        let mut cache = BatteryPeripheralCache::default();
-        let mut dbus = FakeDbus::new();
-        let path = "/org/freedesktop/UPower/devices/battery_hidpp_mouse";
-        dbus.enqueue(
-            SYSTEM,
-            UPOWER_NAME,
-            path,
-            "org.freedesktop.DBus.Properties",
-            "GetAll",
-            battery_props_reply(path, &[("Percentage", "60"), ("Model", "Internal Name")]),
-        );
-
-        let reading = read_battery_periph(&mut cache, &mut dbus, path, Some("Override"), clock(0))
-            .expect("present");
-
-        assert_eq!(reading.name, "Override");
-    }
-
-    #[test]
-    fn read_battery_periph_uses_cache_within_ttl() {
-        let mut cache = BatteryPeripheralCache::default();
-        let mut dbus = FakeDbus::new();
-        let path = "/org/freedesktop/UPower/devices/battery_hidpp_mouse";
-        dbus.enqueue(
-            SYSTEM,
-            UPOWER_NAME,
-            path,
-            "org.freedesktop.DBus.Properties",
-            "GetAll",
-            battery_props_reply(path, &[("Percentage", "80"), ("Model", "Mouse")]),
-        );
-
-        let _ = read_battery_periph(&mut cache, &mut dbus, path, None, clock(0));
-        assert_eq!(dbus.call_trace().len(), 1);
-
-        // Second call within TTL: no new D-Bus call, cached charge returned.
-        let reading = read_battery_periph(&mut cache, &mut dbus, path, None, clock(10));
-        assert_eq!(reading.expect("cached").charge_percent, 80);
-        assert_eq!(dbus.call_trace().len(), 1);
-    }
-
-    // ── read_battery_bolt ────────────────────────────────────────────────────
-
-    #[test]
-    fn read_battery_bolt_caches_name_and_level() {
-        let mut cache = BatteryPeripheralCache::default();
-        let mut bolt = FakeBolt::default();
-        bolt.push_ok(
-            1,
-            true,
-            Some(BoltBattery {
-                name: String::from("MX Keys S"),
-                level: 90,
-            }),
-        );
-
-        let reading = read_battery_bolt(&mut cache, &mut bolt, 1, None, clock(0)).expect("present");
-
-        assert_eq!(reading.name, "MX Keys S");
-        assert_eq!(reading.charge_percent, 90);
-        assert_eq!(bolt.calls(), &[(1, true)]);
-
-        // Within the 1h TTL: no new query, cached values returned.
-        let reading_cached =
-            read_battery_bolt(&mut cache, &mut bolt, 1, None, clock(60)).expect("cached");
-        assert_eq!(reading_cached.charge_percent, 90);
-        assert_eq!(bolt.calls().len(), 1);
-
-        // After the TTL: fetch level only (name stays cached → want_name=false).
-        bolt.push_ok(
-            1,
-            false,
-            Some(BoltBattery {
-                name: String::new(),
-                level: 80,
-            }),
-        );
-        let reading2 =
-            read_battery_bolt(&mut cache, &mut bolt, 1, None, clock(3601)).expect("refreshed");
-        assert_eq!(reading2.charge_percent, 80);
-        assert_eq!(reading2.name, "MX Keys S");
-        assert_eq!(bolt.calls(), &[(1, true), (1, false)]);
-    }
-
-    #[test]
-    fn read_battery_bolt_returns_none_when_level_is_none_but_advances_timestamp() {
-        let mut cache = BatteryPeripheralCache::default();
-        let mut bolt = FakeBolt::default();
-        bolt.push_ok(2, true, None);
-
-        let reading = read_battery_bolt(&mut cache, &mut bolt, 2, None, clock(0));
-        assert!(reading.is_none());
-
-        // Cache timestamp advanced → second call within TTL makes no query.
-        let reading2 = read_battery_bolt(&mut cache, &mut bolt, 2, None, clock(60));
-        assert!(reading2.is_none());
-        assert_eq!(bolt.calls().len(), 1);
-    }
-
-    #[test]
-    fn read_battery_bolt_no_level_hides_stale_charge_for_refresh_call() {
-        let mut cache = BatteryPeripheralCache {
-            name: "Keyboard".to_owned(),
-            charge_percent: Some(80),
-            sampled_at: Some(Duration::ZERO),
-        };
-        let mut bolt = FakeBolt::default();
-        bolt.push_ok(2, false, None);
-
-        let refreshed = read_battery_bolt(&mut cache, &mut bolt, 2, None, clock(3601));
-
-        assert!(refreshed.is_none());
-        // Python retains the old value in the cache but hides it on the
-        // refresh call that reported no level.
-        assert_eq!(cache.charge_percent, Some(80));
-        assert!(read_battery_bolt(&mut cache, &mut bolt, 2, None, clock(3602)).is_some());
-        assert_eq!(bolt.calls().len(), 1);
-    }
-
-    #[test]
-    fn read_battery_bolt_returns_none_on_hid_failure_without_advancing_timestamp() {
-        let mut cache = BatteryPeripheralCache::default();
-        let mut bolt = FakeBolt::default();
-        bolt.push_err(3, true);
-
-        let reading = read_battery_bolt(&mut cache, &mut bolt, 3, None, clock(0));
-        assert!(reading.is_none());
-
-        // Timestamp NOT advanced → next call retries.
-        bolt.push_ok(
-            3,
-            true,
-            Some(BoltBattery {
-                name: String::from("Recovered"),
-                level: 50,
-            }),
-        );
-        let reading2 =
-            read_battery_bolt(&mut cache, &mut bolt, 3, None, clock(1)).expect("retry ok");
-        assert_eq!(reading2.charge_percent, 50);
-        assert_eq!(reading2.name, "Recovered");
-    }
-
-    #[test]
-    fn read_battery_bolt_name_override_suppresses_name_fetch() {
-        let mut cache = BatteryPeripheralCache::default();
-        let mut bolt = FakeBolt::default();
-        // want_name should be false because name_override is provided.
-        bolt.push_ok(
-            1,
-            false,
-            Some(BoltBattery {
-                name: String::new(),
-                level: 70,
-            }),
-        );
-
-        let reading =
-            read_battery_bolt(&mut cache, &mut bolt, 1, Some("Custom"), clock(0)).expect("ok");
-
-        assert_eq!(reading.name, "Custom");
-        assert_eq!(reading.charge_percent, 70);
-        assert_eq!(bolt.calls(), &[(1, false)]);
-    }
-
-    // ── numeric helpers ──────────────────────────────────────────────────────
-
-    #[test]
-    fn round_half_even_ratio_matches_python_bankers_rounding() {
-        // 1.5 → 2 (even), 2.5 → 2 (even), 0.5 → 0 (even).
-        assert_eq!(round_half_even_ratio(1_500_000, 1_000_000), 2);
-        assert_eq!(round_half_even_ratio(2_500_000, 1_000_000), 2);
-        assert_eq!(round_half_even_ratio(500_000, 1_000_000), 0);
-        // Not-at-half rounds normally.
-        assert_eq!(round_half_even_ratio(1_600_000, 1_000_000), 2);
-        assert_eq!(round_half_even_ratio(1_400_000, 1_000_000), 1);
-    }
-
-    #[test]
-    fn round_half_even_f64_handles_halfway_and_non_finite() {
-        assert_eq!(round_half_even_f64(15.5), 16);
-        assert_eq!(round_half_even_f64(14.5), 14);
-        assert_eq!(round_half_even_f64(0.5), 0);
-        assert_eq!(round_half_even_f64(15.0), 15);
-        assert_eq!(round_half_even_f64(15.4), 15);
-        assert_eq!(round_half_even_f64(15.6), 16);
-        assert_eq!(round_half_even_f64(f64::NAN), 0);
-        assert_eq!(round_half_even_f64(f64::INFINITY), 0);
-    }
-
-    #[test]
-    fn bat_name_from_id_extracts_power_supply_name() {
-        assert_eq!(
-            bat_name_from_id("/org/freedesktop/UPower/devices/battery_BAT0"),
-            "BAT0",
-        );
-        assert_eq!(bat_name_from_id("BAT0"), "BAT0");
-        assert_eq!(bat_name_from_id("battery_BAT1"), "BAT1");
-    }
-
-    #[test]
-    fn parse_bool_accepts_case_insensitive_true_false() {
-        assert_eq!(parse_bool("true"), Some(true));
-        assert_eq!(parse_bool("FALSE"), Some(false));
-        assert_eq!(parse_bool("  True  "), Some(true));
-        assert_eq!(parse_bool("yes"), None);
-    }
-}
+mod tests;

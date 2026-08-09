@@ -119,7 +119,7 @@ impl DbusFacade for ProductionDbusFacade {
         }
         let value: Value = serde_json::from_slice(&result.stdout)
             .map_err(|error| dbus_error(&request, format!("invalid busctl JSON: {error}")))?;
-        let body = normalize_dbus_body(&request, &value);
+        let body = normalize_dbus_body(&request, &value)?;
         Ok(DbusOutput {
             bus: request.bus,
             service: request.service,
@@ -172,25 +172,54 @@ fn scalar(value: &Value) -> String {
         Value::String(text) => text.clone(),
         Value::Bool(boolean) => boolean.to_string(),
         Value::Number(number) => number.to_string(),
-        Value::Array(values) if values.len() == 1 => scalar(&values[0]),
-        _ => String::new(),
+        Value::Array(_) | Value::Object(_) => value.to_string(),
+        Value::Null => String::new(),
     }
 }
 
-fn normalize_dbus_body(request: &DbusRequest, reply: &Value) -> Vec<String> {
-    let value = data(reply);
-    if request.member == "GetManagedObjects" {
-        return normalize_managed_objects(value);
+pub(crate) fn normalize_dbus_body(
+    request: &DbusRequest,
+    reply: &Value,
+) -> Result<Vec<String>, BoundaryError> {
+    match request.member.as_str() {
+        "EnumerateDevices" => normalize_object_paths(request, reply),
+        "GetManagedObjects" => normalize_managed_objects(request, reply),
+        "GetAll" => normalize_properties(request, reply),
+        "Get" => {
+            let value = single_reply_value(request, reply, "v")?;
+            let value = variant_value(request, value, "Get result")?;
+            Ok(vec![scalar(value)])
+        }
+        _ => {
+            let mut out = Vec::new();
+            flatten_scalars(data(reply), &mut out);
+            Ok(out)
+        }
     }
-    if request.member == "GetAll" {
-        return normalize_properties(value);
-    }
-    if request.member == "Get" {
-        return vec![scalar(value)];
-    }
-    let mut out = Vec::new();
-    flatten_scalars(value, &mut out);
-    out
+}
+
+fn normalize_object_paths(
+    request: &DbusRequest,
+    reply: &Value,
+) -> Result<Vec<String>, BoundaryError> {
+    let value = single_reply_value(request, reply, "ao")?;
+    let Value::Array(paths) = value else {
+        return Err(dbus_shape_error(
+            request,
+            "EnumerateDevices data must contain an object-path array",
+        ));
+    };
+    paths
+        .iter()
+        .map(|path| {
+            path.as_str().map(str::to_owned).ok_or_else(|| {
+                dbus_shape_error(
+                    request,
+                    "EnumerateDevices data must contain only object-path strings",
+                )
+            })
+        })
+        .collect()
 }
 
 fn flatten_scalars(value: &Value, out: &mut Vec<String>) {
@@ -203,46 +232,381 @@ fn flatten_scalars(value: &Value, out: &mut Vec<String>) {
     }
 }
 
-fn normalize_properties(value: &Value) -> Vec<String> {
+fn normalize_properties(
+    request: &DbusRequest,
+    reply: &Value,
+) -> Result<Vec<String>, BoundaryError> {
     let mut out = Vec::new();
-    let value = match data(value) {
-        Value::Array(values) if values.len() == 1 => data(&values[0]),
-        value => value,
+    let value = single_reply_value(request, reply, "a{sv}")?;
+    let Value::Object(properties) = value else {
+        return Err(dbus_shape_error(
+            request,
+            "GetAll data must contain a property object",
+        ));
     };
-    if let Value::Object(properties) = value {
-        for (key, value) in properties {
-            out.push(key.clone());
-            out.push(scalar(value));
-        }
+    for (key, value) in properties {
+        let value = variant_value(request, value, &format!("GetAll property `{key}`"))?;
+        out.push(key.clone());
+        out.push(scalar(value));
     }
-    out
+    Ok(out)
 }
 
-fn normalize_managed_objects(value: &Value) -> Vec<String> {
+fn normalize_managed_objects(
+    request: &DbusRequest,
+    reply: &Value,
+) -> Result<Vec<String>, BoundaryError> {
     let mut out = Vec::new();
-    let value = match data(value) {
-        Value::Array(values) if values.len() == 1 => data(&values[0]),
-        value => value,
-    };
+    let value = single_reply_value(request, reply, "a{oa{sa{sv}}}")?;
     let Value::Object(objects) = value else {
-        return out;
+        return Err(dbus_shape_error(
+            request,
+            "GetManagedObjects data must contain an object map",
+        ));
     };
     for (path, interfaces) in objects {
+        let Value::Object(interfaces) = interfaces else {
+            return Err(dbus_shape_error(
+                request,
+                &format!("managed object `{path}` must contain an interface map"),
+            ));
+        };
         out.push(path.clone());
-        if let Value::Object(interfaces) = data(interfaces) {
-            for (interface, properties) in interfaces {
-                out.push(interface.clone());
-                if interface == "org.freedesktop.UDisks2.Block"
-                    && let Value::Object(properties) = data(properties)
-                    && let Some(drive) = properties.get("Drive")
-                {
-                    out.push(format!("Block.Drive={}", scalar(drive)));
+        for (interface, properties) in interfaces {
+            let Value::Object(properties) = properties else {
+                return Err(dbus_shape_error(
+                    request,
+                    &format!(
+                        "managed interface `{interface}` on `{path}` must contain a property map"
+                    ),
+                ));
+            };
+            out.push(interface.clone());
+            for (property, value) in properties {
+                let value = variant_value(
+                    request,
+                    value,
+                    &format!("managed property `{interface}.{property}` on `{path}`"),
+                )?;
+                if interface == "org.freedesktop.UDisks2.Block" && property == "Drive" {
+                    out.push(format!("Block.Drive={}", scalar(value)));
                 }
             }
         }
         out.push(String::new());
     }
-    out
+    Ok(out)
+}
+
+fn single_reply_value<'a>(
+    request: &DbusRequest,
+    reply: &'a Value,
+    expected_signature: &str,
+) -> Result<&'a Value, BoundaryError> {
+    let signature = reply.get("type").and_then(Value::as_str).ok_or_else(|| {
+        dbus_shape_error(
+            request,
+            "busctl reply must contain a string `type` signature",
+        )
+    })?;
+    if signature != expected_signature {
+        return Err(dbus_shape_error(
+            request,
+            &format!(
+                "unexpected busctl reply signature `{signature}`; expected `{expected_signature}`"
+            ),
+        ));
+    }
+    let values = reply
+        .get("data")
+        .and_then(Value::as_array)
+        .ok_or_else(|| dbus_shape_error(request, "busctl reply must contain a `data` array"))?;
+    let [value] = values.as_slice() else {
+        return Err(dbus_shape_error(
+            request,
+            &format!(
+                "busctl reply signature `{expected_signature}` must contain exactly one value"
+            ),
+        ));
+    };
+    validate_typed_value(request, expected_signature, value, "busctl reply value")?;
+    Ok(value)
+}
+
+fn variant_value<'a>(
+    request: &DbusRequest,
+    value: &'a Value,
+    context: &str,
+) -> Result<&'a Value, BoundaryError> {
+    let Value::Object(variant) = value else {
+        return Err(dbus_shape_error(
+            request,
+            &format!("{context} must be a typed variant object"),
+        ));
+    };
+    let Some(signature) = variant.get("type").and_then(Value::as_str) else {
+        return Err(dbus_shape_error(
+            request,
+            &format!("{context} must contain a string `type` signature"),
+        ));
+    };
+    if signature.is_empty() {
+        return Err(dbus_shape_error(
+            request,
+            &format!("{context} must contain a nonempty string `type` signature"),
+        ));
+    }
+    let value = variant
+        .get("data")
+        .ok_or_else(|| dbus_shape_error(request, &format!("{context} must contain `data`")))?;
+    validate_typed_value(request, signature, value, context)?;
+    Ok(value)
+}
+
+fn validate_typed_value(
+    request: &DbusRequest,
+    signature: &str,
+    value: &Value,
+    context: &str,
+) -> Result<(), BoundaryError> {
+    let consumed = validate_dbus_type(request, signature, value, context)?;
+    if consumed != signature.len() {
+        return Err(dbus_shape_error(
+            request,
+            &format!("{context} has unsupported compound signature `{signature}`"),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_dbus_type(
+    request: &DbusRequest,
+    signature: &str,
+    value: &Value,
+    context: &str,
+) -> Result<usize, BoundaryError> {
+    let Some(kind) = signature.as_bytes().first().copied() else {
+        return Err(dbus_shape_error(
+            request,
+            &format!("{context} has an empty value signature"),
+        ));
+    };
+    match kind {
+        b's' | b'o' | b'g' if value.is_string() => Ok(1),
+        b'b' if value.is_boolean() => Ok(1),
+        b'y' if value
+            .as_u64()
+            .is_some_and(|number| u8::try_from(number).is_ok()) =>
+        {
+            Ok(1)
+        }
+        b'n' if value
+            .as_i64()
+            .is_some_and(|number| i16::try_from(number).is_ok()) =>
+        {
+            Ok(1)
+        }
+        b'q' if value
+            .as_u64()
+            .is_some_and(|number| u16::try_from(number).is_ok()) =>
+        {
+            Ok(1)
+        }
+        b'i' if value
+            .as_i64()
+            .is_some_and(|number| i32::try_from(number).is_ok()) =>
+        {
+            Ok(1)
+        }
+        b'u' | b'h'
+            if value
+                .as_u64()
+                .is_some_and(|number| u32::try_from(number).is_ok()) =>
+        {
+            Ok(1)
+        }
+        b'x' if value.as_i64().is_some() => Ok(1),
+        b't' if value.as_u64().is_some() => Ok(1),
+        b'd' if value.is_number() => Ok(1),
+        b'v' => {
+            variant_value(request, value, context)?;
+            Ok(1)
+        }
+        b'a' => validate_dbus_array(request, signature, value, context),
+        b'(' => validate_dbus_struct(request, signature, value, context),
+        b'{' | b')' | b'}' => Err(dbus_shape_error(
+            request,
+            &format!(
+                "{context} has misplaced signature delimiter `{}`",
+                char::from(kind)
+            ),
+        )),
+        _ => Err(dbus_shape_error(
+            request,
+            &format!("{context} does not match D-Bus signature `{signature}`"),
+        )),
+    }
+}
+
+fn validate_dbus_array(
+    request: &DbusRequest,
+    signature: &str,
+    value: &Value,
+    context: &str,
+) -> Result<usize, BoundaryError> {
+    let element_signature = signature.get(1..).unwrap_or_default();
+    if element_signature.starts_with('{') {
+        return validate_dbus_dictionary(request, signature, value, context);
+    }
+    let element_len = dbus_type_len(request, element_signature, context)?;
+    let Value::Array(values) = value else {
+        return Err(dbus_shape_error(
+            request,
+            &format!("{context} must be an array for signature `{signature}`"),
+        ));
+    };
+    for (index, value) in values.iter().enumerate() {
+        validate_typed_value(
+            request,
+            &element_signature[..element_len],
+            value,
+            &format!("{context} element {index}"),
+        )?;
+    }
+    Ok(1 + element_len)
+}
+
+fn validate_dbus_dictionary(
+    request: &DbusRequest,
+    signature: &str,
+    value: &Value,
+    context: &str,
+) -> Result<usize, BoundaryError> {
+    let inner = signature.get(2..).unwrap_or_default();
+    let key_len = dbus_type_len(request, inner, context)?;
+    let value_signature = inner.get(key_len..).unwrap_or_default();
+    let value_len = dbus_type_len(request, value_signature, context)?;
+    if value_signature.as_bytes().get(value_len) != Some(&b'}') {
+        return Err(dbus_shape_error(
+            request,
+            &format!("{context} has malformed dictionary signature `{signature}`"),
+        ));
+    }
+    let Value::Object(entries) = value else {
+        return Err(dbus_shape_error(
+            request,
+            &format!("{context} must be an object for signature `{signature}`"),
+        ));
+    };
+    for (key, value) in entries {
+        validate_typed_value(
+            request,
+            &inner[..key_len],
+            &Value::String(key.clone()),
+            &format!("{context} key `{key}`"),
+        )?;
+        validate_typed_value(
+            request,
+            &value_signature[..value_len],
+            value,
+            &format!("{context} value for `{key}`"),
+        )?;
+    }
+    Ok(3 + key_len + value_len)
+}
+
+fn validate_dbus_struct(
+    request: &DbusRequest,
+    signature: &str,
+    value: &Value,
+    context: &str,
+) -> Result<usize, BoundaryError> {
+    let Value::Array(fields) = value else {
+        return Err(dbus_shape_error(
+            request,
+            &format!("{context} must be an array for struct signature `{signature}`"),
+        ));
+    };
+    let mut offset = 1;
+    for (index, field) in fields.iter().enumerate() {
+        let remaining = signature.get(offset..).unwrap_or_default();
+        if remaining.starts_with(')') {
+            return Err(dbus_shape_error(
+                request,
+                &format!("{context} has too many struct fields"),
+            ));
+        }
+        let field_len = validate_dbus_type(
+            request,
+            remaining,
+            field,
+            &format!("{context} field {index}"),
+        )?;
+        offset += field_len;
+    }
+    if signature.as_bytes().get(offset) != Some(&b')') {
+        return Err(dbus_shape_error(
+            request,
+            &format!("{context} has too few struct fields"),
+        ));
+    }
+    Ok(offset + 1)
+}
+
+fn dbus_type_len(
+    request: &DbusRequest,
+    signature: &str,
+    context: &str,
+) -> Result<usize, BoundaryError> {
+    match signature.as_bytes().first().copied() {
+        Some(b'a') => {
+            Ok(1 + dbus_type_len(request, signature.get(1..).unwrap_or_default(), context)?)
+        }
+        Some(b'(') => delimited_type_len(request, signature, b'(', b')', context),
+        Some(b'{') => delimited_type_len(request, signature, b'{', b'}', context),
+        Some(
+            b's' | b'o' | b'g' | b'b' | b'y' | b'n' | b'q' | b'i' | b'u' | b'h' | b'x' | b't'
+            | b'd' | b'v',
+        ) => Ok(1),
+        _ => Err(dbus_shape_error(
+            request,
+            &format!("{context} has malformed D-Bus signature `{signature}`"),
+        )),
+    }
+}
+
+fn delimited_type_len(
+    request: &DbusRequest,
+    signature: &str,
+    open: u8,
+    close: u8,
+    context: &str,
+) -> Result<usize, BoundaryError> {
+    let mut offset = 1;
+    while let Some(kind) = signature.as_bytes().get(offset).copied() {
+        if kind == close {
+            return Ok(offset + 1);
+        }
+        if kind == open {
+            return Err(dbus_shape_error(
+                request,
+                &format!("{context} has malformed D-Bus signature `{signature}`"),
+            ));
+        }
+        offset += dbus_type_len(
+            request,
+            signature.get(offset..).unwrap_or_default(),
+            context,
+        )?;
+    }
+    Err(dbus_shape_error(
+        request,
+        &format!("{context} has unterminated D-Bus signature `{signature}`"),
+    ))
+}
+
+fn dbus_shape_error(request: &DbusRequest, detail: &str) -> BoundaryError {
+    dbus_error(request, format!("malformed busctl reply: {detail}"))
 }
 
 /// Desktop notification facade using the standard `notify-send` client.
@@ -305,54 +669,4 @@ impl ProductionClock {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn command_runner_returns_timeout_without_waiting_for_child_exit() {
-        let mut runner = ProductionCommandRunner;
-        let result = runner.run(
-            Path::new("/bin/sh"),
-            &[OsString::from("-c"), OsString::from("sleep 1")],
-            Duration::from_millis(10),
-        );
-
-        let error = match result {
-            Ok(_) => panic!("sleeping command must time out"),
-            Err(error) => error,
-        };
-        assert!(error.to_string().contains("timed out after 0.010s"));
-    }
-
-    #[test]
-    fn property_json_normalizes_to_interleaved_pairs() {
-        let value = serde_json::json!({"data": [{
-            "Percentage": {"type": "d", "data": 52.5},
-            "State": {"type": "u", "data": 2}
-        }]});
-        assert_eq!(
-            normalize_properties(&value),
-            vec!["Percentage", "52.5", "State", "2"]
-        );
-    }
-
-    #[test]
-    fn managed_object_json_preserves_drive_relation() {
-        let value = serde_json::json!({"data": [{
-            "/block": {"data": {
-                "org.freedesktop.UDisks2.Block": {"data": {
-                    "Drive": {"type": "o", "data": "/drive"}
-                }}
-            }}
-        }]});
-        assert_eq!(
-            normalize_managed_objects(&value),
-            vec![
-                "/block",
-                "org.freedesktop.UDisks2.Block",
-                "Block.Drive=/drive",
-                ""
-            ]
-        );
-    }
-}
+mod tests;

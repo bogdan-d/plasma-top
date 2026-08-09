@@ -7,6 +7,93 @@ use std::time::Duration;
 use crate::domain::boundary::ClockSnapshot;
 use crate::domain::metric::{Capability, Metric};
 
+/// Latest completed value for one independently captured metric.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MetricSample<T> {
+    /// Captured value.
+    pub value: T,
+    /// Monotonic instant captured with the source read.
+    pub captured_at: Duration,
+}
+
+impl<T> MetricSample<T> {
+    /// Creates one completed metric sample.
+    #[must_use]
+    pub const fn new(value: T, captured_at: Duration) -> Self {
+        Self { value, captured_at }
+    }
+}
+
+/// Latest valid sample plus attempt and failure times.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RetainedMetricSample<T> {
+    /// Latest successful sample, retained across failed attempts.
+    pub latest: Option<MetricSample<T>>,
+    /// Monotonic instant of the most recent attempt, successful or not.
+    pub attempted_at: Option<Duration>,
+    /// Monotonic instant of the most recent failed attempt.
+    pub failed_at: Option<Duration>,
+    /// Whether the most recent attempt failed.
+    pub latest_attempt_failed: bool,
+}
+
+impl<T> RetainedMetricSample<T> {
+    /// Records one attempt, replacing the latest sample only when it succeeded.
+    pub fn record(&mut self, value: Option<T>, captured_at: Duration) {
+        if let Some(value) = value {
+            self.record_value(value, captured_at);
+        } else {
+            self.record_failure(captured_at);
+        }
+    }
+
+    /// Records a successful value.
+    pub fn record_value(&mut self, value: T, captured_at: Duration) {
+        self.attempted_at = Some(captured_at);
+        self.latest = Some(MetricSample::new(value, captured_at));
+        self.latest_attempt_failed = false;
+    }
+
+    /// Records a successful attempt that produced no comparable value.
+    pub fn record_baseline(&mut self, attempted_at: Duration) {
+        self.attempted_at = Some(attempted_at);
+        self.latest_attempt_failed = false;
+    }
+
+    /// Records a failed attempt without replacing the latest valid sample.
+    pub fn record_failure(&mut self, attempted_at: Duration) {
+        self.attempted_at = Some(attempted_at);
+        self.failed_at = Some(attempted_at);
+        self.latest_attempt_failed = true;
+    }
+
+    /// Records a confirmed valid absence and clears the retained sample.
+    pub fn record_absence(&mut self, attempted_at: Duration) {
+        self.attempted_at = Some(attempted_at);
+        self.latest = None;
+        self.latest_attempt_failed = false;
+    }
+
+    /// Invalidates both the retained sample and attempt time.
+    pub fn invalidate(&mut self) {
+        self.latest = None;
+        self.attempted_at = None;
+        self.failed_at = None;
+        self.latest_attempt_failed = false;
+    }
+}
+
+impl<T> Default for RetainedMetricSample<T> {
+    fn default() -> Self {
+        Self {
+            latest: None,
+            attempted_at: None,
+            failed_at: None,
+            latest_attempt_failed: false,
+        }
+    }
+}
+
 /// System-battery charge state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum BatteryState {
@@ -133,9 +220,9 @@ pub struct SmartDisk {
     pub rotational: bool,
 }
 
-/// Aggregate hardware discovery snapshot shared by formatter and collector lanes.
+/// Latest known hardware that can provide PlasmaTop metrics.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct HardwareSnapshot {
+pub struct HardwareInventory {
     /// Capabilities discovered on the current host.
     pub capabilities: BTreeSet<Capability>,
     /// Metrics that collection can potentially populate on this host.
@@ -144,6 +231,8 @@ pub struct HardwareSnapshot {
     pub cpu_temp_path: Option<PathBuf>,
     /// `cpu0` cpufreq fast-path sysfs file.
     pub cpu_freq_path: Option<PathBuf>,
+    /// Active turbo/boost control file.
+    pub cpu_turbo_path: Option<PathBuf>,
     /// Disk temperature sensor paths keyed by disk label.
     pub hd_temp_paths: BTreeMap<String, PathBuf>,
     /// Fan speed sensor paths keyed by configured fan label.
@@ -174,17 +263,16 @@ pub struct HardwareSnapshot {
     pub battery_kbd_id: Option<String>,
     /// SMART-capable disks keyed by disk label.
     pub disk_smart_drives: BTreeMap<String, SmartDisk>,
-    /// Monotonic time of the most recent peripheral rescan.
-    pub periph_scan_at: Option<Duration>,
 }
 
-impl Default for HardwareSnapshot {
+impl Default for HardwareInventory {
     fn default() -> Self {
         Self {
             capabilities: BTreeSet::new(),
             metrics: BTreeSet::new(),
             cpu_temp_path: None,
             cpu_freq_path: None,
+            cpu_turbo_path: None,
             hd_temp_paths: BTreeMap::new(),
             fan_paths: BTreeMap::new(),
             battery_sys_ids: Vec::new(),
@@ -200,16 +288,15 @@ impl Default for HardwareSnapshot {
             battery_mouse_id: None,
             battery_kbd_id: None,
             disk_smart_drives: BTreeMap::new(),
-            periph_scan_at: None,
         }
     }
 }
 
-/// Aggregate point-in-time readings snapshot.
+/// Latest completed metric values assembled for one display publication.
 #[derive(Debug, Clone, PartialEq, Default)]
-pub struct ReadingsSnapshot {
-    /// Collection timestamp.
-    pub collected_at: ClockSnapshot,
+pub struct DisplaySnapshot {
+    /// Display assembly timestamp.
+    pub assembled_at: ClockSnapshot,
     /// Metrics populated in this sample.
     pub metrics: BTreeSet<Metric>,
     /// Aggregate CPU usage percentage.
@@ -307,44 +394,4 @@ pub struct ReadingsSnapshot {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn battery_state_tokens_match_python_contract() {
-        assert_eq!(BatteryState::Unknown.as_str(), "");
-        assert_eq!(BatteryState::Charging.as_str(), "charging");
-        assert_eq!(BatteryState::Discharging.as_str(), "discharging");
-        assert_eq!(BatteryState::FullyCharged.as_str(), "fully-charged");
-    }
-
-    #[test]
-    fn smart_disk_interface_tokens_match_python_contract() {
-        assert_eq!(DiskSmartInterface::Ata.as_str(), "ata");
-        assert_eq!(DiskSmartInterface::Nvme.as_str(), "nvme");
-    }
-
-    #[test]
-    fn hardware_snapshot_default_is_a_safe_empty_machine() {
-        let hardware = HardwareSnapshot::default();
-
-        assert!(hardware.capabilities.is_empty());
-        assert!(hardware.metrics.is_empty());
-        assert_eq!(hardware.cpu_count, 1);
-        assert!(hardware.hd_temp_paths.is_empty());
-        assert!(hardware.disk_smart_drives.is_empty());
-        assert_eq!(hardware.periph_scan_at, None);
-    }
-
-    #[test]
-    fn readings_snapshot_default_starts_empty_at_zero_time() {
-        let readings = ReadingsSnapshot::default();
-
-        assert_eq!(readings.collected_at, ClockSnapshot::default());
-        assert!(readings.metrics.is_empty());
-        assert!(readings.cpu_history.is_empty());
-        assert!(readings.disk_usage.is_empty());
-        assert!(readings.battery_sys.is_empty());
-        assert_eq!(readings.server_ok, None);
-    }
-}
+mod tests;

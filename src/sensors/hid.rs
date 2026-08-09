@@ -42,6 +42,12 @@ pub enum HidError {
     },
     /// A report could not be written.
     Write(io::Error),
+    /// A report could not be read.
+    Read(io::Error),
+    /// No report arrived before the transport deadline.
+    Timeout,
+    /// The bounded read loop received no matching response.
+    NoMatchingResponse,
 }
 
 impl std::fmt::Display for HidError {
@@ -55,6 +61,14 @@ impl std::fmt::Display for HidError {
                 write!(formatter, "cannot open `{}`: {source}", path.display())
             }
             Self::Write(source) => write!(formatter, "cannot write HID report: {source}"),
+            Self::Read(source) => write!(formatter, "cannot read HID report: {source}"),
+            Self::Timeout => formatter.write_str("timed out waiting for HID response"),
+            Self::NoMatchingResponse => {
+                write!(
+                    formatter,
+                    "no matching HID response after {MAX_READS} reads"
+                )
+            }
         }
     }
 }
@@ -62,8 +76,11 @@ impl std::fmt::Display for HidError {
 impl std::error::Error for HidError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::Open { source, .. } | Self::Write(source) => Some(source),
-            Self::DeviceAbsent | Self::InvalidDeviceIndex(_) => None,
+            Self::Open { source, .. } | Self::Write(source) | Self::Read(source) => Some(source),
+            Self::DeviceAbsent
+            | Self::InvalidDeviceIndex(_)
+            | Self::Timeout
+            | Self::NoMatchingResponse => None,
         }
     }
 }
@@ -84,20 +101,40 @@ impl BoltHidFacade {
         Self { sys_root, dev_root }
     }
 
-    fn query_inner(&self, dev_idx: i32, want_name: bool) -> Result<Option<BoltBattery>, HidError> {
-        let dev_idx = u8::try_from(dev_idx).map_err(|_| HidError::InvalidDeviceIndex(dev_idx))?;
-        let path =
-            find_bolt_hidraw(&self.sys_root, &self.dev_root).ok_or(HidError::DeviceAbsent)?;
+    fn query_inner(
+        &self,
+        dev_idx: i32,
+        want_name: bool,
+    ) -> Result<Option<BoltBattery>, BoundaryError> {
+        let dev_idx = u8::try_from(dev_idx)
+            .map_err(|_| boundary_error(HidError::InvalidDeviceIndex(dev_idx), None))?;
+        let path = find_bolt_hidraw(&self.sys_root, &self.dev_root)
+            .ok_or_else(|| boundary_error(HidError::DeviceAbsent, None))?;
         let file = OpenOptions::new()
             .read(true)
             .write(true)
             .open(&path)
-            .map_err(|source| HidError::Open {
-                path: path.clone(),
-                source,
+            .map_err(|source| {
+                boundary_error(
+                    HidError::Open {
+                        path: path.clone(),
+                        source,
+                    },
+                    Some(&path),
+                )
             })?;
         let mut device = HidrawDevice(file);
-        query_device(&mut device, dev_idx, want_name)
+        self.query_reports(&mut device, dev_idx, want_name, Some(&path))
+    }
+
+    fn query_reports(
+        &self,
+        device: &mut impl ReportIo,
+        dev_idx: u8,
+        want_name: bool,
+        path: Option<&Path>,
+    ) -> Result<Option<BoltBattery>, BoundaryError> {
+        query_device(device, dev_idx, want_name).map_err(|error| boundary_error(error, path))
     }
 }
 
@@ -113,16 +150,18 @@ impl BoltBatteryFacade for BoltHidFacade {
         dev_idx: i32,
         want_name: bool,
     ) -> Result<Option<BoltBattery>, BoundaryError> {
-        self.query_inner(dev_idx, want_name).map_err(|error| {
-            let path = match &error {
-                HidError::Open { path, .. } => Some(path.clone()),
-                _ => None,
-            };
-            BoundaryError::HidFailed {
-                path,
-                detail: error.to_string(),
-            }
-        })
+        self.query_inner(dev_idx, want_name)
+    }
+}
+
+fn boundary_error(error: HidError, path: Option<&Path>) -> BoundaryError {
+    let path = path.map(Path::to_path_buf).or_else(|| match &error {
+        HidError::Open { path, .. } => Some(path.clone()),
+        _ => None,
+    });
+    BoundaryError::HidFailed {
+        path,
+        detail: error.to_string(),
     }
 }
 
@@ -197,22 +236,21 @@ fn transfer(
     device: &mut impl ReportIo,
     packet: &[u8],
     expected_feature: u8,
-) -> Result<Option<Vec<u8>>, HidError> {
+) -> Result<Vec<u8>, HidError> {
     device.write_report(packet).map_err(HidError::Write)?;
     let mut buffer = [0_u8; 64];
     for _ in 0..MAX_READS {
-        let read = match device.read_report_timeout(&mut buffer, TIMEOUT_MS) {
-            Ok(read) => read,
-            Err(_) => return Ok(None),
-        };
+        let read = device
+            .read_report_timeout(&mut buffer, TIMEOUT_MS)
+            .map_err(HidError::Read)?;
         if read >= 5 && buffer[1] == packet[1] && buffer[2] == expected_feature {
-            return Ok(Some(buffer[..read].to_vec()));
+            return Ok(buffer[..read].to_vec());
         }
         if read == 0 {
-            break;
+            return Err(HidError::Timeout);
         }
     }
-    Ok(None)
+    Err(HidError::NoMatchingResponse)
 }
 
 fn feature_index(device: &mut impl ReportIo, dev_idx: u8, feature_id: u16) -> Result<u8, HidError> {
@@ -226,7 +264,7 @@ fn feature_index(device: &mut impl ReportIo, dev_idx: u8, feature_id: u16) -> Re
         high,
         low,
     ]);
-    Ok(transfer(device, &packet, ROOT_FEATURE)?.map_or(0, |response| response[4]))
+    Ok(transfer(device, &packet, ROOT_FEATURE)?[4])
 }
 
 fn battery_level(device: &mut impl ReportIo, dev_idx: u8) -> Result<Option<u8>, HidError> {
@@ -236,7 +274,7 @@ fn battery_level(device: &mut impl ReportIo, dev_idx: u8) -> Result<Option<u8>, 
     }
     let mut packet = [0_u8; REPORT_LEN];
     packet[..4].copy_from_slice(&[LONG_REPORT_ID, dev_idx, feature, (1 << 4) | SOFTWARE_ID]);
-    Ok(transfer(device, &packet, feature)?.map(|response| response[4]))
+    Ok(Some(transfer(device, &packet, feature)?[4]))
 }
 
 fn device_name(device: &mut impl ReportIo, dev_idx: u8) -> Result<String, HidError> {
@@ -246,9 +284,7 @@ fn device_name(device: &mut impl ReportIo, dev_idx: u8) -> Result<String, HidErr
     }
     let mut packet = [0_u8; REPORT_LEN];
     packet[..5].copy_from_slice(&[LONG_REPORT_ID, dev_idx, feature, (1 << 4) | SOFTWARE_ID, 0]);
-    let Some(response) = transfer(device, &packet, feature)? else {
-        return Ok(String::new());
-    };
+    let response = transfer(device, &packet, feature)?;
     let payload = &response[4..];
     let end = payload
         .iter()
@@ -281,315 +317,4 @@ fn query_device(
 }
 
 #[cfg(test)]
-mod tests {
-    #![allow(clippy::expect_used, clippy::unwrap_used)]
-
-    use std::collections::VecDeque;
-    use std::sync::atomic::{AtomicU64, Ordering};
-
-    use super::*;
-
-    static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
-
-    struct TempDir(PathBuf);
-
-    impl TempDir {
-        fn new() -> Self {
-            let id = NEXT_TEMP.fetch_add(1, Ordering::Relaxed);
-            let path =
-                std::env::temp_dir().join(format!("plasma-top-hid-{}-{id}", std::process::id()));
-            fs::create_dir_all(&path).expect("create temp dir");
-            Self(path)
-        }
-    }
-
-    impl Drop for TempDir {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.0);
-        }
-    }
-
-    #[derive(Default)]
-    struct FakeDevice {
-        writes: Vec<Vec<u8>>,
-        reads: VecDeque<Result<Vec<u8>, io::ErrorKind>>,
-        write_error: Option<io::ErrorKind>,
-        timeouts: Vec<u16>,
-    }
-
-    impl FakeDevice {
-        fn reply(&mut self, bytes: &[u8]) {
-            self.reads.push_back(Ok(bytes.to_vec()));
-        }
-
-        fn timeout(&mut self) {
-            self.reply(&[]);
-        }
-    }
-
-    impl ReportIo for FakeDevice {
-        fn write_report(&mut self, report: &[u8]) -> io::Result<usize> {
-            if let Some(kind) = self.write_error {
-                return Err(io::Error::from(kind));
-            }
-            self.writes.push(report.to_vec());
-            Ok(report.len())
-        }
-
-        fn read_report_timeout(&mut self, report: &mut [u8], timeout_ms: u16) -> io::Result<usize> {
-            self.timeouts.push(timeout_ms);
-            match self.reads.pop_front().unwrap_or(Ok(Vec::new())) {
-                Ok(bytes) => {
-                    report[..bytes.len()].copy_from_slice(&bytes);
-                    Ok(bytes.len())
-                }
-                Err(kind) => Err(io::Error::from(kind)),
-            }
-        }
-    }
-
-    fn response(dev_idx: u8, feature: u8, payload: &[u8]) -> Vec<u8> {
-        let mut bytes = vec![LONG_REPORT_ID, dev_idx, feature, SOFTWARE_ID];
-        bytes.extend_from_slice(payload);
-        bytes
-    }
-
-    #[test]
-    fn discovery_finds_matching_product_and_control_interface() {
-        use std::os::unix::fs::symlink;
-
-        let root = TempDir::new();
-        let sys = root.0.join("sys");
-        let dev = root.0.join("dev");
-        let usb = sys.join("devices/pci/usb/1-2");
-        let interface = usb.join("1-2:1.2");
-        let hid = interface.join("0003:046D:C548.0001/hidraw/hidraw7");
-        fs::create_dir_all(&hid).expect("hid hierarchy");
-        fs::create_dir_all(sys.join("class/hidraw")).expect("class hierarchy");
-        fs::create_dir_all(&dev).expect("dev root");
-        fs::write(usb.join("idProduct"), "C548\n").expect("product");
-        symlink(&hid, sys.join("class/hidraw/hidraw7")).expect("class link");
-        symlink(".", hid.join("device")).expect("device link");
-
-        assert_eq!(find_bolt_hidraw(&sys, &dev), Some(dev.join("hidraw7")));
-    }
-
-    #[test]
-    fn discovery_rejects_wrong_interface_and_malformed_tree() {
-        use std::os::unix::fs::symlink;
-
-        let root = TempDir::new();
-        let sys = root.0.join("sys");
-        let usb = sys.join("devices/usb/1-2");
-        let hid = usb.join("1-2:1.bad/hidraw/hidraw0");
-        fs::create_dir_all(&hid).expect("hid hierarchy");
-        fs::create_dir_all(sys.join("class/hidraw")).expect("class hierarchy");
-        fs::write(usb.join("idProduct"), BOLT_PID).expect("product");
-        symlink(&hid, sys.join("class/hidraw/hidraw0")).expect("class link");
-        symlink(".", hid.join("device")).expect("device link");
-
-        assert_eq!(find_bolt_hidraw(&sys, &root.0.join("dev")), None);
-    }
-
-    #[test]
-    fn transfer_skips_short_and_mismatched_reports() {
-        let packet = [LONG_REPORT_ID, 2, 7, SOFTWARE_ID, 0];
-        let mut device = FakeDevice::default();
-        device.reply(&[LONG_REPORT_ID, 2, 7, SOFTWARE_ID]);
-        device.reply(&response(3, 7, &[10]));
-        device.reply(&response(2, 8, &[20]));
-        device.reply(&response(2, 7, &[30]));
-
-        let received = transfer(&mut device, &packet, 7).expect("transfer");
-
-        assert_eq!(received.expect("matching response")[4], 30);
-        assert_eq!(device.writes, vec![packet]);
-        assert_eq!(device.timeouts, vec![TIMEOUT_MS; 4]);
-    }
-
-    #[test]
-    fn transfer_timeout_and_read_error_return_no_response() {
-        let packet = [LONG_REPORT_ID, 1, 0, SOFTWARE_ID, 0];
-        let mut timeout = FakeDevice::default();
-        timeout.timeout();
-        assert_eq!(transfer(&mut timeout, &packet, 0).expect("timeout"), None);
-
-        let mut failed = FakeDevice::default();
-        failed.reads.push_back(Err(io::ErrorKind::PermissionDenied));
-        assert_eq!(transfer(&mut failed, &packet, 0).expect("read error"), None);
-    }
-
-    #[test]
-    fn transfer_write_failure_is_an_error() {
-        let mut device = FakeDevice {
-            write_error: Some(io::ErrorKind::PermissionDenied),
-            ..FakeDevice::default()
-        };
-        assert!(matches!(
-            transfer(&mut device, &[LONG_REPORT_ID, 1, 0, SOFTWARE_ID], 0),
-            Err(HidError::Write(_))
-        ));
-    }
-
-    #[test]
-    fn feature_query_emits_exact_root_packet() {
-        let mut device = FakeDevice::default();
-        device.reply(&response(3, ROOT_FEATURE, &[9]));
-
-        assert_eq!(feature_index(&mut device, 3, 0x1004).expect("feature"), 9);
-        assert_eq!(
-            device.writes[0],
-            [LONG_REPORT_ID, 3, ROOT_FEATURE, SOFTWARE_ID, 0x10, 0x04]
-                .into_iter()
-                .chain([0; 14])
-                .collect::<Vec<_>>()
-        );
-    }
-
-    #[test]
-    fn transfer_stops_after_ten_mismatched_reports() {
-        let packet = [LONG_REPORT_ID, 1, 7, SOFTWARE_ID, 0];
-        let mut device = FakeDevice::default();
-        for _ in 0..MAX_READS + 1 {
-            device.reply(&response(2, 7, &[10]));
-        }
-
-        assert_eq!(transfer(&mut device, &packet, 7).expect("transfer"), None);
-        assert_eq!(device.timeouts.len(), MAX_READS);
-        assert_eq!(device.reads.len(), 1);
-    }
-
-    #[test]
-    fn absent_battery_feature_stops_after_root_query() {
-        let mut device = FakeDevice::default();
-        device.reply(&response(1, ROOT_FEATURE, &[0]));
-
-        assert_eq!(battery_level(&mut device, 1).expect("unsupported"), None);
-        assert_eq!(device.writes.len(), 1);
-    }
-
-    #[test]
-    fn absent_name_feature_returns_empty_name() {
-        let mut device = FakeDevice::default();
-        device.reply(&response(1, ROOT_FEATURE, &[0]));
-
-        assert_eq!(device_name(&mut device, 1).expect("unsupported"), "");
-        assert_eq!(device.writes.len(), 1);
-    }
-
-    #[test]
-    fn battery_query_emits_exact_function_packet_and_converts_level() {
-        let mut device = FakeDevice::default();
-        device.reply(&response(4, ROOT_FEATURE, &[7]));
-        device.reply(&response(4, 7, &[83]));
-
-        assert_eq!(battery_level(&mut device, 4).expect("battery"), Some(83));
-        assert_eq!(
-            device.writes[1],
-            [LONG_REPORT_ID, 4, 7, 0x11]
-                .into_iter()
-                .chain([0; 16])
-                .collect::<Vec<_>>()
-        );
-    }
-
-    #[test]
-    fn battery_report_timeout_returns_no_level() {
-        let mut device = FakeDevice::default();
-        device.reply(&response(4, ROOT_FEATURE, &[7]));
-        device.timeout();
-
-        assert_eq!(battery_level(&mut device, 4).expect("timeout"), None);
-        assert_eq!(device.writes.len(), 2);
-    }
-
-    #[test]
-    fn name_query_decodes_ascii_replaces_invalid_bytes_and_trims() {
-        let mut device = FakeDevice::default();
-        device.reply(&response(1, ROOT_FEATURE, &[5]));
-        device.reply(&response(1, 5, b" MX\xff Keys \0ignored"));
-
-        assert_eq!(
-            device_name(&mut device, 1).expect("name"),
-            "MX\u{fffd} Keys"
-        );
-        assert_eq!(
-            device.writes[1],
-            [LONG_REPORT_ID, 1, 5, 0x11, 0]
-                .into_iter()
-                .chain([0; 15])
-                .collect::<Vec<_>>()
-        );
-    }
-
-    #[test]
-    fn combined_query_fetches_name_then_battery() {
-        let mut device = FakeDevice::default();
-        device.reply(&response(2, ROOT_FEATURE, &[5]));
-        device.reply(&response(2, 5, b"Mouse\0"));
-        device.reply(&response(2, ROOT_FEATURE, &[7]));
-        device.reply(&response(2, 7, &[64]));
-
-        assert_eq!(
-            query_device(&mut device, 2, true).expect("query"),
-            Some(BoltBattery {
-                name: String::from("Mouse"),
-                level: 64,
-            })
-        );
-        assert_eq!(device.writes.len(), 4);
-    }
-
-    #[test]
-    fn battery_timeout_returns_success_without_level() {
-        let mut device = FakeDevice::default();
-        device.timeout();
-
-        assert_eq!(query_device(&mut device, 1, false).expect("query"), None);
-    }
-
-    #[test]
-    fn facade_reports_absent_device_and_invalid_index() {
-        let root = TempDir::new();
-        let mut facade = BoltHidFacade::new(root.0.join("sys"), root.0.join("dev"));
-
-        assert!(matches!(
-            facade.query(1, false),
-            Err(BoundaryError::HidFailed { path: None, .. })
-        ));
-        assert!(matches!(
-            facade.query(256, false),
-            Err(BoundaryError::HidFailed { path: None, .. })
-        ));
-    }
-
-    #[test]
-    fn facade_reports_open_failure_with_device_path() {
-        use std::os::unix::fs::symlink;
-
-        let root = TempDir::new();
-        let sys = root.0.join("sys");
-        let dev = root.0.join("dev");
-        let usb = sys.join("devices/usb/1-2");
-        let interface = usb.join("1-2:1.2");
-        let hid = interface.join("hid/hidraw/hidraw4");
-        fs::create_dir_all(&hid).expect("hid hierarchy");
-        fs::create_dir_all(sys.join("class/hidraw")).expect("class hierarchy");
-        fs::create_dir_all(&dev).expect("dev root");
-        fs::write(usb.join("idProduct"), BOLT_PID).expect("product");
-        symlink(&hid, sys.join("class/hidraw/hidraw4")).expect("class link");
-        symlink(".", hid.join("device")).expect("device link");
-        let mut facade = BoltHidFacade::new(sys, dev.clone());
-
-        let error = facade.query(1, false).expect_err("missing dev node");
-
-        assert!(matches!(
-            error,
-            BoundaryError::HidFailed {
-                path: Some(ref path),
-                ..
-            } if path == &dev.join("hidraw4")
-        ));
-        assert!(error.to_string().contains("hidraw4"));
-    }
-}
+mod tests;

@@ -7,7 +7,7 @@ Run commands from repository root. Development setup and full gates live in `doc
 ## Architecture boundaries
 
 - Item identity is `metric[:form]`: domain rules live in `src/domain/{metric,form,item,registry}.rs`; render dispatch lives in `src/render/registry.rs`.
-- Pipeline: `src/sensors/` -> `ReadingsSnapshot` -> `src/render/{formatter,model,mono}.rs` -> table-free HTML.
+- Pipeline: `src/sensors/` -> `DisplaySnapshot` -> `src/render/{formatter,model,mono}.rs` -> table-free HTML.
 - `src/daemon.rs` owns lifecycle, reload, collection, publication, page wake, and shutdown. Host process/D-Bus/notification boundaries live in `src/adapters.rs` and are injectable through `domain/boundary.rs`.
 - Read `docs/LAYOUT.md` before changing `render/mono.rs`; real HTML tables are forbidden on render paths because Qt RichText layout is prohibitively costly.
 
@@ -21,6 +21,12 @@ Run commands from repository root. Development setup and full gates live in `doc
 - Qt RichText supports less CSS than browsers. Validate visual changes with `tools/qt_shot.py` or `tools/qt_render_matrix.sh` before theorizing from browser CSS.
 - Keep all repository text English. Comments explain invariants, not mechanics.
 - Never hard-wrap prose, docs, or comments to a fixed column. Write each paragraph and comment sentence as a single line; let viewers reflow.
+
+## Source structure
+
+- Keep Rust test implementations outside production files. Unit tests live in child modules such as `foo/tests.rs` or `foo/tests/*.rs`, referenced with `#[cfg(test)] mod tests;`. Reserve root `tests/` for integration tests exercising public interfaces.
+- Handwritten code files, including test files, must not exceed 1,000 physical lines. Treat 800 lines as a warning to plan a cohesive split. Split any touched over-limit file before adding behavior. Generated files, fixtures, and golden outputs are exempt.
+- Split by cohesive responsibility behind a small interface. Do not satisfy line limits with `include!`, numbered fragments, or arbitrary function/type scattering.
 
 ## Shell scripts
 

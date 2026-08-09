@@ -8,25 +8,30 @@ use std::time::{Duration, Instant};
 use crate::adapters::{ProductionClock, ProductionCommandRunner, ProductionDbusFacade};
 use crate::cli::{PanelLayout, RenderCommand, RenderComponent, RenderFormat};
 use crate::config::{Config, apply_canonical_width, load_config, resolve_style};
-use crate::daemon::{executable_lookup, plasma_is_light, read_css, render_page, render_page_id};
+use crate::daemon::{
+    executable_lookup, merge_process_page_sample, plasma_is_light, read_css, render_page_id,
+    render_page_with_clock,
+};
 use crate::domain::boundary::FilesystemRoots;
-use crate::domain::readings::{HardwareSnapshot, ReadingsSnapshot};
+use crate::domain::readings::{DisplaySnapshot, HardwareInventory};
 use crate::domain::registry::list_items;
-use crate::domain::state::DaemonStateSnapshot;
 use crate::error::Result;
 use crate::page_commands::{PageCommandCache, build_pages};
 use crate::render::PanelFormatter;
 use crate::sensors::hid::BoltHidFacade;
-use crate::sensors::process::read_top_process_page;
-use crate::sensors::{CollectCtx, CollectorState, Timings, collect, discover_hardware};
+use crate::sensors::process::ProcessState;
+use crate::sensors::{
+    CollectCtx, OwnerRefs, Timings, collect, cpu, discover_hardware, disk, external, gpu_history,
+    gpu_intel, gpu_nvidia, memory, network, power,
+};
 
 const RENDER_PANEL_FILE: &str = "/tmp/plasma-top_render_panel.html";
 const RENDER_TOOLTIP_FILE: &str = "/tmp/plasma-top_render_tooltip.html";
 
 struct OneShot {
     cfg: Config,
-    hw: HardwareSnapshot,
-    readings: ReadingsSnapshot,
+    hw: HardwareInventory,
+    readings: DisplaySnapshot,
     commands: ProductionCommandRunner,
     roots: FilesystemRoots,
     clock: ProductionClock,
@@ -57,31 +62,58 @@ fn collect_one_shot(
         cpu_count,
     );
     let clock = ProductionClock::default();
-    let mut collector = CollectorState::default();
-    let mut state = DaemonStateSnapshot::default();
+    let mut cpu_owner = cpu::CpuState::default();
+    let mut memory_owner = memory::MemoryState::default();
+    let mut network_owner = network::NetworkState::default();
+    let mut disk_owner = disk::DiskState::default();
+    let mut process_owner = ProcessState::default();
+    let mut intel_gpu_owner = gpu_intel::IntelGpuState::default();
+    let mut power_owner = power::PowerState::default();
+    let mut nvidia_owner = gpu_nvidia::NvidiaState::default();
+    let mut gpu_history_owner = gpu_history::GpuHistoryState::default();
+    let mut external_owner = external::ExternalState::default();
     let mut bolt = BoltHidFacade::default();
     for warm in [false, true] {
         if warm {
             thread::sleep(Duration::from_secs(1));
         }
-        let mut ctx = CollectCtx::new(&roots, &mut commands, &mut dbus, clock.snapshot());
+        let mut capture_clock = || clock.snapshot();
+        let mut ctx = CollectCtx::new(&roots, &mut commands, &mut dbus, &mut capture_clock);
         ctx.bolt = Some(&mut bolt);
-        let readings = collect(&mut collector, &mut state, &mut hw, &cfg, &mut ctx, None);
+        let readings = collect(
+            OwnerRefs {
+                cpu: &mut cpu_owner,
+                memory: &mut memory_owner,
+                network: &mut network_owner,
+                disk: &mut disk_owner,
+                process: &mut process_owner,
+                intel_gpu: &mut intel_gpu_owner,
+                power: &mut power_owner,
+                nvidia: &mut nvidia_owner,
+                gpu_history: &mut gpu_history_owner,
+                external: &mut external_owner,
+            },
+            &mut hw,
+            &cfg,
+            &mut ctx,
+            None,
+        );
         if warm {
             let mut readings = readings;
             if page == Some("processes") {
-                let _ = read_top_process_page(
+                merge_process_page_sample(
+                    &mut readings,
                     &roots.proc_root,
-                    &mut collector.process,
-                    clock.snapshot(),
+                    &mut process_owner,
+                    &mut || clock.snapshot(),
                 );
                 thread::sleep(Duration::from_millis(500));
-                readings.top_process_full = read_top_process_page(
+                merge_process_page_sample(
+                    &mut readings,
                     &roots.proc_root,
-                    &mut collector.process,
-                    clock.snapshot(),
-                )
-                .or(readings.top_process_full);
+                    &mut process_owner,
+                    &mut || clock.snapshot(),
+                );
             }
             let width = PanelFormatter::new(&cfg, &hw).canonical_width(&readings);
             apply_canonical_width(&mut cfg, i32::try_from(width).unwrap_or(i32::MAX));
@@ -121,7 +153,8 @@ fn tooltip_for(one: &mut OneShot, page_id: Option<&str>, css: &str) -> String {
     let index = usize::from(active.len() > 1);
     let lookup = executable_lookup();
     let mut cache = PageCommandCache::new();
-    render_page(
+    let cadence_at = one.clock.snapshot().monotonic;
+    render_page_with_clock(
         &one.cfg,
         &one.hw,
         &one.readings,
@@ -131,8 +164,9 @@ fn tooltip_for(one: &mut OneShot, page_id: Option<&str>, css: &str) -> String {
         &mut one.commands,
         &lookup,
         &mut cache,
-        one.clock.snapshot().monotonic,
+        cadence_at,
         &one.roots.proc_root,
+        &mut || one.clock.snapshot().monotonic,
     )
 }
 
@@ -281,7 +315,7 @@ macro_rules! reading {
     };
 }
 
-fn print_readings(r: &ReadingsSnapshot) {
+fn print_readings(r: &DisplaySnapshot) {
     reading!(r, cpu_usage);
     reading!(r, cpu_temp);
     reading!(r, "cpu_freq", cpu_freq_mhz);
@@ -354,15 +388,34 @@ pub fn run_profiling(config_path: Option<&Path>) -> Result<()> {
     println!("  load_config()                {config_ms:7.2}ms");
     println!("  discover_hardware()          {discovery_ms:7.2}ms\n");
     let clock = ProductionClock::default();
-    let mut lanes = CollectorState::default();
-    let mut state = DaemonStateSnapshot::default();
+    let mut cpu_owner = cpu::CpuState::default();
+    let mut memory_owner = memory::MemoryState::default();
+    let mut network_owner = network::NetworkState::default();
+    let mut disk_owner = disk::DiskState::default();
+    let mut process_owner = ProcessState::default();
+    let mut intel_gpu_owner = gpu_intel::IntelGpuState::default();
+    let mut power_owner = power::PowerState::default();
+    let mut nvidia_owner = gpu_nvidia::NvidiaState::default();
+    let mut gpu_history_owner = gpu_history::GpuHistoryState::default();
+    let mut external_owner = external::ExternalState::default();
     for label in ["COLD POLL (EMPTY CACHE)", "WARM POLL (VALID CACHE)"] {
         let mut timings = Timings::new();
-        let mut ctx = CollectCtx::new(&roots, &mut commands, &mut dbus, clock.snapshot());
+        let mut capture_clock = || clock.snapshot();
+        let mut ctx = CollectCtx::new(&roots, &mut commands, &mut dbus, &mut capture_clock);
         let start = Instant::now();
         let readings = collect(
-            &mut lanes,
-            &mut state,
+            OwnerRefs {
+                cpu: &mut cpu_owner,
+                memory: &mut memory_owner,
+                network: &mut network_owner,
+                disk: &mut disk_owner,
+                process: &mut process_owner,
+                intel_gpu: &mut intel_gpu_owner,
+                power: &mut power_owner,
+                nvidia: &mut nvidia_owner,
+                gpu_history: &mut gpu_history_owner,
+                external: &mut external_owner,
+            },
             &mut hw,
             &cfg,
             &mut ctx,
@@ -403,14 +456,4 @@ pub fn run_list_items() -> Result<()> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn strip_html_preserves_rows_and_spacing() {
-        assert_eq!(
-            strip_html("<style>.x{}</style><div>a&nbsp;b<br>c</div>"),
-            "a b\nc\n"
-        );
-    }
-}
+mod tests;

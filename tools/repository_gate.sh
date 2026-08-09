@@ -45,6 +45,39 @@ if rg -n '(python[0-9]*|src/[^ ]*\.py|python_oracle|parity_runner)' \
     fail "Python runtime path remains on a production surface"
 fi
 
+mapfile -t handwritten_code < <(
+    git ls-files --cached --others --exclude-standard -- \
+        '*.rs' '*.qml' '*.js' '*.py' '*.sh'
+)
+handwritten_code+=(plasma-top packaging/plasma-top-launcher packaging/aur/PKGBUILD packaging/aur/plasma-top.install)
+oversized_code=()
+for path in "${handwritten_code[@]}"; do
+    [[ -f "$path" ]] || continue
+    case "$path" in
+    tests/fixtures/* | tests/golden/* | */generated/* | *.generated.*) continue ;;
+    esac
+    line_count=$(awk 'END { print NR }' "$path")
+    if ((line_count > 1000)); then
+        oversized_code+=("$path ($line_count lines)")
+    fi
+done
+if ((${#oversized_code[@]})); then
+    printf 'repository gate: handwritten code exceeds 1,000 lines:\n' >&2
+    printf '  %s\n' "${oversized_code[@]}" >&2
+    exit 1
+fi
+
+mapfile -t production_rust < <(
+    find src -type f -name '*.rs' \
+        -not -name 'tests.rs' -not -path '*/tests/*' \
+        -print | sort
+)
+if rg -n -U '#\[cfg\([^]]*\btest\b[^]]*\)\][[:space:]]*(?:#\[[^]]*\][[:space:]]*)*(?:pub(?:\([^)]*\))?[[:space:]]+)?mod[[:space:]]+[[:alnum:]_]+[[:space:]]*\{' "${production_rust[@]}" ||
+    rg -n '^[[:space:]]*#\[(?:[[:alnum:]_]+::)?test(?:\([^]]*\))?\]' "${production_rust[@]}" ||
+    rg -n '^[[:space:]]*mod tests[[:space:]]*\{' "${production_rust[@]}"; then
+    fail "inline Rust test module remains in production code"
+fi
+
 grep -Fqx 'ExecStart=/usr/bin/plasma-top daemon' service/plasma-top.service ||
     fail "system service launcher drift"
 grep -Fqx 'ExecStart=%h/.local/bin/plasma-top daemon' service/plasma-top-user.service ||
@@ -53,9 +86,10 @@ grep -Fq 'exec /usr/lib/plasma-top/plasma-top "$@"' packaging/plasma-top-launche
     fail "package launcher drift"
 grep -Fq "makedepends=('cargo' 'git')" packaging/aur/PKGBUILD ||
     fail "AUR Rust build dependencies drift"
-grep -Fq 'canonical_width_covers_every_tooltip_item' src/render/formatter.rs ||
+rg -Fq 'canonical_width_covers_every_tooltip_item' \
+    src/render/formatter.rs src/render/formatter ||
     fail "canonical-width closure test missing"
-grep -Fq 'html.contains("<table")' src/render/mono.rs ||
+rg -Fq 'html.contains("<table")' src/render/mono.rs src/render/mono ||
     fail "table-free render assertion missing"
 
 echo "repository gate: ok"
