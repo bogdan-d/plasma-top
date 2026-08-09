@@ -1,7 +1,7 @@
 # Introduce domain model and owner state
 
 Type: task
-Status: ready-for-agent
+Status: resolved
 Blocked by: 01
 
 ## Objective
