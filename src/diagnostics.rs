@@ -9,8 +9,7 @@ use crate::adapters::{ProductionClock, ProductionCommandRunner, ProductionDbusFa
 use crate::cli::{PanelLayout, RenderCommand, RenderComponent, RenderFormat};
 use crate::config::{Config, apply_canonical_width, load_config, resolve_style};
 use crate::daemon::{
-    executable_lookup, merge_process_page_sample, plasma_is_light, read_css, render_page_id,
-    render_page_with_clock,
+    executable_lookup, plasma_is_light, read_css, render_page_id, render_page_with_clock,
 };
 use crate::domain::boundary::FilesystemRoots;
 use crate::domain::readings::{DisplaySnapshot, HardwareInventory};
@@ -18,11 +17,12 @@ use crate::domain::registry::list_items;
 use crate::error::Result;
 use crate::page_commands::{PageCommandCache, build_pages};
 use crate::render::PanelFormatter;
+use crate::scheduler::{PageId, SchedulerTime};
 use crate::sensors::hid::BoltHidFacade;
 use crate::sensors::process::ProcessState;
 use crate::sensors::{
-    CollectCtx, OwnerRefs, Timings, collect, cpu, discover_hardware, disk, external, gpu_history,
-    gpu_intel, gpu_nvidia, memory, network, power,
+    CollectCtx, OwnerRefs, SerialSchedule, Timings, cpu, discover_hardware, disk, external,
+    gpu_history, gpu_intel, gpu_nvidia, memory, network, power,
 };
 
 const RENDER_PANEL_FILE: &str = "/tmp/plasma-top_render_panel.html";
@@ -35,6 +35,22 @@ struct OneShot {
     commands: ProductionCommandRunner,
     roots: FilesystemRoots,
     clock: ProductionClock,
+}
+
+pub(crate) fn capture_diagnostic_baseline_and_warm<T>(
+    mut capture: impl FnMut() -> T,
+    warm_up: impl FnOnce(),
+) -> T {
+    let _ = capture();
+    warm_up();
+    capture()
+}
+
+fn diagnostic_acquisition_page(page: Option<&str>) -> PageId {
+    match page.map_or(PageId::Main, PageId::from_id) {
+        PageId::Connections | PageId::Fastfetch => PageId::Main,
+        page => page,
+    }
 }
 
 fn collect_one_shot(
@@ -73,61 +89,50 @@ fn collect_one_shot(
     let mut gpu_history_owner = gpu_history::GpuHistoryState::default();
     let mut external_owner = external::ExternalState::default();
     let mut bolt = BoltHidFacade::default();
-    for warm in [false, true] {
-        if warm {
-            thread::sleep(Duration::from_secs(1));
-        }
-        let mut capture_clock = || clock.snapshot();
-        let mut ctx = CollectCtx::new(&roots, &mut commands, &mut dbus, &mut capture_clock);
-        ctx.bolt = Some(&mut bolt);
-        let readings = collect(
-            OwnerRefs {
-                cpu: &mut cpu_owner,
-                memory: &mut memory_owner,
-                network: &mut network_owner,
-                disk: &mut disk_owner,
-                process: &mut process_owner,
-                intel_gpu: &mut intel_gpu_owner,
-                power: &mut power_owner,
-                nvidia: &mut nvidia_owner,
-                gpu_history: &mut gpu_history_owner,
-                external: &mut external_owner,
-            },
-            &mut hw,
-            &cfg,
-            &mut ctx,
-            None,
-        );
-        if warm {
-            let mut readings = readings;
-            if page == Some("processes") {
-                merge_process_page_sample(
-                    &mut readings,
-                    &roots.proc_root,
-                    &mut process_owner,
-                    &mut || clock.snapshot(),
-                );
-                thread::sleep(Duration::from_millis(500));
-                merge_process_page_sample(
-                    &mut readings,
-                    &roots.proc_root,
-                    &mut process_owner,
-                    &mut || clock.snapshot(),
-                );
-            }
-            let width = PanelFormatter::new(&cfg, &hw).canonical_width(&readings);
-            apply_canonical_width(&mut cfg, i32::try_from(width).unwrap_or(i32::MAX));
-            return Ok(OneShot {
-                cfg,
-                hw,
-                readings,
-                commands,
-                roots,
-                clock,
-            });
-        }
-    }
-    unreachable!("two fixed warm-up passes always return on the second pass")
+    let mut schedule = SerialSchedule::new(
+        &cfg,
+        &hw,
+        &roots.proc_root,
+        SchedulerTime::from_duration(clock.snapshot().monotonic),
+        diagnostic_acquisition_page(page),
+    );
+    let readings = capture_diagnostic_baseline_and_warm(
+        || {
+            let mut capture_clock = || clock.snapshot();
+            let mut ctx = CollectCtx::new(&roots, &mut commands, &mut dbus, &mut capture_clock);
+            ctx.bolt = Some(&mut bolt);
+            schedule.sample(
+                OwnerRefs {
+                    cpu: &mut cpu_owner,
+                    memory: &mut memory_owner,
+                    network: &mut network_owner,
+                    disk: &mut disk_owner,
+                    process: &mut process_owner,
+                    intel_gpu: &mut intel_gpu_owner,
+                    power: &mut power_owner,
+                    nvidia: &mut nvidia_owner,
+                    gpu_history: &mut gpu_history_owner,
+                    external: &mut external_owner,
+                },
+                &mut hw,
+                &cfg,
+                &mut ctx,
+                None,
+                None,
+            )
+        },
+        || thread::sleep(Duration::from_secs(1)),
+    );
+    let width = PanelFormatter::new(&cfg, &hw).canonical_width(&readings);
+    apply_canonical_width(&mut cfg, i32::try_from(width).unwrap_or(i32::MAX));
+    Ok(OneShot {
+        cfg,
+        hw,
+        readings,
+        commands,
+        roots,
+        clock,
+    })
 }
 
 fn active_css(cfg: &Config, commands: &mut ProductionCommandRunner) -> String {
@@ -398,12 +403,19 @@ pub fn run_profiling(config_path: Option<&Path>) -> Result<()> {
     let mut nvidia_owner = gpu_nvidia::NvidiaState::default();
     let mut gpu_history_owner = gpu_history::GpuHistoryState::default();
     let mut external_owner = external::ExternalState::default();
+    let mut schedule = SerialSchedule::new(
+        &cfg,
+        &hw,
+        &roots.proc_root,
+        SchedulerTime::from_duration(clock.snapshot().monotonic),
+        PageId::Main,
+    );
     for label in ["COLD POLL (EMPTY CACHE)", "WARM POLL (VALID CACHE)"] {
         let mut timings = Timings::new();
         let mut capture_clock = || clock.snapshot();
         let mut ctx = CollectCtx::new(&roots, &mut commands, &mut dbus, &mut capture_clock);
         let start = Instant::now();
-        let readings = collect(
+        let readings = schedule.sample(
             OwnerRefs {
                 cpu: &mut cpu_owner,
                 memory: &mut memory_owner,
@@ -420,6 +432,7 @@ pub fn run_profiling(config_path: Option<&Path>) -> Result<()> {
             &cfg,
             &mut ctx,
             Some(&mut timings),
+            None,
         );
         let total = start.elapsed();
         let width = PanelFormatter::new(&cfg, &hw).canonical_width(&readings);

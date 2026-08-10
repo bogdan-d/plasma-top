@@ -1,3 +1,7 @@
+//! Issue-02 collection characterization harness retained only for owner regression tests.
+//!
+//! Production cadence lives exclusively in [`crate::scheduler`]; this test-only pass preserves pre-cutover fixtures while they continue to verify one-attempt owner semantics.
+
 use std::collections::BTreeSet;
 use std::str::FromStr;
 use std::time::Duration;
@@ -209,6 +213,8 @@ fn flatten_network_info(result: NetworkInfoResult, readings: &mut DisplaySnapsho
     };
     readings.net_device = sample.value.device.clone();
     readings.ip_address = sample.value.ip_address;
+    readings.wifi_ssid = None;
+    readings.wifi_signal_percent = None;
     if let Some(wifi) = result.wifi.sample
         && Some(wifi.value.device.as_str()) == sample.value.device.as_deref()
     {
@@ -281,6 +287,7 @@ fn flatten_gpu_history(result: gpu_history::GpuHistoryResult, readings: &mut Dis
 /// Display values plus current-attempt values eligible for synchronous notifications.
 pub(crate) struct CollectionOutput {
     pub(crate) display: DisplaySnapshot,
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) notifications: DisplaySnapshot,
 }
 
@@ -899,7 +906,7 @@ pub(crate) fn collect_with_notifications(
 /// Mirrors the body of Python's `needed_capabilities(cfg)`: union of every
 /// configured item's metric capabilities, capabilities pulled by enabled
 /// notification flags, and the `graphs` page's fixed capability set.
-fn resolve_capabilities(cfg: &Config) -> BTreeSet<Capability> {
+pub(super) fn resolve_capabilities(cfg: &Config) -> BTreeSet<Capability> {
     let items = cfg
         .panel
         .sections

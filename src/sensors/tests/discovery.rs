@@ -1,6 +1,6 @@
 use super::*;
 
-use crate::sensors::DiscoveryOutcome;
+use crate::sensors::{DiscoveryOutcome, ReconciliationOutcome};
 
 #[derive(Clone, Copy)]
 enum RouteReply {
@@ -224,6 +224,193 @@ fn discover_hardware_degrades_to_safe_defaults_on_absence() {
     assert!(!hw.has_wifi);
     assert!(hw.net_device.is_none());
     assert_eq!(hw.cpu_count, 1);
+}
+
+#[test]
+fn local_startup_discovery_seeds_sysfs_inventory_without_slow_boundaries() {
+    let tree = TempTree::new();
+    tree.write("sys/class/hwmon/hwmon0/name", "nct6775\n");
+    tree.write("sys/class/hwmon/hwmon0/fan1_input", "1200\n");
+    tree.write("sys/class/backlight/panel/brightness", "50\n");
+    tree.write("sys/class/backlight/panel/max_brightness", "100\n");
+    tree.mkdir("sys/class/net/wlan0/wireless");
+    tree.mkdir("sys/bus/pci/devices");
+    tree.mkdir("sys/class/drm");
+    tree.mkdir("sys/devices/system/cpu");
+    tree.write("proc/mounts", "");
+    let mut cfg = Config::default();
+    cfg.sensors.fan1_speed = Some(String::from("nct6775|fan1_input"));
+
+    let hw = crate::sensors::discover_local_hardware(&tree.sys(), &tree.proc(), &cfg, 8);
+
+    assert_eq!(hw.cpu_count, 8);
+    assert!(hw.fan_paths.contains_key("1"));
+    assert!(hw.has_backlight);
+    assert!(hw.has_wifi);
+    assert!(hw.battery_sys_ids.is_empty());
+    assert!(hw.disk_smart_drives.is_empty());
+    assert!(hw.net_device.is_none());
+}
+
+#[test]
+fn family_reconciliation_confirms_removal_without_polling_other_families() {
+    let tree = TempTree::new();
+    tree.mkdir("sys/class/hwmon");
+    let mut cfg = Config::default();
+    cfg.sensors.fan1_speed = Some(String::from("nct6775|fan1_input"));
+    let mut hw = HardwareInventory {
+        fan_paths: [(String::from("1"), PathBuf::from("/old/fan"))].into(),
+        battery_sys_ids: vec![String::from("BAT0")],
+        has_nvidia: true,
+        ..HardwareInventory::default()
+    };
+    let mut dbus = FakeDbus::new();
+    let mut commands = FakeCommandRunner::new();
+
+    let outcome = crate::sensors::reconcile_inventory_family(
+        crate::domain::readings::InventoryFamily::Thermal,
+        &mut hw,
+        &tree.sys(),
+        &tree.proc(),
+        &cfg,
+        &mut dbus,
+        &mut commands,
+    );
+
+    assert_eq!(outcome, ReconciliationOutcome::Captured);
+    assert!(hw.fan_paths.is_empty());
+    assert_eq!(hw.battery_sys_ids, ["BAT0"]);
+    assert!(hw.has_nvidia);
+    assert!(dbus.call_trace().is_empty());
+    assert!(commands.call_trace().is_empty());
+}
+
+#[test]
+fn route_reconciliation_retains_failure_and_captures_confirmed_absence() {
+    let tree = TempTree::new();
+    tree.mkdir("sys/class/net");
+    let mut hw = HardwareInventory {
+        net_device: Some(String::from("eth0")),
+        ..HardwareInventory::default()
+    };
+    let mut dbus = FakeDbus::new();
+    let mut failed_commands = FakeCommandRunner::new();
+
+    let failed = crate::sensors::reconcile_inventory_family(
+        crate::domain::readings::InventoryFamily::Network,
+        &mut hw,
+        &tree.sys(),
+        &tree.proc(),
+        &Config::default(),
+        &mut dbus,
+        &mut failed_commands,
+    );
+
+    assert_eq!(failed, ReconciliationOutcome::Failed);
+    assert_eq!(hw.net_device.as_deref(), Some("eth0"));
+
+    let mut absent_commands = FakeCommandRunner::new();
+    for args in [["route", "get", "8.8.8.8"], ["route", "show", "default"]] {
+        absent_commands.enqueue(IP, args, ok_cmd(IP, &args, ""));
+    }
+    let absent = crate::sensors::reconcile_inventory_family(
+        crate::domain::readings::InventoryFamily::Network,
+        &mut hw,
+        &tree.sys(),
+        &tree.proc(),
+        &Config::default(),
+        &mut dbus,
+        &mut absent_commands,
+    );
+
+    assert_eq!(absent, ReconciliationOutcome::Captured);
+    assert!(hw.net_device.is_none());
+}
+
+#[test]
+fn battery_reconciliation_retains_dbus_failure_and_captures_absence() {
+    let tree = TempTree::new();
+    let mut hw = HardwareInventory {
+        battery_sys_ids: vec![String::from("BAT0")],
+        ..HardwareInventory::default()
+    };
+    let mut commands = FakeCommandRunner::new();
+    let mut failed_dbus = FakeDbus::new();
+
+    let failed = crate::sensors::reconcile_inventory_family(
+        crate::domain::readings::InventoryFamily::SystemBattery,
+        &mut hw,
+        &tree.sys(),
+        &tree.proc(),
+        &Config::default(),
+        &mut failed_dbus,
+        &mut commands,
+    );
+
+    assert_eq!(failed, ReconciliationOutcome::Failed);
+    assert_eq!(hw.battery_sys_ids, ["BAT0"]);
+
+    let mut absent_dbus = FakeDbus::new();
+    absent_dbus.enqueue(
+        SYSTEM,
+        UPOWER_NAME,
+        UPOWER_PATH,
+        UPOWER_IFACE,
+        "EnumerateDevices",
+        enumerate_reply(&[]),
+    );
+    let absent = crate::sensors::reconcile_inventory_family(
+        crate::domain::readings::InventoryFamily::SystemBattery,
+        &mut hw,
+        &tree.sys(),
+        &tree.proc(),
+        &Config::default(),
+        &mut absent_dbus,
+        &mut commands,
+    );
+
+    assert_eq!(absent, ReconciliationOutcome::Captured);
+    assert!(hw.battery_sys_ids.is_empty());
+}
+
+#[test]
+fn sysfs_reconciliation_retains_incomplete_enumeration_and_captures_absence() {
+    let tree = TempTree::new();
+    let mut cfg = Config::default();
+    cfg.sensors.fan1_speed = Some(String::from("nct6775|fan1_input"));
+    let mut hw = HardwareInventory {
+        fan_paths: [(String::from("1"), PathBuf::from("/old/fan"))].into(),
+        ..HardwareInventory::default()
+    };
+    let mut dbus = FakeDbus::new();
+    let mut commands = FakeCommandRunner::new();
+
+    let failed = crate::sensors::reconcile_inventory_family(
+        crate::domain::readings::InventoryFamily::Thermal,
+        &mut hw,
+        &tree.sys(),
+        &tree.proc(),
+        &cfg,
+        &mut dbus,
+        &mut commands,
+    );
+
+    assert_eq!(failed, ReconciliationOutcome::Failed);
+    assert!(hw.fan_paths.contains_key("1"));
+
+    tree.mkdir("sys/class/hwmon");
+    let absent = crate::sensors::reconcile_inventory_family(
+        crate::domain::readings::InventoryFamily::Thermal,
+        &mut hw,
+        &tree.sys(),
+        &tree.proc(),
+        &cfg,
+        &mut dbus,
+        &mut commands,
+    );
+
+    assert_eq!(absent, ReconciliationOutcome::Captured);
+    assert!(hw.fan_paths.is_empty());
 }
 
 #[test]

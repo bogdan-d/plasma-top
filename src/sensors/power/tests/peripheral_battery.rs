@@ -1,5 +1,69 @@
 use super::*;
 
+#[test]
+fn configured_peripheral_sources_ignore_stale_discovered_inventory() {
+    let mut cfg = crate::config::Config::default();
+    cfg.battery.mouse_unifying = Some(String::from("/configured_mouse"));
+    cfg.battery.mouse_bolt = Some(9);
+    cfg.battery.kbd_bolt = Some(7);
+    let hw = HardwareInventory {
+        battery_mouse_id: Some(String::from("/stale_mouse")),
+        battery_kbd_id: Some(String::from("/stale_keyboard")),
+        ..HardwareInventory::default()
+    };
+    let mut state = PowerState {
+        battery_mouse_cache: BatteryPeripheralCache {
+            charge_percent: Some(80),
+            source: Some(String::from("upower:/configured_mouse")),
+            ..BatteryPeripheralCache::default()
+        },
+        battery_kbd_cache: BatteryPeripheralCache {
+            charge_percent: Some(70),
+            source: Some(String::from("bolt:7")),
+            ..BatteryPeripheralCache::default()
+        },
+        ..PowerState::default()
+    };
+    let capabilities =
+        std::collections::BTreeSet::from([Capability::BatteryMouse, Capability::BatteryKeyboard]);
+
+    state.reconcile_sources(&hw, &cfg, &capabilities);
+
+    assert_eq!(state.battery_mouse_cache.charge_percent, Some(80));
+    assert_eq!(state.battery_kbd_cache.charge_percent, Some(70));
+}
+
+#[test]
+fn configured_bolt_cache_survives_stale_inventory_and_transient_failure() {
+    let mut cfg = crate::config::Config::default();
+    cfg.battery.kbd_bolt = Some(7);
+    let hw = HardwareInventory {
+        battery_kbd_id: Some(String::from("/stale_keyboard")),
+        ..HardwareInventory::default()
+    };
+    let mut state = PowerState {
+        battery_kbd_cache: BatteryPeripheralCache {
+            name: String::from("Keyboard"),
+            charge_percent: Some(70),
+            sampled_at: Some(Duration::ZERO),
+            source: Some(String::from("bolt:7")),
+            ..BatteryPeripheralCache::default()
+        },
+        ..PowerState::default()
+    };
+    let capabilities = std::collections::BTreeSet::from([Capability::BatteryKeyboard]);
+    state.reconcile_sources(&hw, &cfg, &capabilities);
+    let mut bolt = FakeBolt::default();
+    bolt.push_err(7, false);
+
+    let reading =
+        read_battery_bolt_once(&mut state.battery_kbd_cache, &mut bolt, 7, None, clock(1));
+
+    assert_eq!(reading.expect("retained").charge_percent, 70);
+    assert_eq!(state.battery_kbd_cache.sampled_at, Some(Duration::ZERO));
+    assert_eq!(state.battery_kbd_cache.source.as_deref(), Some("bolt:7"));
+}
+
 // ── read_battery_periph ──────────────────────────────────────────────────
 
 #[test]

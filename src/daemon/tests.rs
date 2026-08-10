@@ -7,6 +7,8 @@ use crate::domain::boundary::{
 use std::cell::Cell;
 use std::collections::VecDeque;
 
+mod production_executor;
+
 #[test]
 fn rgb_and_luma_match_python_boundaries() {
     assert_eq!(parse_rgb("1, 2,3,255"), Some((1, 2, 3)));

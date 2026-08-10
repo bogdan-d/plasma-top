@@ -147,6 +147,20 @@ impl Form {
             | Self::Pair => SurfaceSet::TOOLTIP,
         }
     }
+
+    /// Returns whether this form renders recorded history rather than only the current value.
+    #[must_use]
+    pub const fn renders_history(self) -> bool {
+        matches!(
+            self,
+            Self::Spark
+                | Self::Braille
+                | Self::SparkValue
+                | Self::BrailleValue
+                | Self::BarSpark
+                | Self::BarBraille
+        )
+    }
 }
 
 impl Display for Shape {

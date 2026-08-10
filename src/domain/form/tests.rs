@@ -29,3 +29,20 @@ fn tooltip_only_forms_stay_out_of_panel() {
     assert!(!surfaces.contains(Surface::PanelHorizontal));
     assert!(!surfaces.contains(Surface::PanelVertical));
 }
+
+#[test]
+fn only_trace_forms_render_history() {
+    for form in [Form::Value, Form::Bar, Form::Pair] {
+        assert!(!form.renders_history(), "{form:?}");
+    }
+    for form in [
+        Form::Spark,
+        Form::Braille,
+        Form::SparkValue,
+        Form::BrailleValue,
+        Form::BarSpark,
+        Form::BarBraille,
+    ] {
+        assert!(form.renders_history(), "{form:?}");
+    }
+}

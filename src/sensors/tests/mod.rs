@@ -404,4 +404,5 @@ mod intel_collection;
 mod network_collection;
 mod nvidia_collection;
 mod sampling;
+mod scheduled_execution;
 mod slow_source_coordination;

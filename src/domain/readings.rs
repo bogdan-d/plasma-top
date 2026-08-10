@@ -29,6 +29,8 @@ impl<T> MetricSample<T> {
 pub struct RetainedMetricSample<T> {
     /// Latest successful sample, retained across failed attempts.
     pub latest: Option<MetricSample<T>>,
+    /// Successful sample immediately preceding `latest`.
+    previous: Option<MetricSample<T>>,
     /// Monotonic instant of the most recent attempt, successful or not.
     pub attempted_at: Option<Duration>,
     /// Monotonic instant of the most recent failed attempt.
@@ -50,8 +52,21 @@ impl<T> RetainedMetricSample<T> {
     /// Records a successful value.
     pub fn record_value(&mut self, value: T, captured_at: Duration) {
         self.attempted_at = Some(captured_at);
-        self.latest = Some(MetricSample::new(value, captured_at));
+        self.previous = self.latest.replace(MetricSample::new(value, captured_at));
         self.latest_attempt_failed = false;
+    }
+
+    /// Returns the newest retained sample captured no later than `cutoff`.
+    #[must_use]
+    pub fn sample_at_or_before(&self, cutoff: Duration) -> Option<&MetricSample<T>> {
+        self.latest
+            .as_ref()
+            .filter(|sample| sample.captured_at <= cutoff)
+            .or_else(|| {
+                self.previous
+                    .as_ref()
+                    .filter(|sample| sample.captured_at <= cutoff)
+            })
     }
 
     /// Records a successful attempt that produced no comparable value.
@@ -71,12 +86,14 @@ impl<T> RetainedMetricSample<T> {
     pub fn record_absence(&mut self, attempted_at: Duration) {
         self.attempted_at = Some(attempted_at);
         self.latest = None;
+        self.previous = None;
         self.latest_attempt_failed = false;
     }
 
     /// Invalidates both the retained sample and attempt time.
     pub fn invalidate(&mut self) {
         self.latest = None;
+        self.previous = None;
         self.attempted_at = None;
         self.failed_at = None;
         self.latest_attempt_failed = false;
@@ -87,6 +104,7 @@ impl<T> Default for RetainedMetricSample<T> {
     fn default() -> Self {
         Self {
             latest: None,
+            previous: None,
             attempted_at: None,
             failed_at: None,
             latest_attempt_failed: false,
@@ -218,6 +236,21 @@ pub struct SmartDisk {
     pub interface: DiskSmartInterface,
     /// Whether the kernel reports the disk as rotational.
     pub rotational: bool,
+}
+
+/// Discoverable hardware family reconciled independently according to demand.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) enum InventoryFamily {
+    Cpu,
+    Thermal,
+    SystemBattery,
+    Smart,
+    Nvidia,
+    Intel,
+    Backlight,
+    Network,
+    DiskIo,
+    Peripheral,
 }
 
 /// Latest known hardware that can provide PlasmaTop metrics.

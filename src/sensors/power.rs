@@ -34,6 +34,7 @@ use crate::domain::readings::{
     BatteryPeripheralReading, BatteryState, BatterySystemReading, DiskSmartInterface,
     HardwareInventory, SmartDisk,
 };
+use crate::scheduler::{PeripheralRole, PeripheralSource};
 
 use super::disk::is_rotational;
 
@@ -147,28 +148,50 @@ impl PowerState {
         reconcile_peripheral_source(
             &mut self.battery_mouse_cache,
             capabilities.contains(&Capability::BatteryMouse),
-            hw.battery_mouse_id.as_deref(),
-            cfg.battery.mouse_bolt,
+            resolve_peripheral_source(cfg, hw, PeripheralRole::Mouse),
         );
         reconcile_peripheral_source(
             &mut self.battery_kbd_cache,
             capabilities.contains(&Capability::BatteryKeyboard),
-            hw.battery_kbd_id.as_deref(),
-            cfg.battery.kbd_bolt,
+            resolve_peripheral_source(cfg, hw, PeripheralRole::Keyboard),
         );
     }
+}
+
+pub(super) fn resolve_peripheral_source(
+    cfg: &crate::config::Config,
+    hw: &HardwareInventory,
+    role: PeripheralRole,
+) -> Option<PeripheralSource> {
+    let (unifying, bolt, discovered) = match role {
+        PeripheralRole::Mouse => (
+            cfg.battery.mouse_unifying.as_ref(),
+            cfg.battery.mouse_bolt,
+            hw.battery_mouse_id.as_ref(),
+        ),
+        PeripheralRole::Keyboard => (
+            cfg.battery.kbd_unifying.as_ref(),
+            cfg.battery.kbd_bolt,
+            hw.battery_kbd_id.as_ref(),
+        ),
+    };
+    unifying
+        .cloned()
+        .map(PeripheralSource::Upower)
+        .or_else(|| bolt.map(PeripheralSource::Bolt))
+        .or_else(|| discovered.cloned().map(PeripheralSource::Upower))
 }
 
 fn reconcile_peripheral_source(
     cache: &mut BatteryPeripheralCache,
     demanded: bool,
-    upower_id: Option<&str>,
-    bolt_index: Option<i32>,
+    resolved: Option<PeripheralSource>,
 ) {
     let source = if demanded {
-        upower_id
-            .map(|id| format!("upower:{id}"))
-            .or_else(|| bolt_index.map(|index| format!("bolt:{index}")))
+        resolved.map(|source| match source {
+            PeripheralSource::Upower(id) => format!("upower:{id}"),
+            PeripheralSource::Bolt(index) => format!("bolt:{index}"),
+        })
     } else {
         None
     };

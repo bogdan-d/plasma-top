@@ -1,5 +1,4 @@
 use std::path::Path;
-use std::time::Duration;
 
 use crate::domain::boundary::{ClockSnapshot, CommandRunner, DbusFacade, FilesystemRoots};
 
@@ -12,7 +11,7 @@ use super::{cpu, disk, memory, network, process};
 
 /// Short-lived borrowed wiring for the domain owners used by one synchronous sampling pass.
 ///
-/// The wiring owns no cache state. Daemon and diagnostic composition keep every domain owner as a separate long-lived value and construct this view only for a [`crate::sensors::collect`] call.
+/// The wiring owns no cache state. Daemon and diagnostic composition keep every domain owner as a separate long-lived value and construct this view only while executing one scheduled job.
 pub struct OwnerRefs<'a> {
     /// CPU aggregate/per-core diff and history owner.
     pub cpu: &'a mut cpu::CpuState,
@@ -36,18 +35,28 @@ pub struct OwnerRefs<'a> {
     pub external: &'a mut ExternalState,
 }
 
-/// Mutable cadence state owned by peripheral discovery.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub struct PeripheralDiscoveryState {
-    /// Monotonic instant of the latest rescan attempt.
-    pub sampled_at: Option<Duration>,
+impl OwnerRefs<'_> {
+    pub(crate) fn reborrow(&mut self) -> OwnerRefs<'_> {
+        OwnerRefs {
+            cpu: self.cpu,
+            memory: self.memory,
+            network: self.network,
+            disk: self.disk,
+            process: self.process,
+            intel_gpu: self.intel_gpu,
+            power: self.power,
+            nvidia: self.nvidia,
+            gpu_history: self.gpu_history,
+            external: self.external,
+        }
+    }
 }
 
 /// Borrowed roots, boundaries, and clock for one synchronous sampling pass.
 ///
-/// Grouping the `&mut` boundaries keeps [`crate::sensors::collect`]'s parameter list reviewable and makes the daemon's per-pass wiring explicit.
+/// Grouping the `&mut` boundaries keeps scheduled job execution wiring explicit and reviewable.
 ///
-/// The collector never stores the context; it borrows for the duration of one [`crate::sensors::collect`] call.
+/// The serial executor never stores the context; it borrows for one job attempt.
 pub struct CollectCtx<'io, 'optional> {
     /// `/proc` fixture root (production: `/proc`).
     pub proc_root: &'io Path,

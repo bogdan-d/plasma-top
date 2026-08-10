@@ -82,6 +82,19 @@ fn resolve_mounts_explicit_list_used_as_is() {
     cfg.disks.mounts = Mounts::Explicit(vec![String::from("/"), String::from("/data")]);
 
     assert_eq!(resolve_mounts(Path::new("/ignored"), &cfg), ["/", "/data"]);
+    let explicit = try_resolve_mounts(Path::new("/missing-proc"), &cfg);
+    assert!(matches!(explicit, Ok(mounts) if mounts == ["/", "/data"]));
+}
+
+#[test]
+fn automatic_mount_resolution_reports_unreadable_and_malformed_enumeration() {
+    let tmp = TempTree::new();
+    let proc_root = tmp.path().join("proc");
+
+    assert!(try_resolve_mounts(&proc_root, &Config::default()).is_err());
+
+    tmp.write("proc/mounts", "/dev/root / ext4\n");
+    assert!(try_resolve_mounts(&proc_root, &Config::default()).is_err());
 }
 
 #[test]

@@ -58,3 +58,23 @@ fn retained_metric_sample_keeps_valid_value_after_failure() {
     assert_eq!(sample.attempted_at, Some(Duration::from_secs(2)));
     assert_eq!(sample.failed_at, Some(Duration::from_secs(2)));
 }
+
+#[test]
+fn retained_metric_sample_selects_predecessor_at_cutoff() {
+    let mut sample = RetainedMetricSample::default();
+    sample.record_value(25, Duration::from_millis(500));
+    sample.record_value(75, Duration::from_millis(1_500));
+
+    assert_eq!(
+        sample.sample_at_or_before(Duration::from_secs(1)),
+        Some(&MetricSample::new(25, Duration::from_millis(500)))
+    );
+}
+
+#[test]
+fn retained_metric_sample_rejects_late_first_value() {
+    let mut sample = RetainedMetricSample::default();
+    sample.record_value(75, Duration::from_millis(1_500));
+
+    assert_eq!(sample.sample_at_or_before(Duration::from_secs(1)), None);
+}

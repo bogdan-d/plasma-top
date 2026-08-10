@@ -4,7 +4,7 @@ use std::path::Path;
 
 use crate::config::Config;
 use crate::domain::boundary::{CommandRunner, CommandStatus, DbusFacade};
-use crate::domain::readings::{HardwareInventory, SmartDisk};
+use crate::domain::readings::{HardwareInventory, InventoryFamily, SmartDisk};
 
 use super::{NETWORK_COMMAND_TIMEOUT, cpu, disk, gpu_intel, gpu_nvidia, network, power};
 
@@ -32,6 +32,25 @@ impl<T> DiscoveryOutcome<T> {
         match self {
             Self::Confirmed(value) => DiscoveryOutcome::Confirmed(map(value)),
             Self::Failed => DiscoveryOutcome::Failed,
+        }
+    }
+}
+
+/// Scheduler-facing result of reconciling one demanded inventory family.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ReconciliationOutcome {
+    /// Every required probe completed, including confirmed absence.
+    Captured,
+    /// At least one required probe failed and its previous inventory was retained.
+    Failed,
+}
+
+impl ReconciliationOutcome {
+    const fn and(self, other: Self) -> Self {
+        if matches!(self, Self::Failed) || matches!(other, Self::Failed) {
+            Self::Failed
+        } else {
+            Self::Captured
         }
     }
 }
@@ -100,9 +119,13 @@ impl HardwareDiscovery {
     }
 }
 
-fn apply<T>(current: &mut T, outcome: DiscoveryOutcome<T>) {
-    if let DiscoveryOutcome::Confirmed(value) = outcome {
-        *current = value;
+fn apply<T>(current: &mut T, outcome: DiscoveryOutcome<T>) -> ReconciliationOutcome {
+    match outcome {
+        DiscoveryOutcome::Confirmed(value) => {
+            *current = value;
+            ReconciliationOutcome::Captured
+        }
+        DiscoveryOutcome::Failed => ReconciliationOutcome::Failed,
     }
 }
 
@@ -132,6 +155,30 @@ pub fn discover_hardware(
     discover_hardware_attempt(sys_root, proc_root, cfg, dbus, commands, cpu_count).into_inventory()
 }
 
+/// Discovers only bounded local `/proc` and `/sys` inventory for startup or reload.
+///
+/// Command and D-Bus discovery is intentionally excluded so this inventory can seed the scheduler catalog without delaying the first-paint deadline.
+#[must_use]
+pub fn discover_local_hardware(
+    sys_root: &Path,
+    proc_root: &Path,
+    cfg: &Config,
+    cpu_count: usize,
+) -> HardwareInventory {
+    discover_local_hardware_attempt(sys_root, proc_root, cfg, cpu_count).into_inventory()
+}
+
+/// Performs one bounded local `/proc` and `/sys` inventory attempt for startup or reload merging.
+#[must_use]
+pub(crate) fn discover_local_hardware_attempt(
+    sys_root: &Path,
+    proc_root: &Path,
+    cfg: &Config,
+    cpu_count: usize,
+) -> HardwareDiscovery {
+    local_hardware_attempt(sys_root, proc_root, cfg, cpu_count)
+}
+
 /// Performs one typed inventory attempt for startup or reload merging.
 #[must_use]
 pub fn discover_hardware_attempt(
@@ -142,25 +189,35 @@ pub fn discover_hardware_attempt(
     commands: &mut dyn CommandRunner,
     cpu_count: usize,
 ) -> HardwareDiscovery {
+    let mut discovery = local_hardware_attempt(sys_root, proc_root, cfg, cpu_count);
+    discovery.system_batteries = DiscoveryOutcome::from_result(power::find_battery_sys(dbus));
+    discovery.route = detect_net_device(commands);
+    discovery.smart = if cfg.disks.smart {
+        smart_discovery_outcome(power::detect_smart_disks(dbus, sys_root), sys_root)
+    } else {
+        DiscoveryOutcome::Confirmed(BTreeMap::new())
+    };
+    discovery.peripherals = find_peripherals(cfg, dbus);
+    discovery
+}
+
+fn local_hardware_attempt(
+    sys_root: &Path,
+    proc_root: &Path,
+    cfg: &Config,
+    cpu_count: usize,
+) -> HardwareDiscovery {
     let cpu_paths = cpu::discover_cpu_paths(sys_root, &cfg.sensors);
     let hd_temp_paths = disk::find_hd_temp_paths(sys_root, &cfg.sensors);
     let fan_paths = disk::find_fan_speed_paths(sys_root, &cfg.sensors);
     let hwmon_complete = validate_hwmon_enumeration(sys_root).is_ok();
-    let system_batteries = DiscoveryOutcome::from_result(power::find_battery_sys(dbus));
     let has_nvidia = DiscoveryOutcome::from_result(gpu_nvidia::detect_nvidia_outcome(sys_root));
     let intel = DiscoveryOutcome::from_result(gpu_intel::detect_intel_gpu_outcome(sys_root));
-    let route = detect_net_device(commands);
     let disk_io_device = DiscoveryOutcome::from_result(disk::detect_disk_io_device_outcome(
         proc_root, sys_root, "/",
     ));
     let has_backlight = DiscoveryOutcome::from_result(detect_has_backlight_outcome(sys_root));
     let has_wifi = DiscoveryOutcome::from_result(network::detect_has_wifi_outcome(sys_root));
-    let smart = if cfg.disks.smart {
-        smart_discovery_outcome(power::detect_smart_disks(dbus, sys_root), sys_root)
-    } else {
-        DiscoveryOutcome::Confirmed(BTreeMap::new())
-    };
-    let peripherals = find_peripherals(cfg, dbus);
 
     let local = HardwareInventory {
         // `capabilities`/`metrics` are derived per-poll from config inside
@@ -199,15 +256,111 @@ pub fn discover_hardware_attempt(
             ),
         ),
         thermal: completion_outcome(hwmon_complete, (hd_temp_paths, fan_paths)),
-        system_batteries,
+        system_batteries: DiscoveryOutcome::Failed,
         nvidia: has_nvidia,
         intel: intel.map(|paths| (paths.freq_path, paths.pci)),
-        route,
+        route: DiscoveryOutcome::Failed,
         disk_io: disk_io_device,
         backlight: has_backlight,
         wifi: has_wifi,
-        peripherals,
-        smart,
+        peripherals: PeripheralOutcomes {
+            mouse: DiscoveryOutcome::Failed,
+            keyboard: DiscoveryOutcome::Failed,
+        },
+        smart: DiscoveryOutcome::Failed,
+    }
+}
+
+/// Reconciles one demanded inventory family, retaining prior values when a boundary or local enumeration fails.
+#[must_use]
+pub(crate) fn reconcile_inventory_family(
+    family: InventoryFamily,
+    hw: &mut HardwareInventory,
+    sys_root: &Path,
+    proc_root: &Path,
+    cfg: &Config,
+    dbus: &mut dyn DbusFacade,
+    commands: &mut dyn CommandRunner,
+) -> ReconciliationOutcome {
+    match family {
+        InventoryFamily::Cpu => {
+            let paths = cpu::discover_cpu_paths(sys_root, &cfg.sensors);
+            let temperature = apply(
+                &mut hw.cpu_temp_path,
+                completion_outcome(
+                    validate_hwmon_enumeration(sys_root).is_ok(),
+                    paths.cpu_temp_path,
+                ),
+            );
+            let controls = if validate_cpu_control_paths(sys_root).is_ok() {
+                hw.cpu_freq_path = paths.cpu_freq_path;
+                hw.cpu_turbo_path = paths.cpu_turbo_path;
+                hw.cpu_turbo_supported = paths.cpu_turbo_supported;
+                ReconciliationOutcome::Captured
+            } else {
+                ReconciliationOutcome::Failed
+            };
+            temperature.and(controls)
+        }
+        InventoryFamily::Thermal => {
+            let temperatures = disk::find_hd_temp_paths(sys_root, &cfg.sensors);
+            let fans = disk::find_fan_speed_paths(sys_root, &cfg.sensors);
+            if validate_hwmon_enumeration(sys_root).is_ok() {
+                hw.hd_temp_paths = temperatures;
+                hw.fan_paths = fans;
+                ReconciliationOutcome::Captured
+            } else {
+                ReconciliationOutcome::Failed
+            }
+        }
+        InventoryFamily::SystemBattery => apply(
+            &mut hw.battery_sys_ids,
+            DiscoveryOutcome::from_result(power::find_battery_sys(dbus)),
+        ),
+        InventoryFamily::Smart => {
+            let outcome = if cfg.disks.smart {
+                smart_discovery_outcome(power::detect_smart_disks(dbus, sys_root), sys_root)
+            } else {
+                DiscoveryOutcome::Confirmed(BTreeMap::new())
+            };
+            apply(&mut hw.disk_smart_drives, outcome)
+        }
+        InventoryFamily::Nvidia => apply(
+            &mut hw.has_nvidia,
+            DiscoveryOutcome::from_result(gpu_nvidia::detect_nvidia_outcome(sys_root)),
+        ),
+        InventoryFamily::Intel => match gpu_intel::detect_intel_gpu_outcome(sys_root) {
+            Ok(paths) => {
+                hw.intel_gpu_freq_path = paths.freq_path;
+                hw.intel_gpu_pci = paths.pci;
+                ReconciliationOutcome::Captured
+            }
+            Err(_) => ReconciliationOutcome::Failed,
+        },
+        InventoryFamily::Backlight => apply(
+            &mut hw.has_backlight,
+            DiscoveryOutcome::from_result(detect_has_backlight_outcome(sys_root)),
+        ),
+        InventoryFamily::Network => {
+            let route = apply(&mut hw.net_device, detect_net_device(commands));
+            let wifi = apply(
+                &mut hw.has_wifi,
+                DiscoveryOutcome::from_result(network::detect_has_wifi_outcome(sys_root)),
+            );
+            route.and(wifi)
+        }
+        InventoryFamily::DiskIo => apply(
+            &mut hw.disk_io_device,
+            DiscoveryOutcome::from_result(disk::detect_disk_io_device_outcome(
+                proc_root, sys_root, "/",
+            )),
+        ),
+        InventoryFamily::Peripheral => {
+            let peripherals = find_peripherals(cfg, dbus);
+            let mouse = apply(&mut hw.battery_mouse_id, peripherals.mouse);
+            let keyboard = apply(&mut hw.battery_kbd_id, peripherals.keyboard);
+            mouse.and(keyboard)
+        }
     }
 }
 
@@ -216,9 +369,7 @@ pub fn discover_hardware_attempt(
 ///
 /// Confirmed enumeration replaces peripheral ids, including confirmed absence;
 /// boundary failures retain the previous ids. The net device is retried only
-/// while still `None` (the daemon started before the network came up). Rescan
-/// cadence state belongs to [`crate::sensors::PeripheralDiscoveryState`], not
-/// the inventory.
+/// while still `None` (the daemon started before the network came up). Rescan scheduling state belongs to the pure scheduler, not the inventory.
 pub fn rescan_peripherals(
     hw: &mut HardwareInventory,
     cfg: &Config,

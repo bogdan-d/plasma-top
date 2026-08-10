@@ -84,6 +84,12 @@ impl NetworkState {
         self.rate_sample_at = None;
     }
 
+    pub(crate) fn invalidate_rate_baseline(&mut self) {
+        self.prev_tx_bytes = 0;
+        self.prev_rx_bytes = 0;
+        self.rate_sample_at = None;
+    }
+
     pub(crate) fn reset_info(&mut self) {
         self.info.invalidate();
         self.wifi.invalidate();

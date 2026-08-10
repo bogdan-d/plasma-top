@@ -29,6 +29,7 @@ pub mod notify;
 pub mod page_commands;
 pub mod render;
 pub mod runtime;
+pub(crate) mod scheduler;
 pub mod sensors;
 
 #[cfg(feature = "test-support")]

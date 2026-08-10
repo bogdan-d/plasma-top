@@ -60,8 +60,16 @@ pub(crate) fn item_gate(
         Metric::GpuIntelFreq => hw.intel_gpu_freq_path.is_some(),
         Metric::GpuIntelUsage | Metric::GpuIntelDecoderUsage => hw.intel_gpu_pci.is_some(),
         Metric::BatterySystem => !hw.battery_sys_ids.is_empty(),
-        Metric::BatteryMouse => hw.battery_mouse_id.is_some() || cfg.battery.mouse_bolt.is_some(),
-        Metric::BatteryKeyboard => hw.battery_kbd_id.is_some() || cfg.battery.kbd_bolt.is_some(),
+        Metric::BatteryMouse => {
+            cfg.battery.mouse_unifying.is_some()
+                || cfg.battery.mouse_bolt.is_some()
+                || hw.battery_mouse_id.is_some()
+        }
+        Metric::BatteryKeyboard => {
+            cfg.battery.kbd_unifying.is_some()
+                || cfg.battery.kbd_bolt.is_some()
+                || hw.battery_kbd_id.is_some()
+        }
         Metric::ScreenBrightness => hw.has_backlight,
         Metric::SwapUsage => readings.swap_usage.is_some(),
         Metric::SystemUpdates => !cfg.system_updates.file.is_empty(),

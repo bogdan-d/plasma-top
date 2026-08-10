@@ -6,17 +6,17 @@ This document maps PlasmaTop metric samples to their real acquisition paths. Use
 
 PlasmaTop does not use a general system-monitoring crate such as `sysinfo`. Most metric samples are parsed directly from Linux `/proc` and `/sys` files with Rust's standard library. Filesystem capacity uses `nix`'s safe `statvfs` wrapper, Logitech Bolt uses `nix::poll` plus direct `hidraw` I/O, and NVIDIA can use the optional `nvml-wrapper` integration.
 
-Collection is synchronous and single-threaded. `src/daemon.rs` stores each domain owner separately and passes short-lived borrowed `OwnerRefs` to `src/sensors/collect.rs::collect_with_notifications` once per normal publication pass. Sampling runs demanded jobs in this order:
+Execution is synchronous and single-threaded during the issue-03 transition. `src/daemon.rs` stores each domain owner separately; the pure scheduler emits typed jobs, and `src/sensors/scheduled.rs` borrows the matching owner for one cadence-free attempt at a time. Due jobs retain deterministic owner/source ordering:
 
 ```text
 CPU and panel processes -> memory -> network -> disks/SMART/temperatures/fans -> batteries/HID -> NVIDIA GPU -> Intel GPU -> GPU history -> brightness/status files
 ```
 
-Every source finishes before the next source starts. Loops over mounts, drives, fans, or batteries are also sequential. Direct file reads, syscalls, NVML calls, HID reads, and subprocess waits therefore block the daemon thread. A blocked pass delays display-snapshot publication, selected-page checks, and shutdown observation until the current operation returns.
+Every source finishes before the next source starts. Loops over mounts, drives, fans, or batteries are represented as independent keyed jobs but still execute sequentially. Direct file reads, syscalls, NVML calls, HID reads, and subprocess waits therefore block the daemon thread. Scheduler publication deadlines never wait logically, but a blocking attempt can still delay when the serial executor observes and performs a due publication; issue 04/05 move these boundaries off the event path.
 
-The demand set is derived from resolved panel and tooltip items, enabled notifications, configured graph history, and selected-page work. CPU and memory are sampled every pass to preserve their diff baselines; optional metrics outside the demand set do no source work. Shared reads execute once per pass and can feed multiple metric samples.
+The hidden demand set contains resolved panel items, enabled notifications, and configured graph histories. Presented-main demand adds tooltip items, and selected-page demand adds page-owned work. CPU and memory have no unconditional exception. Shared owner reads can feed several metrics, and no owner overlaps itself.
 
-After synchronous sampling, display-snapshot assembly, rendering, and publication, the daemon sleeps only for the remainder of `display.poll_interval`. If work consumes the whole interval, the next pass starts immediately rather than overlapping with the previous one.
+Display publication is a separate scheduler deadline. Fast jobs become due 50 ms beforehand; late jobs carry retained values, missed job/history ticks are skipped, and no catch-up burst or owner overlap occurs. The daemon sleeps until the next scheduler deadline or the 100 ms compatibility observation step.
 
 ## Acquisition inventory
 
@@ -25,7 +25,7 @@ After synchronous sampling, display-snapshot assembly, rendering, and publicatio
 | Reading | Primary source | Method | Normal cadence and notes |
 | --- | --- | --- | --- |
 | Aggregate CPU usage | `/proc/stat` | Direct Rust file read; percentage from consecutive counter snapshots | Every poll; first sample seeds the diff |
-| Per-core CPU usage | Per-core lines in `/proc/stat` | Direct Rust file read; consecutive counter diffs | Every poll when the `cpu_cores` page is configured; skipped during fast first paint |
+| Per-core CPU usage | Per-core lines in `/proc/stat` | Direct Rust file read; consecutive counter diffs | Every poll only while the `cpu_cores` page is selected and presented |
 | CPU history | Aggregate/per-core samples already collected | In-memory vectors | Sampled at `display.history_interval`; bounded by configured consumers |
 | CPU temperature | Discovered `/sys/class/hwmon/.../temp*_input` | Direct Rust file read | Every requested poll |
 | CPU frequency | `/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq`, then first `cpu MHz` in `/proc/cpuinfo` | Direct Rust file read with procfs fallback | Every requested poll |
@@ -42,7 +42,7 @@ Relevant code: `src/sensors/cpu.rs`, `src/sensors/memory.rs`, and the CPU/memory
 
 | Reading | Primary source | Method | Normal cadence and notes |
 | --- | --- | --- | --- |
-| Panel top processes | `/proc/[pid]/stat`, `/proc/meminfo` | Direct directory/file scan; CPU percentage from consecutive process samples | 15-second freshness budget; skipped during fast first paint |
+| Panel top processes | `/proc/[pid]/stat`, `/proc/meminfo` | Direct directory/file scan; CPU percentage from consecutive process samples | 15-second freshness budget; a configured panel item is a real startup blocker |
 | Processes tooltip page | `/proc/[pid]/stat` and selected `/proc/[pid]/cmdline` files | Direct directory/file scan owned by the selected page | Updated only while the processes page is selected; separate from the panel process sample |
 
 No `ps`, `top`, or process library is used. Cost scales mainly with process count because the reader walks procfs sequentially.
@@ -67,7 +67,7 @@ Relevant code: `src/sensors/network.rs` and the network section of `src/sensors/
 
 | Reading | Primary source | Method | Normal cadence and notes |
 | --- | --- | --- | --- |
-| Mount discovery | Configured mounts or `/proc/mounts`; device identity from `/sys` | Direct Rust file and symlink reads | Resolved when disk usage is requested |
+| Mount discovery | Configured mounts or `/proc/mounts`; device identity from `/sys` | Direct Rust file and symlink reads | Explicit mounts are fixed; automatic mounts are reconciled at `display.poll_interval` while disk usage is demanded |
 | Filesystem usage | Mounted filesystem | `nix::sys::statvfs::statvfs` syscall wrapper | Once per requested mount per poll, sequentially |
 | Disk read/write rate | `/proc/diskstats` | Direct Rust file read; sector-counter diff using 512-byte sectors | Every requested poll; first sample seeds the diff; device changes reset it |
 | Disk temperature | Discovered `nvme` or `drivetemp` hwmon `temp*_input` files | Direct Rust file read | 30-second freshness budget per drive |
@@ -85,9 +85,9 @@ Relevant code: `src/sensors/disk.rs`, `src/sensors/hwmon.rs`, and SMART function
 | System battery | `/sys/class/power_supply/<id>/...` | Direct Rust file reads | Preferred path; 30-second freshness budget |
 | System battery fallback | UPower properties | External `busctl --system --json=short` processes through the D-Bus facade | Used when sysfs cannot provide the battery; 30-second freshness budget |
 | UPower mouse/keyboard battery | UPower device properties | External `busctl --system --json=short` processes through the D-Bus facade | 30-second freshness budget |
-| Logitech Bolt mouse/keyboard battery | `/dev/hidraw*`, discovered through `/sys/class/hidraw` | Direct HID++ report writes/reads using standard file I/O and `nix::poll` | One-hour freshness budget; skipped during fast first paint; each report read has a 1-second timeout and a query accepts at most 10 reads |
+| Logitech Bolt mouse/keyboard battery | `/dev/hidraw*`, discovered through `/sys/class/hidraw` | Direct HID++ report writes/reads using standard file I/O and `nix::poll` | One-hour freshness budget; a configured panel item is a real startup blocker; each report read has a 1-second timeout and a query accepts at most 10 reads |
 
-Production D-Bus calls default to a 5-second timeout unless a request supplies another value. Peripheral discovery is retried at most every 60 seconds when requested hardware remains unresolved.
+Production D-Bus calls default to a 5-second timeout unless a request supplies another value. Demanded system and UPower peripheral source inventory is reconciled every 30 seconds; other demanded hardware families use a 60-second reconciliation budget.
 
 Relevant code: `src/sensors/power.rs`, `src/sensors/hid.rs`, and `src/adapters.rs`.
 
@@ -95,11 +95,11 @@ Relevant code: `src/sensors/power.rs`, `src/sensors/hid.rs`, and `src/adapters.r
 
 | Reading | Primary source | Method | Normal cadence and notes |
 | --- | --- | --- | --- |
-| NVIDIA temperature, utilization, memory, decoder, fan | NVIDIA Management Library | Optional `nvml-wrapper` feature; library loaded at runtime | Every requested poll; skipped during fast first paint |
+| NVIDIA temperature, utilization, memory, decoder, fan | NVIDIA Management Library | Optional `nvml-wrapper` feature; library loaded at runtime | Every requested poll; a locally discovered configured panel source is a real startup blocker |
 | NVIDIA fallback metrics | `nvidia-smi --query-gpu=... --format=csv,noheader,nounits` | External `nvidia-smi` process | Used when NVML is unavailable or a read fails; 3-second freshness budget and 5-second timeout |
 | NVIDIA history | Current NVIDIA sample | In-memory vectors | Sampled at `display.history_interval` when required |
 | Intel GPU frequency | Discovered DRM/sysfs frequency file | Direct Rust file read | Every requested poll |
-| Intel GPU render/decoder utilization | `/proc/[pid]/fd/*/fdinfo` DRM engine counters associated with the Intel PCI device | Direct procfs scan and consecutive counter diff | 30-second freshness budget; skipped during fast first paint |
+| Intel GPU render/decoder utilization | `/proc/[pid]/fd/*/fdinfo` DRM engine counters associated with the Intel PCI device | Direct procfs scan and consecutive counter diff | 30-second freshness budget; a locally discovered configured panel source is a real startup blocker |
 
 The default Cargo feature set does not enable NVML. Packaging must build with the `nvml` feature to use `nvml-wrapper`; otherwise NVIDIA always uses the `nvidia-smi` fallback.
 
@@ -117,13 +117,13 @@ The update and server-check producers are outside the daemon. Optimizing or chan
 
 ## Deep-dive page inventory
 
-Deep-dive page bodies are built only for the selected page. Page changes are checked during the daemon's sleep in 100 ms steps and can republish the tooltip without another full synchronous sampling pass. The daemon protocol does not report tooltip presentation, so selected-page work remains governed by page selection.
+Deep-dive page bodies are built only for the selected page. Page changes are checked at scheduler wakes no more than 100 ms apart, update page demand, and can republish the tooltip without running unrelated jobs. Until the issue-06 presentation lease protocol lands, the production compatibility adapter reports the tooltip as presented.
 
 | Page | Source | Blocking/retention behavior |
 | --- | --- | --- |
 | Full stats | Current `DisplaySnapshot` | No extra acquisition beyond normal collection |
 | Processes | Direct `/proc` scan | Selected-page only; no external process |
-| CPU cores | Per-core `/proc/stat` data | Sampling enabled when page is configured; rendering only while selected |
+| CPU cores | Per-core `/proc/stat` data | Sampling and history enabled only while selected and presented |
 | Connections | `ss -4tlnp` | External process attempted on every selected-page render because its freshness budget is zero; the latest successful output is retained after a failed attempt; 5-second timeout |
 | Fastfetch | `fastfetch`, optionally wrapped by `script -qec` for terminal behavior | External process only while selected; 30-second freshness budget; 5-second timeout |
 | Graphs | Histories already held in memory, then pure-Rust PNG rasterization | Selected-page render only; no acquisition subprocess |
@@ -195,7 +195,8 @@ Low-risk optimization levers already supported are removing unused metric capabi
 ## Source map
 
 - Publication lifecycle, selected-page wake behavior, and final process-page display-snapshot assembly: `src/daemon.rs`
-- Synchronous order and demand-set capability gating: `src/sensors/collect.rs`
+- Pure cadence, demand, deadline, backoff, identity, and lifecycle policy: `src/scheduler/`
+- Production job catalog and serial execution: `src/sensors/catalog.rs` and `src/sensors/scheduled.rs`
 - Short-lived borrowed owner wiring and collection boundaries: `src/sensors/coordinator.rs`
 - Separate owner state and reconciliation interfaces: matching domain modules under `src/sensors/`
 - One-attempt result contracts and source reads: `src/sensors/attempts.rs`, `src/sensors/attempts/`, and matching owner modules under `src/sensors/`
@@ -205,4 +206,5 @@ Low-risk optimization levers already supported are removing unused metric capabi
 - Metric-to-capability mapping: `src/domain/metric.rs` and `src/domain/registry.rs`
 - `MetricSample`, `HardwareInventory`, and `DisplaySnapshot` contracts: `src/domain/readings.rs`
 - Notification latch state: `src/domain/state.rs`
+- Issue-02 collection characterization retained only for owner regression tests: `src/sensors/tests/legacy_collect.rs`
 - Current freshness policy and profiling guidance: [PERFORMANCE.md](PERFORMANCE.md)

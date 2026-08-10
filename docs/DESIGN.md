@@ -75,9 +75,9 @@ Real placement is the intersection of metric and form surfaces. The current dema
 
 ## Readings and state
 
-`HardwareInventory` contains the latest discovered paths, devices, and feature flags and is owned by discovery in `src/sensors/discovery.rs`. `DisplaySnapshot` is the typed value set assembled for one publication after all included metric samples are merged. CPU, memory, network, disk, process, power, NVIDIA, Intel GPU, external-file, and GPU-history state live as separate values at daemon or diagnostic composition scope. Each matching sensor module owns its cache reconciliation and source invalidation rules. `src/sensors/coordinator.rs` provides only the short-lived borrowed `OwnerRefs` and collection boundaries; it owns no domain state. `src/sensors/collect.rs` preserves synchronous order and freshness budgets, while notification latches remain separate in `src/domain/state.rs`.
+`HardwareInventory` contains the latest discovered paths, devices, and feature flags and is owned by discovery in `src/sensors/discovery.rs`. `DisplaySnapshot` retains the latest independently captured metric samples for publication. CPU, memory, network, disk, process, power, NVIDIA, Intel GPU, external-file, and GPU-history state live as separate values at daemon or diagnostic composition scope. Each matching sensor module owns its cache reconciliation and source invalidation rules. `src/sensors/coordinator.rs` provides only short-lived borrowed `OwnerRefs`; it owns no domain state. `src/scheduler/` owns deterministic cadence, demand, deadlines, backoff, coalescing, generations, cancellation acknowledgement, and lifecycle policy, while `src/sensors/scheduled.rs` executes emitted work serially through cadence-free one-attempt functions. Cancellation retains the owner reservation until the executor acknowledges it, and every queued start is revalidated immediately before I/O. Notification latches remain separate in `src/domain/state.rs`.
 
-Each independently captured value can be represented as a `MetricSample` with its own monotonic capture time, so sample age is not inferred from `DisplaySnapshot::assembled_at`. Collection is synchronous and publication follows each completed pass.
+Each independently captured value can be represented as a `MetricSample` with its own monotonic capture time, so sample age is not inferred from `DisplaySnapshot::assembled_at`. Execution remains synchronous during the issue-03 transition, but publication is an independent scheduler action rather than the end of a collection barrier.
 
 Sensor modules read explicit `/proc` and `/sys` roots and use injected command, D-Bus, clock, notification, and HID boundaries. Missing hardware, unavailable services, malformed files, command failures, and permission errors degrade to absent readings where the compatibility contract requires it; one failed sensor must not block later families.
 
@@ -97,19 +97,18 @@ Graphs are raster PNGs built in `render/chart.rs` with a small pure-Rust pixel p
 
 Page zero is the full tooltip. Configured deep pages are `processes`, `cpu_cores`, `connections`, `fastfetch`, and `graphs`. Only the selected page body is built. Commands, process scans, and chart rasterization therefore cost nothing while another page is selected.
 
-Wheel and click actions run `plasma-top page next|prev` and `plasma-top click`. The daemon checks selected-page state in 100 ms sleep steps and republishes only the tooltip on a page change, without running a full synchronous sampling pass. Middle-click pinning remains QML-owned. The protocol does not report whether a tooltip is presented, so selected-page work is governed by page selection rather than presentation state.
+Wheel and click actions run `plasma-top page next|prev` and `plasma-top click`. The daemon checks selected-page state at scheduler wakes no more than 100 ms apart, changes page demand, and republishes only the tooltip without running unrelated jobs. Middle-click pinning remains QML-owned. Until the issue-06 lease protocol exists, production uses an explicit compatibility input that treats the tooltip as presented; pure scheduler tests cover hidden, presented-main, selected-page, and one-second deactivation-grace policy.
 
 ## Daemon lifecycle
 
-Startup resolves config/assets, creates runtime directories, publishes page metadata, discovers hardware, performs a fast first sampling pass, assembles a display snapshot, computes canonical width, and writes the first panel/tooltip pair. The normal loop then:
+Startup resolves config/assets, creates runtime directories, publishes page metadata, synchronously seeds bounded local `/proc` and `/sys` inventory, initializes the scheduler from that real inventory, and immediately dispatches panel-demand jobs. Command and D-Bus inventory discovery proceeds progressively after first paint only for demanded hardware families. First panel publication occurs when required startup jobs finish or the scheduler's 200 ms deadline is observed; real panel blockers are never replaced by synthetic completions. The normal loop then:
 
-1. checks config/style/theme/geometry changes;
-2. rescans timed hardware boundaries when due;
-3. borrows each domain owner for synchronous sampling and assembles one display snapshot from completed metric samples;
-4. evaluates notifications;
-5. renders the panel and selected tooltip page;
-6. atomically publishes changed output;
-7. sleeps in page-aware steps until the next poll.
+1. converts config, inventory, file, page, time, and lifecycle changes into typed scheduler events;
+2. executes emitted start actions one at a time and feeds typed capture, baseline, absence, or failure completions back;
+3. evaluates notifications only for accepted notification-eligible captures after first panel publication, independently of an aggregate counter's completion classification;
+4. assembles retained samples and renders only when the scheduler emits a publication action;
+5. atomically publishes changed panel and tooltip bytes independently;
+6. sleeps until the next scheduler deadline or the 100 ms compatibility observation step.
 
 SIGINT and SIGTERM use `signal-hook`; shutdown removes daemon-owned runtime files. The service remains a normal user unit with restart-on-failure.
 

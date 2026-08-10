@@ -53,9 +53,16 @@ fn item_gates_match_python_rules() {
     ));
 
     cfg.battery = BatteryConfig {
+        mouse_unifying: Some(String::from("/configured_mouse")),
         kbd_bolt: Some(1),
         ..BatteryConfig::default()
     };
+    assert!(item_gate(
+        &cfg,
+        &hw,
+        &ItemToken::from_str("battery_mouse").expect("token"),
+        &readings,
+    ));
     assert!(item_gate(
         &cfg,
         &hw,

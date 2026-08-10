@@ -86,6 +86,13 @@ impl DiskState {
         self.rate_sample_at = None;
     }
 
+    pub(crate) fn invalidate_io_baseline(&mut self) {
+        self.prev_read_bytes = 0;
+        self.prev_write_bytes = 0;
+        self.rate_sample_at = None;
+    }
+
+    #[cfg(test)]
     pub(crate) fn reconcile_mounts(&mut self, mounts: &[String]) {
         self.usage
             .retain(|mount, _| mounts.iter().any(|current| current == mount));
@@ -241,8 +248,24 @@ pub fn read_fan_speed(path: &Path) -> Option<i32> {
 /// alphabetically.
 #[must_use]
 pub fn resolve_mounts(proc_root: &Path, cfg: &Config) -> Vec<String> {
-    match &cfg.disks.mounts {
+    try_resolve_mounts(proc_root, cfg).unwrap_or_else(|_| match &cfg.disks.mounts {
         Mounts::Explicit(mounts) => mounts.clone(),
+        Mounts::Auto => vec![String::from("/")],
+    })
+}
+
+/// Resolves the configured mountpoint list while preserving automatic enumeration failures.
+///
+/// Explicit lists never inspect procfs and are therefore deterministic. Automatic enumeration
+/// returns an error when the mounts file is unavailable, unreadable, or malformed, allowing a
+/// long-lived caller to retain its last confirmed inventory.
+///
+/// # Errors
+///
+/// Returns an I/O error when automatic procfs enumeration cannot be confirmed.
+pub fn try_resolve_mounts(proc_root: &Path, cfg: &Config) -> io::Result<Vec<String>> {
+    match &cfg.disks.mounts {
+        Mounts::Explicit(mounts) => Ok(mounts.clone()),
         Mounts::Auto => {
             let roots: Vec<String> = cfg
                 .disks
@@ -251,18 +274,23 @@ pub fn resolve_mounts(proc_root: &Path, cfg: &Config) -> Vec<String> {
                 .map(|root| format!("{}/", root.trim_end_matches('/')))
                 .collect();
             let mut found = BTreeSet::new();
-            if let Some(mounts) = load_mounts(proc_root) {
-                for mount in mounts {
-                    if mount.mountpoint != "/"
-                        && roots.iter().any(|root| mount.mountpoint.starts_with(root))
-                    {
-                        found.insert(mount.mountpoint);
-                    }
+            let Some(path) = mounts_path_outcome(proc_root)? else {
+                return Err(io::Error::new(
+                    io::ErrorKind::NotFound,
+                    "mount enumeration is unavailable",
+                ));
+            };
+            let text = fs::read_to_string(path)?;
+            for mount in parse_mounts_outcome(&text)? {
+                if mount.mountpoint != "/"
+                    && roots.iter().any(|root| mount.mountpoint.starts_with(root))
+                {
+                    found.insert(mount.mountpoint);
                 }
             }
             let mut ordered = vec![String::from("/")];
             ordered.extend(found);
-            ordered
+            Ok(ordered)
         }
     }
 }
@@ -416,42 +444,10 @@ pub(crate) fn read_disk_io_once(
     DiskIoReadOutcome::Value(read_bps, write_bps)
 }
 
-fn load_mounts(proc_root: &Path) -> Option<Vec<MountEntry>> {
-    let text = fs::read_to_string(mounts_path(proc_root)?).ok()?;
-    Some(parse_mounts(&text))
-}
-
-fn mounts_path(proc_root: &Path) -> Option<PathBuf> {
-    let mounts = proc_root.join("mounts");
-    if mounts.exists() {
-        return Some(mounts);
-    }
-    let self_mounts = proc_root.join("self/mounts");
-    self_mounts.exists().then_some(self_mounts)
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct MountEntry {
     source: String,
     mountpoint: String,
-}
-
-fn parse_mounts(text: &str) -> Vec<MountEntry> {
-    let mut mounts = Vec::new();
-    for line in text.lines() {
-        let mut fields = line.split_whitespace();
-        let Some(source) = fields.next() else {
-            continue;
-        };
-        let Some(mountpoint) = fields.next() else {
-            continue;
-        };
-        mounts.push(MountEntry {
-            source: source.to_owned(),
-            mountpoint: decode_mount_field(mountpoint),
-        });
-    }
-    mounts
 }
 
 fn parse_mounts_outcome(text: &str) -> io::Result<Vec<MountEntry>> {

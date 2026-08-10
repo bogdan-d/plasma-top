@@ -4,7 +4,7 @@ Read this before changing daemon polling, metric-sample retention, freshness bud
 
 ## Measure current Rust behavior
 
-`plasma-top profiling` uses `std::time::Instant` around real config loading, hardware discovery, and cold/warm synchronous sampling passes. It prints timings to stdout and never writes daemon runtime files:
+`plasma-top profiling` uses `std::time::Instant` around real config loading, hardware discovery, and cold/warm serial scheduler execution. It prints timings to stdout and never writes daemon runtime files:
 
 ```bash
 ./plasma-top profiling --config config/config.toml
@@ -27,19 +27,19 @@ Formatting is deterministic and allocation-heavy relative to arithmetic, but har
 
 ## Pay only for the selected page
 
-The daemon publishes tooltip HTML every poll because the current protocol does not report whether a tooltip is presented, but it builds only the selected page body.
+The pure scheduler models hidden, presented-main, and selected-page demand. Until the presentation lease protocol lands, the production compatibility adapter reports the tooltip as presented, so current visible behavior remains unchanged while only the selected page body is built.
 
 - `processes` uses a page-owned `/proc` diff sample while selected; panel process data has a separate 15-second freshness budget.
-- `cpu_cores` history is collected only when that page is configured.
+- `cpu_cores` sampling and history run only while that page is selected and presented by scheduler input.
 - `connections` runs `ss` only while selected.
 - `fastfetch` runs only while selected and has a 30-second freshness budget.
 - `graphs` rasterizes PNGs only while selected; required histories are sampled while the page is configured.
 
-Selected-page state is checked during sleep in 100 ms steps. A page change republishes the tooltip without waiting a full `display.poll_interval` and without running a new full sampling pass. The protocol does not report tooltip presentation, so page-owned work follows selection state.
+Selected-page state is checked at scheduler wakes no more than 100 ms apart. A page change updates demand and republishes the tooltip without waiting a full `display.poll_interval` or running unrelated work.
 
 ## Current sample and freshness policy
 
-Metric-sample capture times and attempt times use monotonic `Duration` values. `Option` represents “never sampled”; no numeric timestamp doubles as a sentinel. Diff-based owners without a valid metric sample retry promptly rather than delaying the first value for a full freshness budget.
+Metric-sample capture times and attempt times use monotonic `Duration` values. `Option` represents “never sampled”; no numeric timestamp doubles as a sentinel. The scheduler phase-locks normal deadlines, starts fast jobs 50 ms before publication, skips missed ticks, and gives diff-based owners a prompt baseline retry. Bounded exponential failure backoff never exceeds the normal freshness budget.
 
 | Metric sample | Current freshness budget |
 |---|---:|
@@ -54,7 +54,9 @@ Metric-sample capture times and attempt times use monotonic `Duration` values. `
 | panel top processes | 15 s |
 | network identity/Wi-Fi info | 10 s |
 | fastfetch page output | 30 s |
-| peripheral discovery | 60 s |
+| system and UPower peripheral source reconciliation | 30 s |
+| other demanded hardware inventory reconciliation | 60 s |
+| automatic mount reconciliation | `display.poll_interval` |
 
 SMART intervals remain configurable by drive class. Histories use `display.history_interval` and trim to the largest enabled consumer.
 

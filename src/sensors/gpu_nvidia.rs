@@ -105,6 +105,8 @@ pub struct GpuCache {
     pub nvml_init_failed: bool,
     /// Monotonic instant of the latest successful metric sample.
     pub sampled_at: Option<Duration>,
+    /// Latest and predecessor metric samples used for nominal history cutoffs.
+    pub(super) history_samples: RetainedMetricSample<NvidiaMetrics>,
     /// Monotonic instant of the latest attempt, successful or not.
     pub attempted_at: Option<Duration>,
     /// Monotonic instant of the latest source failure.
@@ -450,6 +452,7 @@ pub(super) fn metrics_from_cache(cache: &GpuCache) -> NvidiaMetrics {
 }
 
 fn store_metrics(cache: &mut GpuCache, metrics: NvidiaMetrics, sampled_at: Duration) {
+    cache.history_samples.record_value(metrics, sampled_at);
     cache.temp_celsius = metrics.temp_celsius;
     cache.usage_percent = metrics.usage_percent;
     cache.memory_percent = metrics.memory_percent;

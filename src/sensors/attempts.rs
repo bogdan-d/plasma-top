@@ -19,14 +19,13 @@ mod network_identity;
 mod nvidia;
 
 pub(crate) use network_identity::attempt_network_info;
-pub(crate) use nvidia::{
-    NvidiaResult, attempt_nvidia_fallback, attempt_nvml_nvidia, nvidia_result,
-};
+#[cfg(test)]
+pub(crate) use nvidia::NvidiaResult;
+pub(crate) use nvidia::{attempt_nvidia_fallback, attempt_nvml_nvidia, nvidia_result};
 
 /// Accumulated per-section wall-clock elapsed, keyed by section name.
 ///
-/// Populated only when [`crate::sensors::collect`] is given `Some(&mut Timings)` (the profiling
-/// subcommand). Deterministic tests pass `None`, so no wall clock is read.
+/// Populated only when the profiling subcommand gives the serial executor `Some(&mut Timings)`. Deterministic tests pass `None`, so no wall clock is read.
 pub type Timings = BTreeMap<String, Duration>;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum AttemptStatus {
@@ -95,6 +94,7 @@ pub(super) fn cached_attempt<T: Clone>(
     }
 }
 
+#[cfg(test)]
 pub(super) fn cached_attempt_or_empty<T: Clone>(
     retained: Option<&crate::domain::readings::RetainedMetricSample<T>>,
 ) -> AttemptResult<T> {
@@ -371,6 +371,7 @@ pub(crate) fn attempt_system_battery(
     }
 }
 
+#[cfg(test)]
 pub(super) fn cached_system_battery(
     id: &str,
     cache: Option<&power::BatterySystemCache>,
@@ -457,6 +458,7 @@ fn peripheral_result(
     }
 }
 
+#[cfg(test)]
 pub(super) fn cached_peripheral(
     cache: &power::BatteryPeripheralCache,
     name: Option<&str>,

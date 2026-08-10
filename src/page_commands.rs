@@ -259,6 +259,23 @@ impl PageCommandCache {
         self.entries.get(page_id)
     }
 
+    pub(crate) fn display_text(&self, page_id: &str, fallback: &str) -> String {
+        self.entries.get(page_id).map_or_else(
+            || fallback.to_owned(),
+            |state| {
+                state.latest.as_ref().map_or_else(
+                    || {
+                        state
+                            .last_failure
+                            .clone()
+                            .unwrap_or_else(|| fallback.to_owned())
+                    },
+                    |sample| sample.value.clone(),
+                )
+            },
+        )
+    }
+
     /// Removes owner state for command pages no longer present in the registry.
     pub(crate) fn retain_pages(&mut self, pages: &[Page]) {
         self.entries.retain(|page_id, _| {
@@ -664,6 +681,33 @@ pub fn page_inner_with_clock(
         );
     }
 
+    let width = text_width(&text);
+    let inner = text_to_mono_html(&text);
+    format!(
+        r#"<div class="page">{inner}</div>{}"#,
+        pager_html(idx, width, total)
+    )
+}
+
+pub(crate) fn page_inner_cached(
+    page: &Page,
+    idx: usize,
+    total: usize,
+    min_width: usize,
+    cache: &PageCommandCache,
+    environment: &PageEnvironment,
+) -> String {
+    let Some(spec) = page.command() else {
+        return String::new();
+    };
+    let text = cache.display_text(page.id, "");
+    if spec.colorize == Some(PageColorizer::Connections) {
+        let (inner, width) = format_connections(&text, min_width, environment);
+        return format!(
+            r#"<div class="page">{inner}</div>{}"#,
+            pager_html(idx, width, total)
+        );
+    }
     let width = text_width(&text);
     let inner = text_to_mono_html(&text);
     format!(

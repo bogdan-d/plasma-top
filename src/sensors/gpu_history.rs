@@ -26,6 +26,7 @@ pub struct GpuHistoryState {
 }
 
 impl GpuHistoryState {
+    #[cfg(test)]
     pub(crate) fn is_due(&self, hw: &HardwareInventory, now: Duration, cadence: Duration) -> bool {
         self.source != selected_source(hw)
             || self

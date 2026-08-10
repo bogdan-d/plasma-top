@@ -17,37 +17,39 @@ use crate::adapters::{
     ProductionClock, ProductionCommandRunner, ProductionDbusFacade, ProductionNotificationFacade,
 };
 use crate::cli::{PageDirection as CliPageDirection, RenderPage};
-use crate::config::{
-    Config, apply_canonical_width, cache_live_geom, default_config_path, load_config,
-    machine_source_paths, resolve_style,
-};
+use crate::config::Config;
 use crate::domain::boundary::{
     ClockSnapshot, CommandRunner, DbusFacade, FilesystemRoots, NotificationFacade,
 };
 use crate::domain::readings::{DisplaySnapshot, HardwareInventory};
-use crate::domain::state::NotificationState;
 use crate::error::{Error, Result};
-use crate::notify::check_and_notify;
 use crate::page_commands::{
     CommandLookup, Page, PageCommandCache, PageCommandContext, PageEnvironment, PageRenderKind,
-    PageSource, build_pages, default_click, page_inner_with_clock, pager_html, title_html,
+    PageSource, build_pages, default_click, page_inner_cached, page_inner_with_clock, pager_html,
+    title_html,
 };
 use crate::render::{PageFormatter, PanelFormatter};
 use crate::runtime::{self, atomic::write_atomic as write_atomic_bytes};
 use crate::sensors::gpu_nvidia::NvmlFacade;
 use crate::sensors::hid::BoltHidFacade;
 use crate::sensors::power::BoltBatteryFacade;
-use crate::sensors::process::{ProcessState, read_top_process_page};
+use crate::sensors::process::ProcessState;
+#[cfg(test)]
+use crate::sensors::process::read_top_process_page;
+mod scheduled_loop;
+#[cfg(any(test, feature = "nvml"))]
+use crate::sensors::gpu_nvidia;
+
+#[cfg(test)]
+use crate::domain::state::NotificationState;
+#[cfg(test)]
+use crate::notify::check_and_notify;
+#[cfg(test)]
 use crate::sensors::{
-    CollectCtx, OwnerRefs, PeripheralDiscoveryState, collect, collect_with_notifications,
-    discover_hardware, discover_hardware_attempt, needs_periph_rescan, rescan_peripherals,
-};
-use crate::sensors::{
-    cpu, disk, external, gpu_history, gpu_intel, gpu_nvidia, memory, network, power,
+    CollectCtx, OwnerRefs, collect_with_notifications, cpu, disk, external, gpu_history, gpu_intel,
+    memory, network, power,
 };
 
-/// Periodic retry cadence for peripherals absent at startup.
-pub const PERIPH_RESCAN_INTERVAL: Duration = Duration::from_secs(60);
 /// Page counter check cadence while sleeping between polls.
 pub const PAGE_WAKE_INTERVAL: Duration = Duration::from_millis(100);
 /// Bounded startup readiness logging window.
@@ -348,6 +350,56 @@ pub(crate) fn render_page_with_clock(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
+fn render_page_cached(
+    cfg: &Config,
+    hw: &HardwareInventory,
+    readings: &DisplaySnapshot,
+    css: &str,
+    active: &[Page],
+    index: usize,
+    command_cache: &PageCommandCache,
+    proc_root: &Path,
+) -> String {
+    let index = index % active.len().max(1);
+    if index == 0 {
+        let main = PanelFormatter::new(cfg, hw).format_tooltip(readings, css);
+        let pager = pager_html(0, cfg.display.tooltip_width.max(0) as usize, active.len());
+        return insert_before_tooltip_close(main, &pager);
+    }
+    let page = active[index];
+    let header = title_html(&page);
+    let formatter = PageFormatter::new(cfg, hw);
+    let pager = |width| pager_html(index, width, active.len());
+    match page.source {
+        PageSource::Render(PageRenderKind::CpuCores) => {
+            formatter.format_cpu_cores(readings, css, &header, Some(&pager))
+        }
+        PageSource::Render(PageRenderKind::TopProcess) => {
+            formatter.format_top_process(readings, css, &header, Some(&pager))
+        }
+        PageSource::Render(PageRenderKind::Graphs) => {
+            formatter.format_graphs(readings, css, &header, Some(&pager))
+        }
+        PageSource::Command(_) => {
+            let environment = PageEnvironment {
+                proc_root: proc_root.to_path_buf(),
+                services_text: None,
+            };
+            let inner = page_inner_cached(
+                &page,
+                index,
+                active.len(),
+                cfg.display.tooltip_width.max(0) as usize,
+                command_cache,
+                &environment,
+            );
+            formatter.format_page(&inner, css, &header, "")
+        }
+        PageSource::Full => PanelFormatter::new(cfg, hw).format_tooltip(readings, css),
+    }
+}
+
 struct DynRunner<'a>(&'a mut dyn CommandRunner);
 
 impl CommandRunner for DynRunner<'_> {
@@ -427,6 +479,7 @@ fn log_boot_ready(
 }
 
 /// Merges one selected process-page sample and stamps the completed display snapshot afterward.
+#[cfg(test)]
 pub(crate) fn merge_process_page_sample(
     readings: &mut DisplaySnapshot,
     proc_root: &Path,
@@ -438,8 +491,7 @@ pub(crate) fn merge_process_page_sample(
     readings.assembled_at = clock();
 }
 
-/// Runs daemon against explicit roots and adapters. `poll_limit` bounds tests;
-/// production passes `None`.
+/// Runs daemon against explicit roots and adapters. `poll_limit` bounds post-first-paint scheduled display publications in tests; production passes `None`.
 #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 pub fn run_daemon_with(
     config_path: Option<&Path>,
@@ -449,387 +501,7 @@ pub fn run_daemon_with(
     control: &mut dyn LoopControl,
     poll_limit: Option<usize>,
 ) -> Result<()> {
-    fs::create_dir_all(&paths.runtime)?;
-    fs::create_dir_all(&paths.state)?;
-    cleanup(paths);
-    write_atomic(&paths.page, "0")?;
-
-    let boot = control.snapshot();
-    let mut cfg = load_config(config_path, None)?;
-    let cpu_count = thread::available_parallelism().map_or(1, std::num::NonZero::get);
-    let mut hw = discover_hardware(
-        &roots.sys_root,
-        &roots.proc_root,
-        &cfg,
-        boundaries.dbus,
-        boundaries.commands,
-        cpu_count,
-    );
-    let mut active = publish_pages(paths, &cfg)?;
-    let mut cpu_owner = cpu::CpuState::default();
-    let mut memory_owner = memory::MemoryState::default();
-    let mut network_owner = network::NetworkState::default();
-    let mut disk_owner = disk::DiskState::default();
-    let mut process_owner = ProcessState::default();
-    let mut intel_gpu_owner = gpu_intel::IntelGpuState::default();
-    let mut power_owner = power::PowerState::default();
-    let mut nvidia_owner = gpu_nvidia::NvidiaState::default();
-    let mut gpu_history_owner = gpu_history::GpuHistoryState::default();
-    let mut external_owner = external::ExternalState::default();
-    let mut peripheral_discovery = PeripheralDiscoveryState::default();
-    let mut notifications = NotificationState::default();
-    let mut command_cache = PageCommandCache::new();
-    let command_lookup = executable_lookup();
-    let mut boot_pending = BTreeSet::from([
-        "battery_sys",
-        "battery_mouse",
-        "battery_kbd",
-        "hd_temps",
-        "fan_speeds",
-        "gpu_nvidia",
-        "gpu_intel",
-        "system_updates",
-        "server_check",
-        "top_process",
-    ]);
-
-    let watch_path = config_path.map_or_else(default_config_path, Path::to_path_buf);
-    let machine_paths = machine_source_paths(config_path);
-    let mut config_stamp = mtime(&watch_path);
-    let mut machine_stamps = machine_paths
-        .iter()
-        .map(|path| mtime(path))
-        .collect::<Vec<_>>();
-    let mut plasma_stamp = mtime(&paths.plasma_config);
-    let mut geom_stamp = mtime(&paths.geom);
-    let mut kde_stamp = mtime(&paths.kdeglobals);
-
-    let mut light = plasma_is_light(boundaries.commands, &paths.kdeglobals);
-    let mut css_path = resolve_style(if light {
-        "style-light.css"
-    } else {
-        "style-dark.css"
-    });
-    let mut overlay_path = cfg
-        .display
-        .overlay
-        .then(|| resolve_style("style-overlay.css"));
-    let mut css_stamp = mtime(&css_path);
-    let mut overlay_stamp = overlay_path.as_deref().and_then(mtime);
-    let mut css = read_css(&css_path, overlay_path.as_deref());
-
-    let first_clock = control.snapshot();
-    let mut capture_clock = || control.snapshot();
-    let mut first_ctx = CollectCtx::new(
-        roots,
-        &mut *boundaries.commands,
-        &mut *boundaries.dbus,
-        &mut capture_clock,
-    );
-    first_ctx.skip_slow = true;
-    first_ctx.nvml = boundaries.nvml.take();
-    first_ctx.bolt = boundaries.bolt.take();
-    let mut first = collect(
-        OwnerRefs {
-            cpu: &mut cpu_owner,
-            memory: &mut memory_owner,
-            network: &mut network_owner,
-            disk: &mut disk_owner,
-            process: &mut process_owner,
-            intel_gpu: &mut intel_gpu_owner,
-            power: &mut power_owner,
-            nvidia: &mut nvidia_owner,
-            gpu_history: &mut gpu_history_owner,
-            external: &mut external_owner,
-        },
-        &mut hw,
-        &cfg,
-        &mut first_ctx,
-        None,
-    );
-    boundaries.nvml = first_ctx.nvml.take();
-    boundaries.bolt = first_ctx.bolt.take();
-    let first_index = page_index(paths, active.len());
-    if active[first_index].render() == Some(PageRenderKind::TopProcess) {
-        let mut process_clock = || control.snapshot();
-        merge_process_page_sample(
-            &mut first,
-            &roots.proc_root,
-            &mut process_owner,
-            &mut process_clock,
-        );
-    }
-    let first_width = PanelFormatter::new(&cfg, &hw).canonical_width(&first);
-    apply_canonical_width(&mut cfg, i32::try_from(first_width).unwrap_or(i32::MAX));
-    write_atomic(
-        &paths.panel,
-        &PanelFormatter::with_now_unix(&cfg, &hw, clock_unix(first_clock))
-            .format_panel(&first, &css),
-    )?;
-    let page_cadence_at = control.snapshot().monotonic;
-    let mut command_capture_clock = || control.snapshot().monotonic;
-    let tooltip = render_page_with_clock(
-        &cfg,
-        &hw,
-        &first,
-        &css,
-        &active,
-        first_index,
-        boundaries.commands,
-        &command_lookup,
-        &mut command_cache,
-        page_cadence_at,
-        &roots.proc_root,
-        &mut command_capture_clock,
-    );
-    write_atomic(&paths.tooltip, &tooltip)?;
-    println!(
-        "[boot] first paint at +{:.0}ms",
-        first_clock
-            .monotonic
-            .saturating_sub(boot.monotonic)
-            .as_secs_f64()
-            * 1000.0
-    );
-    log_boot_ready(
-        &first,
-        &mut boot_pending,
-        boot.monotonic,
-        first_clock.monotonic,
-    );
-    cache_live_geom();
-
-    let mut polls = 0usize;
-    while !control.should_stop() && poll_limit.is_none_or(|limit| polls < limit) {
-        let start = control.snapshot();
-        let new_config_stamp = mtime(&watch_path);
-        let new_machine_stamps = machine_paths
-            .iter()
-            .map(|path| mtime(path))
-            .collect::<Vec<_>>();
-        if new_config_stamp != config_stamp || new_machine_stamps != machine_stamps {
-            config_stamp = new_config_stamp;
-            machine_stamps = new_machine_stamps;
-            match load_config(config_path, None) {
-                Ok(new_cfg) => {
-                    let discovery = discover_hardware_attempt(
-                        &roots.sys_root,
-                        &roots.proc_root,
-                        &new_cfg,
-                        boundaries.dbus,
-                        boundaries.commands,
-                        cpu_count,
-                    );
-                    cfg = new_cfg;
-                    discovery.merge_into(&mut hw);
-                    replace_page_registry(
-                        paths,
-                        &cfg,
-                        &mut active,
-                        &mut command_cache,
-                        &mut process_owner,
-                    )?;
-                }
-                Err(error) => eprintln!("[reload] config reload failed, keeping previous: {error}"),
-            }
-        }
-
-        let new_plasma_stamp = mtime(&paths.plasma_config);
-        let new_geom_stamp = mtime(&paths.geom);
-        if new_plasma_stamp != plasma_stamp || new_geom_stamp != geom_stamp {
-            plasma_stamp = new_plasma_stamp;
-            geom_stamp = new_geom_stamp;
-            cache_live_geom();
-            match load_config(config_path, None) {
-                Ok(new_cfg) => {
-                    cfg = new_cfg;
-                    replace_page_registry(
-                        paths,
-                        &cfg,
-                        &mut active,
-                        &mut command_cache,
-                        &mut process_owner,
-                    )?;
-                }
-                Err(error) => {
-                    eprintln!("[reload] plasma-triggered reload failed, keeping previous: {error}")
-                }
-            }
-        }
-
-        let new_kde_stamp = mtime(&paths.kdeglobals);
-        if new_kde_stamp != kde_stamp {
-            kde_stamp = new_kde_stamp;
-            let new_light = plasma_is_light(boundaries.commands, &paths.kdeglobals);
-            if new_light != light {
-                light = new_light;
-                css_path = resolve_style(if light {
-                    "style-light.css"
-                } else {
-                    "style-dark.css"
-                });
-                css_stamp = mtime(&css_path);
-                css = read_css(&css_path, overlay_path.as_deref());
-            }
-        }
-        let wanted_overlay = cfg
-            .display
-            .overlay
-            .then(|| resolve_style("style-overlay.css"));
-        if wanted_overlay != overlay_path {
-            overlay_path = wanted_overlay;
-            overlay_stamp = overlay_path.as_deref().and_then(mtime);
-            css = read_css(&css_path, overlay_path.as_deref());
-        }
-        let new_css_stamp = mtime(&css_path);
-        let new_overlay_stamp = overlay_path.as_deref().and_then(mtime);
-        if new_css_stamp != css_stamp || new_overlay_stamp != overlay_stamp {
-            css_stamp = new_css_stamp;
-            overlay_stamp = new_overlay_stamp;
-            css = read_css(&css_path, overlay_path.as_deref());
-        }
-
-        if needs_periph_rescan(&hw, &cfg) {
-            let decision_at = control.snapshot().monotonic;
-            if peripheral_discovery
-                .sampled_at
-                .is_none_or(|last| decision_at.saturating_sub(last) >= PERIPH_RESCAN_INTERVAL)
-            {
-                rescan_peripherals(&mut hw, &cfg, boundaries.dbus, boundaries.commands);
-                peripheral_discovery.sampled_at = Some(decision_at);
-            }
-        }
-
-        let mut capture_clock = || control.snapshot();
-        let mut ctx = CollectCtx::new(
-            roots,
-            &mut *boundaries.commands,
-            &mut *boundaries.dbus,
-            &mut capture_clock,
-        );
-        ctx.nvml = boundaries.nvml.take();
-        ctx.bolt = boundaries.bolt.take();
-        let collected = collect_with_notifications(
-            OwnerRefs {
-                cpu: &mut cpu_owner,
-                memory: &mut memory_owner,
-                network: &mut network_owner,
-                disk: &mut disk_owner,
-                process: &mut process_owner,
-                intel_gpu: &mut intel_gpu_owner,
-                power: &mut power_owner,
-                nvidia: &mut nvidia_owner,
-                gpu_history: &mut gpu_history_owner,
-                external: &mut external_owner,
-            },
-            &mut hw,
-            &cfg,
-            &mut ctx,
-            None,
-        );
-        let mut readings = collected.display;
-        boundaries.nvml = ctx.nvml.take();
-        boundaries.bolt = ctx.bolt.take();
-        let index = page_index(paths, active.len());
-        if active[index].render() == Some(PageRenderKind::TopProcess) {
-            let mut process_clock = || control.snapshot();
-            merge_process_page_sample(
-                &mut readings,
-                &roots.proc_root,
-                &mut process_owner,
-                &mut process_clock,
-            );
-        }
-        let canonical_width = PanelFormatter::new(&cfg, &hw).canonical_width(&readings);
-        apply_canonical_width(&mut cfg, i32::try_from(canonical_width).unwrap_or(i32::MAX));
-        let report = check_and_notify(
-            &collected.notifications,
-            &cfg,
-            &mut notifications,
-            &hw,
-            start.monotonic,
-            &mut DynNotification(boundaries.notifications),
-        );
-        for failure in report.failures {
-            eprintln!("[notify] {}", failure.error);
-        }
-        log_boot_ready(
-            &readings,
-            &mut boot_pending,
-            boot.monotonic,
-            start.monotonic,
-        );
-
-        write_atomic(
-            &paths.panel,
-            &PanelFormatter::with_now_unix(&cfg, &hw, clock_unix(start))
-                .format_panel(&readings, &css),
-        )?;
-        let page_cadence_at = control.snapshot().monotonic;
-        let mut command_capture_clock = || control.snapshot().monotonic;
-        write_atomic(
-            &paths.tooltip,
-            &render_page_with_clock(
-                &cfg,
-                &hw,
-                &readings,
-                &css,
-                &active,
-                index,
-                boundaries.commands,
-                &command_lookup,
-                &mut command_cache,
-                page_cadence_at,
-                &roots.proc_root,
-                &mut command_capture_clock,
-            ),
-        )?;
-
-        let interval = cfg.display.poll_interval.duration();
-        let mut remaining =
-            interval.saturating_sub(control.snapshot().monotonic.saturating_sub(start.monotonic));
-        let mut last_page = page_index(paths, active.len());
-        while !remaining.is_zero() && !control.should_stop() {
-            let step = remaining.min(PAGE_WAKE_INTERVAL);
-            control.sleep(step);
-            remaining = remaining.saturating_sub(step);
-            let page = page_index(paths, active.len());
-            if page != last_page {
-                last_page = page;
-                if active[page].render() == Some(PageRenderKind::TopProcess) {
-                    let mut process_clock = || control.snapshot();
-                    merge_process_page_sample(
-                        &mut readings,
-                        &roots.proc_root,
-                        &mut process_owner,
-                        &mut process_clock,
-                    );
-                }
-                let page_cadence_at = control.snapshot().monotonic;
-                let mut command_capture_clock = || control.snapshot().monotonic;
-                write_atomic(
-                    &paths.tooltip,
-                    &render_page_with_clock(
-                        &cfg,
-                        &hw,
-                        &readings,
-                        &css,
-                        &active,
-                        page,
-                        boundaries.commands,
-                        &command_lookup,
-                        &mut command_cache,
-                        page_cadence_at,
-                        &roots.proc_root,
-                        &mut command_capture_clock,
-                    ),
-                )?;
-            }
-        }
-        polls = polls.saturating_add(1);
-    }
-    cleanup(paths);
-    Ok(())
+    scheduled_loop::run(config_path, roots, paths, boundaries, control, poll_limit)
 }
 
 struct DynNotification<'a>(&'a mut dyn NotificationFacade);
