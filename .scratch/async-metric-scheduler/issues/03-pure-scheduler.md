@@ -1,7 +1,7 @@
 # Build pure scheduler
 
 Type: task
-Status: ready-for-agent
+Status: resolved
 Blocked by: 02
 
 ## Objective
@@ -26,3 +26,7 @@ Implement deterministic scheduling policy without Tokio or real I/O.
 ## Validation
 
 Run focused scheduler tests, then the full Rust gates from `docs/DEVELOPMENT.md`.
+
+## Answer
+
+Implemented in `a9cbec8` (`feat: add deterministic metric scheduler`). PlasmaTop now uses one pure typed scheduler for demand, deadlines, backoff, history, generations, cancellation, publication, notification, inventory, and lifecycle policy, with a bounded non-recursive serial production executor and deterministic fake-time coverage. Full repository validation and a fresh integration acceptance review passed.
