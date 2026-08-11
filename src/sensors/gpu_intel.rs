@@ -242,6 +242,10 @@ fn try_read_intel_gpu_engine_times(
 /// Returns `None` when `drm-client-id` is missing or unparseable. Malformed
 /// `drm-engine-*` values are skipped (Rust is more defensive than Python,
 /// which would raise; in practice the kernel always emits well-formed ints).
+#[expect(
+    clippy::collapsible_if,
+    reason = "prefix, token, and integer parsing remain separate input stages"
+)]
 fn parse_fdinfo(text: &str) -> Option<(u32, BTreeMap<String, u64>)> {
     let mut client_id: Option<u32> = None;
     let mut engines: BTreeMap<String, u64> = BTreeMap::new();
@@ -326,12 +330,12 @@ pub(crate) fn read_intel_gpu_metrics_once(
         };
         for (engine, &ns) in engines {
             let prev_ns = prev_engines.get(engine).copied().unwrap_or(ns);
-            if let Some(delta) = ns.checked_sub(prev_ns) {
-                if delta > 0 {
-                    sums.entry(engine.clone())
-                        .or_insert(0)
-                        .saturating_add_assign_u64(delta);
-                }
+            if let Some(delta) = ns.checked_sub(prev_ns)
+                && delta > 0
+            {
+                sums.entry(engine.clone())
+                    .or_insert(0)
+                    .saturating_add_assign_u64(delta);
             }
         }
     }

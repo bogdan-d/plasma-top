@@ -1,7 +1,7 @@
 # Adopt Rust 1.97.1 and restore current syntax
 
 Type: task
-Status: ready-for-agent
+Status: resolved
 Blocked by: 04
 
 ## Objective
@@ -26,3 +26,7 @@ Drop backward-compatibility work for Rust 1.87, set Rust 1.97.1 as the project m
 ## Validation
 
 Run a clean Rust 1.97.1 all-target/all-feature check, inspect the syntax-only source diff against `5fbe6ce`, and run the full gates from `docs/DEVELOPMENT.md`.
+
+## Answer
+
+PlasmaTop now pins Rust and Cargo policy to exactly 1.97.1 across Cargo metadata, the repository toolchain, CI, source-build documentation, the installer, AUR packaging, repository gates, the scheduler spec, and architecture evidence. All 43 compatibility-only nested conditions introduced by `5fbe6ce` are restored to their behaviorally equivalent pre-commit let chains, and equivalent issue-04 command and D-Bus adapter conditions now use let chains without changing polling, disconnect, reconnect, cancellation, or shutdown behavior. Deliberate pre-existing nested conditions remain intact with narrow Clippy expectations where Rust 1.97.1 newly diagnoses them. A fresh independent Rust review found no behavior or policy defects after that lint-gate fix; focused tests and every clean validation gate in `docs/DEVELOPMENT.md` pass with Homebrew `rustc 1.97.1` and `cargo 1.97.1`.

@@ -277,18 +277,18 @@ async fn serve_bus(
                 });
             }
             SystemEvent::Joined(disconnected) => {
-                if let Some(disconnected) = disconnected {
-                    if connection_matches(
+                if let Some(disconnected) = disconnected
+                    && connection_matches(
                         connection.as_ref().map(|(generation, _)| *generation),
                         disconnected.generation,
-                    ) && disconnected.disconnected
-                    {
-                        connection = None;
-                        if let Some(task) = signals.take() {
-                            task.abort();
-                        }
-                        reconnect.failed();
+                    )
+                    && disconnected.disconnected
+                {
+                    connection = None;
+                    if let Some(task) = signals.take() {
+                        task.abort();
                     }
+                    reconnect.failed();
                 }
             }
             SystemEvent::Connected(result) => {
@@ -381,15 +381,15 @@ pub(super) async fn serve_session(
                 });
             }
             SessionEvent::Joined(disconnected) => {
-                if let Some(disconnected) = disconnected {
-                    if connection_matches(
+                if let Some(disconnected) = disconnected
+                    && connection_matches(
                         connection.as_ref().map(|(generation, _)| *generation),
                         disconnected.generation,
-                    ) && disconnected.disconnected
-                    {
-                        connection = None;
-                        reconnect.failed();
-                    }
+                    )
+                    && disconnected.disconnected
+                {
+                    connection = None;
+                    reconnect.failed();
                 }
             }
             SessionEvent::Connected(result) => {
@@ -759,15 +759,11 @@ async fn wait_system_event(
         if changed.as_mut().poll(cx).is_ready() {
             return Poll::Ready(SystemEvent::Shutdown);
         }
-        if has_calls {
-            if let Poll::Ready(Some(result)) = joined.as_mut().poll(cx) {
-                return Poll::Ready(SystemEvent::Joined(result.ok()));
-            }
+        if has_calls && let Poll::Ready(Some(result)) = joined.as_mut().poll(cx) {
+            return Poll::Ready(SystemEvent::Joined(result.ok()));
         }
-        if is_connecting {
-            if let Poll::Ready(result) = connection_finished.as_mut().poll(cx) {
-                return Poll::Ready(SystemEvent::Connected(result));
-            }
+        if is_connecting && let Poll::Ready(result) = connection_finished.as_mut().poll(cx) {
+            return Poll::Ready(SystemEvent::Connected(result));
         }
         if has_signals && signal_finished.as_mut().poll(cx).is_ready() {
             return Poll::Ready(SystemEvent::SignalsEnded);
@@ -820,15 +816,11 @@ async fn wait_session_event(
         if changed.as_mut().poll(cx).is_ready() {
             return Poll::Ready(SessionEvent::Shutdown);
         }
-        if has_calls {
-            if let Poll::Ready(Some(result)) = joined.as_mut().poll(cx) {
-                return Poll::Ready(SessionEvent::Joined(result.ok()));
-            }
+        if has_calls && let Poll::Ready(Some(result)) = joined.as_mut().poll(cx) {
+            return Poll::Ready(SessionEvent::Joined(result.ok()));
         }
-        if is_connecting {
-            if let Poll::Ready(result) = connection_finished.as_mut().poll(cx) {
-                return Poll::Ready(SessionEvent::Connected(result));
-            }
+        if is_connecting && let Poll::Ready(result) = connection_finished.as_mut().poll(cx) {
+            return Poll::Ready(SessionEvent::Connected(result));
         }
         if accept_request {
             match request.as_mut().poll(cx) {

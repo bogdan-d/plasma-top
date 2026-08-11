@@ -2,7 +2,7 @@
 name = "plasma-top"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.87"
+rust-version = "1.97.1"
 license = "GPL-2.0-or-later"
 publish = false
 description = "KDE Plasma panel and tooltip system statistics"

@@ -579,6 +579,10 @@ pub(super) fn battery_periph_from_cache(
 }
 
 /// Updates `cache` with a fresh UPower property read for one peripheral.
+#[expect(
+    clippy::collapsible_if,
+    reason = "empty-name policy, optional model, and nonempty model are distinct conditions"
+)]
 fn refresh_periph_cache(
     cache: &mut BatteryPeripheralCache,
     dbus: &mut dyn DbusFacade,

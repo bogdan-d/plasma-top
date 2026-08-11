@@ -109,7 +109,7 @@ Final low-power acceptance compares release builds from a fixed synchronous comm
 1. [Capture baseline and scheduler contracts](issues/01-baseline-and-contracts.md).
 2. [Introduce the new domain model and extract owner state](issues/02-domain-model-and-owner-state.md).
 3. [Build the pure scheduler](issues/03-pure-scheduler.md).
-4. [Add Tokio, typed command/D-Bus services, and the Rust 1.87 transition](issues/04-async-io-services.md).
+4. [Add Tokio and typed command/D-Bus services](issues/04-async-io-services.md).
 5. [Adopt Rust 1.97.1 and restore current syntax](issues/05-adopt-rust-1.97.1.md).
 6. [Cut daemon orchestration over to async owners](issues/06-async-daemon-cutover.md).
 7. [Add inotify and the tooltip presentation protocol](issues/07-event-and-presentation-protocol.md).

@@ -11,8 +11,8 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: Install minimum Rust toolchain (1.87)
-        uses: dtolnay/rust-toolchain@1.87
+      - name: Install Rust toolchain (1.97.1)
+        uses: dtolnay/rust-toolchain@1.97.1
         with:
           components: clippy, rustfmt
 

@@ -351,11 +351,11 @@ pub(crate) fn execute_scheduled_job(
                 readings.ip_address = sample.value.ip_address;
                 readings.wifi_ssid = None;
                 readings.wifi_signal_percent = None;
-                if let Some(wifi) = result.wifi.sample {
-                    if Some(wifi.value.device.as_str()) == readings.net_device.as_deref() {
-                        readings.wifi_ssid = wifi.value.ssid;
-                        readings.wifi_signal_percent = wifi.value.signal_pct;
-                    }
+                if let Some(wifi) = result.wifi.sample
+                    && Some(wifi.value.device.as_str()) == readings.net_device.as_deref()
+                {
+                    readings.wifi_ssid = wifi.value.ssid;
+                    readings.wifi_signal_percent = wifi.value.signal_pct;
                 }
             }
             completion

@@ -122,54 +122,52 @@ pub fn check_and_notify(
     let cool = f64::from(thresholds.temp_hysteresis);
     let mut report = NotificationReport::default();
 
-    if enabled.cpu_temp {
-        if let Some(temp) = readings.cpu_temp {
-            if sustained(
-                &mut state.cpu_temp,
-                f64::from(temp),
-                f64::from(thresholds.cpu_temp),
-                f64::from(thresholds.cpu_temp) - cool,
-                hold,
-                now,
-            ) {
-                emit(
-                    facade,
-                    &mut report,
-                    payload(
-                        format!(
-                            "{} {temp}{TEMP_SCALE}",
-                            label(labels, "cpu_temp", "Cpu temp")
-                        ),
-                        ERROR_ICON,
-                    ),
-                );
-            }
-        }
+    if enabled.cpu_temp
+        && let Some(temp) = readings.cpu_temp
+        && sustained(
+            &mut state.cpu_temp,
+            f64::from(temp),
+            f64::from(thresholds.cpu_temp),
+            f64::from(thresholds.cpu_temp) - cool,
+            hold,
+            now,
+        )
+    {
+        emit(
+            facade,
+            &mut report,
+            payload(
+                format!(
+                    "{} {temp}{TEMP_SCALE}",
+                    label(labels, "cpu_temp", "Cpu temp")
+                ),
+                ERROR_ICON,
+            ),
+        );
     }
 
-    if enabled.gpu_nvidia_temp {
-        if let Some(temp) = readings.gpu_temp {
-            if sustained(
-                &mut state.gpu_nvidia_temp,
-                f64::from(temp),
-                f64::from(thresholds.gpu_nvidia_temp),
-                f64::from(thresholds.gpu_nvidia_temp) - cool,
-                hold,
-                now,
-            ) {
-                emit(
-                    facade,
-                    &mut report,
-                    payload(
-                        format!(
-                            "{} {temp}{TEMP_SCALE}",
-                            label(labels, "gpu_nvidia_temp", "Gpu temp")
-                        ),
-                        ERROR_ICON,
-                    ),
-                );
-            }
-        }
+    if enabled.gpu_nvidia_temp
+        && let Some(temp) = readings.gpu_temp
+        && sustained(
+            &mut state.gpu_nvidia_temp,
+            f64::from(temp),
+            f64::from(thresholds.gpu_nvidia_temp),
+            f64::from(thresholds.gpu_nvidia_temp) - cool,
+            hold,
+            now,
+        )
+    {
+        emit(
+            facade,
+            &mut report,
+            payload(
+                format!(
+                    "{} {temp}{TEMP_SCALE}",
+                    label(labels, "gpu_nvidia_temp", "Gpu temp")
+                ),
+                ERROR_ICON,
+            ),
+        );
     }
 
     if enabled.disk_usage {
@@ -272,93 +270,88 @@ pub fn check_and_notify(
         }
     }
 
-    if enabled.battery_mouse {
-        if let Some(battery) = &readings.battery_mouse {
-            if battery.charge_percent != 0 {
-                let over =
-                    battery.charge_percent > 0 && battery.charge_percent < thresholds.battery_mouse;
-                if over && !state.battery_mouse {
-                    let name = if battery.name.is_empty() {
-                        label(labels, "battery_mouse", "Mouse")
-                    } else {
-                        &battery.name
-                    };
-                    emit(
-                        facade,
-                        &mut report,
-                        payload(format!("{name}: {}%", battery.charge_percent), BATTERY_ICON),
-                    );
-                }
-                state.battery_mouse = over;
-            }
+    if enabled.battery_mouse
+        && let Some(battery) = &readings.battery_mouse
+        && battery.charge_percent != 0
+    {
+        let over = battery.charge_percent > 0 && battery.charge_percent < thresholds.battery_mouse;
+        if over && !state.battery_mouse {
+            let name = if battery.name.is_empty() {
+                label(labels, "battery_mouse", "Mouse")
+            } else {
+                &battery.name
+            };
+            emit(
+                facade,
+                &mut report,
+                payload(format!("{name}: {}%", battery.charge_percent), BATTERY_ICON),
+            );
         }
+        state.battery_mouse = over;
     }
 
-    if enabled.battery_kbd {
-        if let Some(battery) = &readings.battery_kbd {
-            if battery.charge_percent != 0 {
-                let over =
-                    battery.charge_percent > 0 && battery.charge_percent < thresholds.battery_kbd;
-                if over && !state.battery_kbd {
-                    let name = if battery.name.is_empty() {
-                        label(labels, "battery_kbd", "Keyboard")
-                    } else {
-                        &battery.name
-                    };
-                    emit(
-                        facade,
-                        &mut report,
-                        payload(format!("{name}: {}%", battery.charge_percent), BATTERY_ICON),
-                    );
-                }
-                state.battery_kbd = over;
-            }
+    if enabled.battery_kbd
+        && let Some(battery) = &readings.battery_kbd
+        && battery.charge_percent != 0
+    {
+        let over = battery.charge_percent > 0 && battery.charge_percent < thresholds.battery_kbd;
+        if over && !state.battery_kbd {
+            let name = if battery.name.is_empty() {
+                label(labels, "battery_kbd", "Keyboard")
+            } else {
+                &battery.name
+            };
+            emit(
+                facade,
+                &mut report,
+                payload(format!("{name}: {}%", battery.charge_percent), BATTERY_ICON),
+            );
         }
+        state.battery_kbd = over;
     }
 
-    if enabled.load_avg {
-        if let Some(load) = readings.load_average {
-            if sustained(
-                &mut state.load_avg,
-                load.fifteen / hardware.cpu_count as f64,
-                thresholds.load_avg_15,
-                thresholds.load_avg_15,
-                f64::from(thresholds.load_avg_minutes) * 60.0,
-                now,
-            ) {
-                emit(
-                    facade,
-                    &mut report,
-                    payload(
-                        format!(
-                            "{} 15m {} {} min ({:.2})",
-                            label(labels, "load_avg", "Load avg"),
-                            notify_label(labels, "load_high_for", "high for"),
-                            thresholds.load_avg_minutes,
-                            load.fifteen
-                        ),
-                        WARNING_ICON,
-                    ),
-                );
-            }
-        }
+    if enabled.load_avg
+        && let Some(load) = readings.load_average
+        && sustained(
+            &mut state.load_avg,
+            load.fifteen / hardware.cpu_count as f64,
+            thresholds.load_avg_15,
+            thresholds.load_avg_15,
+            f64::from(thresholds.load_avg_minutes) * 60.0,
+            now,
+        )
+    {
+        emit(
+            facade,
+            &mut report,
+            payload(
+                format!(
+                    "{} 15m {} {} min ({:.2})",
+                    label(labels, "load_avg", "Load avg"),
+                    notify_label(labels, "load_high_for", "high for"),
+                    thresholds.load_avg_minutes,
+                    load.fifteen
+                ),
+                WARNING_ICON,
+            ),
+        );
     }
 
-    if enabled.server_check {
-        if let Some(server_ok) = readings.server_ok {
-            let down = !server_ok;
-            if down && !state.server {
-                emit(
-                    facade,
-                    &mut report,
-                    payload(
-                        notify_label(labels, "server_down", "Server is not reachable!").to_owned(),
-                        ERROR_ICON,
-                    ),
-                );
-            }
-            state.server = down;
+    if enabled.server_check
+        && let Some(server_ok) = readings.server_ok
+    {
+        let down = !server_ok;
+        if down && !state.server {
+            emit(
+                facade,
+                &mut report,
+                payload(
+                    notify_label(labels, "server_down", "Server is not reachable!").to_owned(),
+                    ERROR_ICON,
+                ),
+            );
         }
+        state.server = down;
     }
 
     report

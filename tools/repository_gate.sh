@@ -84,7 +84,15 @@ grep -Fqx 'ExecStart=%h/.local/bin/plasma-top daemon' service/plasma-top-user.se
     fail "user service launcher drift"
 grep -Fq 'exec /usr/lib/plasma-top/plasma-top "$@"' packaging/plasma-top-launcher ||
     fail "package launcher drift"
-grep -Fq "makedepends=('cargo>=1.87' 'git')" packaging/aur/PKGBUILD ||
+grep -Fqx 'rust-version = "1.97.1"' Cargo.toml ||
+    fail "Cargo Rust version policy drift"
+grep -Fqx 'channel = "1.97.1"' rust-toolchain.toml ||
+    fail "repository Rust toolchain policy drift"
+grep -Fqx '      - name: Install Rust toolchain (1.97.1)' .github/workflows/baseline.yml ||
+    fail "CI Rust toolchain name drift"
+grep -Fqx '        uses: dtolnay/rust-toolchain@1.97.1' .github/workflows/baseline.yml ||
+    fail "CI Rust toolchain action drift"
+grep -Fq "makedepends=('cargo>=1.97.1' 'git')" packaging/aur/PKGBUILD ||
     fail "AUR Rust build dependencies drift"
 rg -Fq 'canonical_width_covers_every_tooltip_item' \
     src/render/formatter.rs src/render/formatter ||

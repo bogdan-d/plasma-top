@@ -188,6 +188,10 @@ fn tempdir_for_loader_tests() -> PathBuf {
 ///
 /// Panics on I/O failure — these are tests exercising the loader, not I/O
 /// robustness, so a panic on tempdir setup is the right level of noise.
+#[expect(
+    clippy::collapsible_if,
+    reason = "the test helper keeps optional parent discovery separate from setup failure"
+)]
 fn write_file(path: PathBuf, contents: &str) {
     if let Some(parent) = path.parent() {
         if let Err(error) = std::fs::create_dir_all(parent) {

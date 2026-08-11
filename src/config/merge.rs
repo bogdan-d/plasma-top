@@ -131,6 +131,10 @@ pub fn load_toml_at(path: &Path) -> Table {
 /// `--config` reads only its own sibling. `{}` if none exist or all are
 /// malformed.
 #[must_use]
+#[expect(
+    clippy::collapsible_if,
+    reason = "file reads and TOML decoding remain distinct best-effort stages"
+)]
 pub fn load_machines(config_path: Option<&Path>) -> Table {
     let mut machines = Table::new();
     for path in machine_source_paths(config_path) {

@@ -60,10 +60,11 @@ fn collect_one_shot(
     page: Option<&str>,
 ) -> Result<OneShot> {
     let mut cfg = load_config(config_path, vertical)?;
-    if let Some(page) = page {
-        if page != "full" && !cfg.pages.order.iter().any(|known| known == page) {
-            cfg.pages.order.push(page.to_owned());
-        }
+    if let Some(page) = page
+        && page != "full"
+        && !cfg.pages.order.iter().any(|known| known == page)
+    {
+        cfg.pages.order.push(page.to_owned());
     }
     let roots = FilesystemRoots::default();
     let io = ProductionIo::start_for_diagnostics()?;

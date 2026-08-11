@@ -215,11 +215,11 @@ fn flatten_network_info(result: NetworkInfoResult, readings: &mut DisplaySnapsho
     readings.ip_address = sample.value.ip_address;
     readings.wifi_ssid = None;
     readings.wifi_signal_percent = None;
-    if let Some(wifi) = result.wifi.sample {
-        if Some(wifi.value.device.as_str()) == sample.value.device.as_deref() {
-            readings.wifi_ssid = wifi.value.ssid;
-            readings.wifi_signal_percent = wifi.value.signal_pct;
-        }
+    if let Some(wifi) = result.wifi.sample
+        && Some(wifi.value.device.as_str()) == sample.value.device.as_deref()
+    {
+        readings.wifi_ssid = wifi.value.ssid;
+        readings.wifi_signal_percent = wifi.value.signal_pct;
     }
 }
 
@@ -375,22 +375,20 @@ pub(crate) fn collect_with_notifications(
         &mut *ctx.clock,
         &mut timings,
     );
-    if cpu_result.usage.status != AttemptStatus::Baseline {
-        if let Some(usage) = cpu_result.usage.sample.as_ref() {
-            if let Some(history_at) = cpu_result.usage.attempted_at {
-                if sample_due(
-                    owners.cpu.cpu_history_sample_at,
-                    history_at,
-                    cfg.display.history_interval.duration(),
-                ) {
-                    cpu::append_cpu_history(owners.cpu, cfg, history_at, usage.value);
-                    cpu_result.history = Some(MetricSample::new(
-                        owners.cpu.cpu_history.clone(),
-                        history_at,
-                    ));
-                }
-            }
-        }
+    if cpu_result.usage.status != AttemptStatus::Baseline
+        && let Some(usage) = cpu_result.usage.sample.as_ref()
+        && let Some(history_at) = cpu_result.usage.attempted_at
+        && sample_due(
+            owners.cpu.cpu_history_sample_at,
+            history_at,
+            cfg.display.history_interval.duration(),
+        )
+    {
+        cpu::append_cpu_history(owners.cpu, cfg, history_at, usage.value);
+        cpu_result.history = Some(MetricSample::new(
+            owners.cpu.cpu_history.clone(),
+            history_at,
+        ));
     }
     flatten_cpu_notifications(&cpu_result, &mut notification_readings);
     flatten_cpu(cpu_result, &mut readings);
@@ -418,22 +416,20 @@ pub(crate) fn collect_with_notifications(
     if cfg.pages.order.iter().any(|page| page == "cpu_cores") && !skip_slow {
         clock = (ctx.clock)();
         let mut result = attempt_cpu_cores(owners.cpu, proc_root, clock, &mut timings);
-        if result.usage.status != AttemptStatus::Baseline {
-            if let Some(usage) = result.usage.sample.as_ref() {
-                if let Some(history_at) = result.usage.attempted_at {
-                    if sample_due(
-                        owners.cpu.cpu_core_history_sample_at,
-                        history_at,
-                        cfg.display.history_interval.duration(),
-                    ) {
-                        cpu::append_cpu_core_history(owners.cpu, cfg, history_at, &usage.value);
-                        result.history = Some(MetricSample::new(
-                            owners.cpu.cpu_core_history.clone(),
-                            history_at,
-                        ));
-                    }
-                }
-            }
+        if result.usage.status != AttemptStatus::Baseline
+            && let Some(usage) = result.usage.sample.as_ref()
+            && let Some(history_at) = result.usage.attempted_at
+            && sample_due(
+                owners.cpu.cpu_core_history_sample_at,
+                history_at,
+                cfg.display.history_interval.duration(),
+            )
+        {
+            cpu::append_cpu_core_history(owners.cpu, cfg, history_at, &usage.value);
+            result.history = Some(MetricSample::new(
+                owners.cpu.cpu_core_history.clone(),
+                history_at,
+            ));
         }
         flatten_cpu_cores(result, &mut readings);
     }
@@ -446,36 +442,33 @@ pub(crate) fn collect_with_notifications(
         &mut *ctx.clock,
         &mut timings,
     );
-    if let Some(usage) = memory_result.usage.sample.as_ref() {
-        if let Some(history_at) = memory_result.usage.attempted_at {
-            if sample_due(
-                owners.memory.mem_history_sample_at,
-                history_at,
-                cfg.display.history_interval.duration(),
-            ) {
-                memory::append_memory_history(owners.memory, cfg, history_at, usage.value.percent);
-                memory_result.history = Some(MetricSample::new(
-                    owners.memory.mem_history.clone(),
-                    history_at,
-                ));
-            }
-        }
+    if let Some(usage) = memory_result.usage.sample.as_ref()
+        && let Some(history_at) = memory_result.usage.attempted_at
+        && sample_due(
+            owners.memory.mem_history_sample_at,
+            history_at,
+            cfg.display.history_interval.duration(),
+        )
+    {
+        memory::append_memory_history(owners.memory, cfg, history_at, usage.value.percent);
+        memory_result.history = Some(MetricSample::new(
+            owners.memory.mem_history.clone(),
+            history_at,
+        ));
     }
     flatten_memory(memory_result, &mut readings);
     // ── Network rates + identity ───────────────────────────────────────────
-    let mut network_speed_result = if caps.contains(&Capability::NetworkSpeed) {
-        if let Some(device) = hw.net_device.as_deref() {
-            clock = (ctx.clock)();
-            Some(attempt_network_speed(
-                owners.network,
-                sys_root,
-                device,
-                clock,
-                &mut timings,
-            ))
-        } else {
-            None
-        }
+    let mut network_speed_result = if caps.contains(&Capability::NetworkSpeed)
+        && let Some(device) = hw.net_device.as_deref()
+    {
+        clock = (ctx.clock)();
+        Some(attempt_network_speed(
+            owners.network,
+            sys_root,
+            device,
+            clock,
+            &mut timings,
+        ))
     } else {
         None
     };
@@ -510,13 +503,13 @@ pub(crate) fn collect_with_notifications(
                 .and_then(|sample| sample.value.device.clone())
         });
         flatten_network_info(result, &mut readings);
-        if let Some(device) = discovered_device {
-            if hw.net_device != device {
-                hw.net_device = device;
-                owners.network.reset_rate();
-                owners.network.reset_history();
-                network_source_changed = true;
-            }
+        if let Some(device) = discovered_device
+            && hw.net_device != device
+        {
+            hw.net_device = device;
+            owners.network.reset_rate();
+            owners.network.reset_history();
+            network_source_changed = true;
         }
     }
 
@@ -527,34 +520,31 @@ pub(crate) fn collect_with_notifications(
             result.up_history = None;
             result.down_history = None;
         }
-        if result.reading.status != AttemptStatus::Baseline {
-            if let Some(sample) = result.reading.sample.as_ref() {
-                if let Some(history_at) = result.reading.attempted_at {
-                    if cfg.pages.order.iter().any(|page| page == "graphs")
-                        && sample_due(
-                            network::net_history_sample_at(owners.network),
-                            history_at,
-                            cfg.display.history_interval.duration(),
-                        )
-                    {
-                        network::append_net_history(
-                            owners.network,
-                            cfg,
-                            history_at,
-                            Some(sample.value.0),
-                            Some(sample.value.1),
-                        );
-                        result.up_history = Some(MetricSample::new(
-                            owners.network.net_up_history().to_vec(),
-                            history_at,
-                        ));
-                        result.down_history = Some(MetricSample::new(
-                            owners.network.net_down_history().to_vec(),
-                            history_at,
-                        ));
-                    }
-                }
-            }
+        if result.reading.status != AttemptStatus::Baseline
+            && let Some(sample) = result.reading.sample.as_ref()
+            && let Some(history_at) = result.reading.attempted_at
+            && cfg.pages.order.iter().any(|page| page == "graphs")
+            && sample_due(
+                network::net_history_sample_at(owners.network),
+                history_at,
+                cfg.display.history_interval.duration(),
+            )
+        {
+            network::append_net_history(
+                owners.network,
+                cfg,
+                history_at,
+                Some(sample.value.0),
+                Some(sample.value.1),
+            );
+            result.up_history = Some(MetricSample::new(
+                owners.network.net_up_history().to_vec(),
+                history_at,
+            ));
+            result.down_history = Some(MetricSample::new(
+                owners.network.net_down_history().to_vec(),
+                history_at,
+            ));
         }
     }
     if let Some(result) = network_speed_result {
@@ -562,11 +552,11 @@ pub(crate) fn collect_with_notifications(
     }
     // ── Disk I/O + usage + SMART + hd_temp + fan ───────────────────────────
     clock = (ctx.clock)();
-    if caps.contains(&Capability::DiskIo) {
-        if let Some(device) = hw.disk_io_device.as_deref() {
-            let result = attempt_disk_io(owners.disk, proc_root, device, clock, &mut timings);
-            flatten_disk_io(result, &mut readings);
-        }
+    if caps.contains(&Capability::DiskIo)
+        && let Some(device) = hw.disk_io_device.as_deref()
+    {
+        let result = attempt_disk_io(owners.disk, proc_root, device, clock, &mut timings);
+        flatten_disk_io(result, &mut readings);
     }
     if caps.contains(&Capability::DiskUsage) {
         let mounts = disk::resolve_mounts(proc_root, cfg);
@@ -841,38 +831,39 @@ pub(crate) fn collect_with_notifications(
         flatten_nvidia_notification(&result, &mut notification_readings);
         flatten_nvidia(result, &mut readings);
     }
-    if caps.contains(&Capability::GpuIntelFrequency) {
-        if let Some(path) = hw.intel_gpu_freq_path.as_deref() {
-            clock = (ctx.clock)();
-            let result = attempt_intel_frequency(owners.intel_gpu, path, clock, &mut timings);
-            flatten_intel_frequency(result, &mut readings);
-        }
+    if caps.contains(&Capability::GpuIntelFrequency)
+        && let Some(path) = hw.intel_gpu_freq_path.as_deref()
+    {
+        clock = (ctx.clock)();
+        let result = attempt_intel_frequency(owners.intel_gpu, path, clock, &mut timings);
+        flatten_intel_frequency(result, &mut readings);
     }
     let wants_intel_usage = caps.contains(&Capability::GpuIntelUsage);
     let wants_intel_dec = caps.contains(&Capability::GpuIntelDecoder);
     let mut intel_history_comparable = true;
-    if let Some(pci) = hw.intel_gpu_pci.clone() {
-        if (wants_intel_usage || wants_intel_dec) && !skip_slow {
-            clock = (ctx.clock)();
-            let result = if owners.intel_gpu.usage_needs_comparable
-                || owners.intel_gpu.usage.latest.is_none()
-                || sample_due(
-                    owners.intel_gpu.usage.attempted_at,
-                    clock.monotonic,
-                    gpu_intel::INTEL_GPU_USAGE_TTL,
-                ) {
-                attempt_intel_usage(owners.intel_gpu, proc_root, &pci, clock, &mut timings)
-            } else {
-                IntelUsageResult {
-                    reading: cached_attempt(&owners.intel_gpu.usage),
-                }
-            };
-            intel_history_comparable = !owners.intel_gpu.usage_needs_comparable;
-            if !hw.has_nvidia {
-                decoder_outcome = intel_decoder_outcome(&result);
+    if let Some(pci) = hw.intel_gpu_pci.clone()
+        && (wants_intel_usage || wants_intel_dec)
+        && !skip_slow
+    {
+        clock = (ctx.clock)();
+        let result = if owners.intel_gpu.usage_needs_comparable
+            || owners.intel_gpu.usage.latest.is_none()
+            || sample_due(
+                owners.intel_gpu.usage.attempted_at,
+                clock.monotonic,
+                gpu_intel::INTEL_GPU_USAGE_TTL,
+            ) {
+            attempt_intel_usage(owners.intel_gpu, proc_root, &pci, clock, &mut timings)
+        } else {
+            IntelUsageResult {
+                reading: cached_attempt(&owners.intel_gpu.usage),
             }
-            flatten_intel_usage(result, wants_intel_usage, wants_intel_dec, &mut readings);
+        };
+        intel_history_comparable = !owners.intel_gpu.usage_needs_comparable;
+        if !hw.has_nvidia {
+            decoder_outcome = intel_decoder_outcome(&result);
         }
+        flatten_intel_usage(result, wants_intel_usage, wants_intel_dec, &mut readings);
     }
     clock = (ctx.clock)();
     let history_due =

@@ -171,10 +171,8 @@ fn kdeglobals_background(path: &Path) -> Option<(i32, i32, i32)> {
         let line = line.trim();
         if line.starts_with('[') {
             in_window = line == "[Colors:Window]";
-        } else if in_window {
-            if let Some(value) = line.strip_prefix("BackgroundNormal=") {
-                return parse_rgb(value);
-            }
+        } else if in_window && let Some(value) = line.strip_prefix("BackgroundNormal=") {
+            return parse_rgb(value);
         }
     }
     None

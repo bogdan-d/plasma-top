@@ -147,10 +147,8 @@ async fn wait_request_join_or_shutdown(
                 ServiceEvent::Closed
             });
         }
-        if has_running {
-            if let Poll::Ready(Some(_)) = joined.as_mut().poll(cx) {
-                return Poll::Ready(ServiceEvent::Joined);
-            }
+        if has_running && let Poll::Ready(Some(_)) = joined.as_mut().poll(cx) {
+            return Poll::Ready(ServiceEvent::Joined);
         }
         match request.as_mut().poll(cx) {
             Poll::Ready(Some(envelope)) => Poll::Ready(ServiceEvent::Request(envelope)),
@@ -330,10 +328,10 @@ struct ActiveProcessGroup {
 
 impl ActiveProcessGroup {
     fn new(groups: Arc<Mutex<BTreeSet<i32>>>, process_group: Option<i32>) -> Self {
-        if let Some(process_group) = process_group {
-            if let Ok(mut groups) = groups.lock() {
-                groups.insert(process_group);
-            }
+        if let Some(process_group) = process_group
+            && let Ok(mut groups) = groups.lock()
+        {
+            groups.insert(process_group);
         }
         Self {
             groups,
@@ -344,10 +342,10 @@ impl ActiveProcessGroup {
 
 impl Drop for ActiveProcessGroup {
     fn drop(&mut self) {
-        if let Some(process_group) = self.process_group {
-            if let Ok(mut groups) = self.groups.lock() {
-                groups.remove(&process_group);
-            }
+        if let Some(process_group) = self.process_group
+            && let Ok(mut groups) = self.groups.lock()
+        {
+            groups.remove(&process_group);
         }
     }
 }
@@ -507,20 +505,21 @@ async fn wait_for_drains(
     )));
     let mut cancelled = Box::pin(wait_for_shutdown(shutdown));
     poll_fn(|cx| {
-        if stdout_result.is_none() {
-            if let Poll::Ready(result) = Pin::new(&mut *stdout).poll(cx) {
-                stdout_result = Some(result);
-            }
+        if stdout_result.is_none()
+            && let Poll::Ready(result) = Pin::new(&mut *stdout).poll(cx)
+        {
+            stdout_result = Some(result);
         }
-        if stderr_result.is_none() {
-            if let Poll::Ready(result) = Pin::new(&mut *stderr).poll(cx) {
-                stderr_result = Some(result);
-            }
+        if stderr_result.is_none()
+            && let Poll::Ready(result) = Pin::new(&mut *stderr).poll(cx)
+        {
+            stderr_result = Some(result);
         }
-        if stdout_result.is_some() && stderr_result.is_some() {
-            if let (Some(stdout), Some(stderr)) = (stdout_result.take(), stderr_result.take()) {
-                return Poll::Ready(DrainOutcome::Drained { stdout, stderr });
-            }
+        if stdout_result.is_some()
+            && stderr_result.is_some()
+            && let (Some(stdout), Some(stderr)) = (stdout_result.take(), stderr_result.take())
+        {
+            return Poll::Ready(DrainOutcome::Drained { stdout, stderr });
         }
         if timer.as_mut().poll(cx).is_ready() {
             return Poll::Ready(DrainOutcome::Timeout {

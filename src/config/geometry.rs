@@ -85,6 +85,10 @@ impl Default for PanelGeometry {
 /// manual `applet_root_containment` parser; a hand parse avoids
 /// `configparser`'s greedy-header surprises on the `[a][b]` section names.
 #[must_use]
+#[expect(
+    clippy::collapsible_if,
+    reason = "the nested stages mirror the ordered KDE section parser"
+)]
 pub fn parse_kde_ini(text: &str) -> BTreeMap<String, BTreeMap<String, String>> {
     let mut sections: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
     let mut current: Option<String> = None;
@@ -237,6 +241,10 @@ pub fn parse_geom(text: &str) -> Option<PanelGeometry> {
 /// cache write-back is the daemon's job ([`cache_live_geom_at`]), not this
 /// read path, so config stays side-effect-free.
 #[must_use]
+#[expect(
+    clippy::collapsible_if,
+    reason = "the live read and parse stages precede the cache fallback"
+)]
 pub fn read_geom_file_at(live: &Path, cache: &Path) -> Option<PanelGeometry> {
     if let Ok(text) = std::fs::read_to_string(live) {
         if let Some(geo) = parse_geom(&text) {
@@ -259,6 +267,10 @@ pub fn read_geom_file() -> Option<PanelGeometry> {
 /// Mirrors Python's `cache_live_geom`. Best-effort: a read/write failure or
 /// a degenerate file is silently ignored — never disturbs a render. Called
 /// by the daemon when the plasmoid publishes a fresh geometry.
+#[expect(
+    clippy::collapsible_if,
+    reason = "parent discovery and best-effort directory creation are separate stages"
+)]
 pub fn cache_live_geom_at(live: &Path, cache: &Path) {
     let text = match std::fs::read_to_string(live) {
         Ok(text) => text,
@@ -412,6 +424,10 @@ pub fn dmi_paths() -> (PathBuf, PathBuf) {
 /// table; Rust's [`Table`] iterates in insertion order (matching Python's
 /// dict, modulo the merged-source ordering).
 #[must_use]
+#[expect(
+    clippy::collapsible_if,
+    reason = "each optional detection rule remains separate from its match"
+)]
 pub fn detect_machine_with_dmi(machines: &Table, board: &str, product: &str) -> Option<String> {
     for (name, mdata) in machines.iter() {
         let Some(detect) = mdata.as_table().and_then(|t| t.get("detect")) else {

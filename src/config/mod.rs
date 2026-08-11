@@ -230,6 +230,10 @@ pub fn load_config_with_dmi(
 ///    Plasma geometry.
 /// 7. [`drop_unknown_items`] / [`drop_misplaced_items`] enforce the item
 ///    registry.
+#[expect(
+    clippy::collapsible_if,
+    reason = "machine selection, lookup, and table conversion are distinct config stages"
+)]
 fn load_config_with_machine(
     path: Option<&Path>,
     vertical: Option<bool>,

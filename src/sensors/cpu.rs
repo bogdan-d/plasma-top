@@ -302,6 +302,10 @@ pub fn read_load_average(proc_root: &Path) -> Option<(f64, f64, f64)> {
 /// that path is absent, unreadable, or malformed, the reader falls back to the
 /// first `cpu MHz` entry in `/proc/cpuinfo`.
 #[must_use]
+#[expect(
+    clippy::collapsible_if,
+    reason = "the optional sysfs path, read, and parse stages precede procfs fallback"
+)]
 pub fn read_cpu_frequency_mhz(proc_root: &Path, freq_path: Option<&Path>) -> Option<f64> {
     if let Some(path) = freq_path {
         if let Ok(text) = fs::read_to_string(path) {
