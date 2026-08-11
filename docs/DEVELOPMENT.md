@@ -4,7 +4,7 @@ Rust is the sole runtime implementation.
 
 ## Requirements
 
-- Rust 1.85+ with Cargo, rustfmt, and Clippy
+- Rust 1.87+ with Cargo, rustfmt, and Clippy
 - Python 3 for optional Qt/QML verification; PyQt6 and Qt SVG support for screenshot tools
 - `kpackagetool6` and `plasmawindowed` for isolated applet verification
 - `plasmoidviewer` from Plasma SDK plus `ydotool`, `ydotoold`, and `awk` for live horizontal and vertical panel verification

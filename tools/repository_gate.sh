@@ -84,7 +84,7 @@ grep -Fqx 'ExecStart=%h/.local/bin/plasma-top daemon' service/plasma-top-user.se
     fail "user service launcher drift"
 grep -Fq 'exec /usr/lib/plasma-top/plasma-top "$@"' packaging/plasma-top-launcher ||
     fail "package launcher drift"
-grep -Fq "makedepends=('cargo' 'git')" packaging/aur/PKGBUILD ||
+grep -Fq "makedepends=('cargo>=1.87' 'git')" packaging/aur/PKGBUILD ||
     fail "AUR Rust build dependencies drift"
 rg -Fq 'canonical_width_covers_every_tooltip_item' \
     src/render/formatter.rs src/render/formatter ||

@@ -67,11 +67,11 @@ fn read_battery_sys_falls_back_to_upower_when_sysfs_absent() {
     // 15.5 → banker's rounding → 16.
     assert_eq!(battery.rate_watts, 16);
     let request = dbus.call_trace().first().expect("GetAll request");
-    assert_eq!(request.interface, "org.freedesktop.DBus.Properties");
-    assert_eq!(request.member, "GetAll");
     assert_eq!(
-        request.arguments,
-        [DbusArgument::String(UPOWER_DEV_IFACE.to_owned())]
+        request,
+        &DbusRequest::UpowerDeviceProperties {
+            object_path: path.to_owned()
+        }
     );
 }
 

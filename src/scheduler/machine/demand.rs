@@ -66,12 +66,12 @@ impl Scheduler {
     ) {
         self.activation_waiting.retain(|job| after.contains(job));
         for job in after.difference(before) {
-            if let Some(runtime) = self.jobs.get_mut(job)
-                && runtime.spec.timing != TimingClass::History
-            {
-                runtime.mark_pending(self.now);
-                if track_tooltip_refresh {
-                    self.activation_waiting.insert(job.clone());
+            if let Some(runtime) = self.jobs.get_mut(job) {
+                if runtime.spec.timing != TimingClass::History {
+                    runtime.mark_pending(self.now);
+                    if track_tooltip_refresh {
+                        self.activation_waiting.insert(job.clone());
+                    }
                 }
             }
         }
@@ -126,15 +126,14 @@ impl Scheduler {
                 runtime.pending_since = None;
                 runtime.pending_history_deadline = None;
                 runtime.retry_due = None;
-                if cancel_page_jobs
-                    && is_cancelled_page_work(id)
-                    && let Some(ticket) = runtime.in_flight.take()
-                {
-                    self.cancelling.insert(ticket.run_id, ticket.clone());
-                    actions.push(SchedulerAction::CancelJob {
-                        ticket,
-                        reason: CancelReason::DemandEnded,
-                    });
+                if cancel_page_jobs && is_cancelled_page_work(id) {
+                    if let Some(ticket) = runtime.in_flight.take() {
+                        self.cancelling.insert(ticket.run_id, ticket.clone());
+                        actions.push(SchedulerAction::CancelJob {
+                            ticket,
+                            reason: CancelReason::DemandEnded,
+                        });
+                    }
                 }
             }
         }

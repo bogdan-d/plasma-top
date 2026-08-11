@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::adapters::{ProductionClock, ProductionCommandRunner, ProductionDbusFacade};
+use crate::adapters::{ProductionClock, ProductionCommandRunner, ProductionIo};
 use crate::cli::{PanelLayout, RenderCommand, RenderComponent, RenderFormat};
 use crate::config::{Config, apply_canonical_width, load_config, resolve_style};
 use crate::daemon::{
@@ -35,6 +35,7 @@ struct OneShot {
     commands: ProductionCommandRunner,
     roots: FilesystemRoots,
     clock: ProductionClock,
+    _io: ProductionIo,
 }
 
 pub(crate) fn capture_diagnostic_baseline_and_warm<T>(
@@ -59,15 +60,15 @@ fn collect_one_shot(
     page: Option<&str>,
 ) -> Result<OneShot> {
     let mut cfg = load_config(config_path, vertical)?;
-    if let Some(page) = page
-        && page != "full"
-        && !cfg.pages.order.iter().any(|known| known == page)
-    {
-        cfg.pages.order.push(page.to_owned());
+    if let Some(page) = page {
+        if page != "full" && !cfg.pages.order.iter().any(|known| known == page) {
+            cfg.pages.order.push(page.to_owned());
+        }
     }
     let roots = FilesystemRoots::default();
-    let mut commands = ProductionCommandRunner;
-    let mut dbus = ProductionDbusFacade::default();
+    let io = ProductionIo::start_for_diagnostics()?;
+    let mut commands = io.commands();
+    let mut dbus = io.dbus();
     let cpu_count = thread::available_parallelism().map_or(1, std::num::NonZero::get);
     let mut hw = discover_hardware(
         &roots.sys_root,
@@ -132,6 +133,7 @@ fn collect_one_shot(
         commands,
         roots,
         clock,
+        _io: io,
     })
 }
 
@@ -375,8 +377,9 @@ pub fn run_profiling(config_path: Option<&Path>) -> Result<()> {
     let mut cfg = load_config(config_path, None)?;
     let config_ms = startup.elapsed().as_secs_f64() * 1000.0;
     let roots = FilesystemRoots::default();
-    let mut commands = ProductionCommandRunner;
-    let mut dbus = ProductionDbusFacade::default();
+    let io = ProductionIo::start_for_diagnostics()?;
+    let mut commands = io.commands();
+    let mut dbus = io.dbus();
     let discover_start = Instant::now();
     let mut hw = discover_hardware(
         &roots.sys_root,

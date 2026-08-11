@@ -400,9 +400,11 @@ pub fn run_command_with_clock(
             .get(page.id)
             .and_then(|state| state.latest.as_ref())
             .is_some_and(|sample| cadence_at.saturating_sub(sample.captured_at) < spec.ttl);
-        if fresh && let Some(state) = cache.entries.get_mut(page.id) {
-            state.status = PageCommandStatus::Cached;
-            return state.display_text("");
+        if fresh {
+            if let Some(state) = cache.entries.get_mut(page.id) {
+                state.status = PageCommandStatus::Cached;
+                return state.display_text("");
+            }
         }
     }
 
@@ -567,15 +569,15 @@ pub fn format_connections(text: &str, min_width: usize, env: &PageEnvironment) -
             None
         };
 
-        if let Some(process_field) = process_field
-            && let Some((comm, pid)) = first_ss_process(&process_field)
-        {
-            rows.push((
-                proc_name(comm, pid, &env.proc_root),
-                String::from(addr),
-                false,
-            ));
-            continue;
+        if let Some(process_field) = process_field {
+            if let Some((comm, pid)) = first_ss_process(&process_field) {
+                rows.push((
+                    proc_name(comm, pid, &env.proc_root),
+                    String::from(addr),
+                    false,
+                ));
+                continue;
+            }
         }
 
         rows.push((

@@ -10,9 +10,9 @@ pub mod registry;
 pub mod state;
 
 pub use boundary::{
-    BoundaryError, BusKind, ClockSnapshot, CommandOutput, CommandRunner, CommandStatus,
-    DbusArgument, DbusFacade, DbusOutput, DbusRequest, FilesystemRoots, NotificationError,
-    NotificationFacade, NotificationPayload, NotificationTimeout, NotificationUrgency,
+    BoundaryError, BusKind, ClockSnapshot, CommandOutput, CommandRunner, CommandStatus, DbusFacade,
+    DbusOutput, DbusRequest, FilesystemRoots, NotificationError, NotificationFacade,
+    NotificationPayload, NotificationTimeout, NotificationUrgency,
 };
 pub use cadence::{Cadence, MIN_CADENCE};
 pub use form::{Form, Shape, Surface, SurfaceSet};

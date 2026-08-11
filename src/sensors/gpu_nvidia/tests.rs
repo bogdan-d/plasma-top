@@ -53,10 +53,10 @@ impl TempTree {
 
     fn write(&self, relative: &str, value: &str) {
         let path = self.0.join(relative);
-        if let Some(parent) = path.parent()
-            && let Err(error) = fs::create_dir_all(parent)
-        {
-            panic!("failed to create {}: {error}", parent.display());
+        if let Some(parent) = path.parent() {
+            if let Err(error) = fs::create_dir_all(parent) {
+                panic!("failed to create {}: {error}", parent.display());
+            }
         }
         if let Err(error) = fs::write(&path, value) {
             panic!("failed to write {}: {error}", path.display());
@@ -97,6 +97,7 @@ fn smi_output(status: CommandStatus, stdout: &[u8]) -> CommandOutput {
         status,
         stdout: stdout.to_vec(),
         stderr: Vec::new(),
+        truncation: Default::default(),
     }
 }
 

@@ -1,69 +1,14 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 use super::*;
-use crate::domain::boundary::{BusKind, DbusFacade, DbusOutput, DbusRequest};
+use crate::domain::boundary::{
+    BusKind, DbusOutput, DbusRequest, UdisksManagedObject, UdisksSmartKind, UpowerDeviceProperties,
+};
 use crate::test_support::FakeDbus;
-use serde_json::Value;
-use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 
-/// Helper to build a `DbusOutput` body tagged with the call signature so
-/// the fake can echo it. Production adapters build this from `busctl` JSON
-/// replies.
-fn dbus_body(
-    bus: BusKind,
-    service: &str,
-    path: &str,
-    iface: &str,
-    member: &str,
-    body: Vec<String>,
-) -> DbusOutput {
-    DbusOutput {
-        bus,
-        service: service.to_owned(),
-        object_path: path.to_owned(),
-        interface: iface.to_owned(),
-        member: member.to_owned(),
-        body,
-    }
-}
-
 const SYSTEM: BusKind = BusKind::System;
-
-struct RawJsonDbus {
-    replies: VecDeque<Value>,
-}
-
-impl RawJsonDbus {
-    fn new(replies: impl IntoIterator<Item = Value>) -> Self {
-        Self {
-            replies: replies.into_iter().collect(),
-        }
-    }
-}
-
-impl DbusFacade for RawJsonDbus {
-    fn call(&mut self, request: DbusRequest) -> Result<DbusOutput, BoundaryError> {
-        let Some(reply) = self.replies.pop_front() else {
-            return Err(BoundaryError::DbusCallNotQueued {
-                bus: request.bus,
-                service: request.service,
-                path: request.object_path,
-                interface: request.interface,
-                member: request.member,
-            });
-        };
-        let body = crate::adapters::normalize_dbus_body(&request, &reply)?;
-        Ok(DbusOutput {
-            bus: request.bus,
-            service: request.service,
-            object_path: request.object_path,
-            interface: request.interface,
-            member: request.member,
-            body,
-        })
-    }
-}
+const UPOWER_NAME: &str = "org.freedesktop.UPower";
 
 /// monotonic(t) → ClockSnapshot with a zero wall clock (tests only use
 /// monotonic time for TTL gates).
@@ -74,30 +19,20 @@ fn clock(seconds: u64) -> ClockSnapshot {
     }
 }
 
-fn upath(member: &str, body: Vec<String>) -> DbusOutput {
-    dbus_body(
-        SYSTEM,
-        UPOWER_NAME,
-        "/org/freedesktop/UPower",
-        UPOWER_IFACE,
-        member,
-        body,
-    )
-}
-
 fn battery_props_reply(path: &str, props: &[(&str, &str)]) -> DbusOutput {
-    let body: Vec<String> = props
-        .iter()
-        .flat_map(|(k, v)| [(*k).to_owned(), (*v).to_owned()])
-        .collect();
-    dbus_body(
-        SYSTEM,
-        UPOWER_NAME,
-        path,
-        "org.freedesktop.DBus.Properties",
-        "GetAll",
-        body,
-    )
+    let mut output = UpowerDeviceProperties::default();
+    for (name, value) in props {
+        match *name {
+            "Percentage" => output.percentage = value.parse().ok(),
+            "State" => output.state = value.parse().ok(),
+            "EnergyRate" => output.energy_rate = value.parse().ok(),
+            "Model" => output.model = Some((*value).to_owned()),
+            "Type" => output.kind = value.parse().ok(),
+            _ => {}
+        }
+    }
+    let _ = path;
+    DbusOutput::UpowerDeviceProperties(output)
 }
 
 /// In-memory fake Bolt facade with FIFO replies keyed by `(dev_idx,

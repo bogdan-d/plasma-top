@@ -84,6 +84,7 @@ fn render_command_page_after_cold_and_warm(
             status,
             stdout: stdout.to_vec(),
             stderr: Vec::new(),
+            truncation: Default::default(),
         },
     );
     let mut lookup = CommandLookup::new();

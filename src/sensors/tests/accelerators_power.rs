@@ -824,14 +824,7 @@ fn collect_disk_smart_uses_per_drive_ttl_and_udisks2_calls() {
         "/drives/NVMe_1",
         "org.freedesktop.UDisks2.NVMe.Controller",
         "SmartUpdate",
-        DbusOutput {
-            bus: SYSTEM,
-            service: "org.freedesktop.UDisks2".to_owned(),
-            object_path: "/drives/NVMe_1".to_owned(),
-            interface: "org.freedesktop.UDisks2.NVMe.Controller".to_owned(),
-            member: "SmartUpdate".to_owned(),
-            body: vec![],
-        },
+        DbusOutput::UdisksSmartUpdated,
     );
     dbus.enqueue(
         SYSTEM,
@@ -839,14 +832,7 @@ fn collect_disk_smart_uses_per_drive_ttl_and_udisks2_calls() {
         "/drives/NVMe_1",
         "org.freedesktop.DBus.Properties",
         "Get",
-        DbusOutput {
-            bus: SYSTEM,
-            service: "org.freedesktop.UDisks2".to_owned(),
-            object_path: "/drives/NVMe_1".to_owned(),
-            interface: "org.freedesktop.DBus.Properties".to_owned(),
-            member: "Get".to_owned(),
-            body: vec![String::new()],
-        },
+        DbusOutput::UdisksNvmeCriticalWarnings(Vec::new()),
     );
     let readings = run_collect(
         &mut lanes,

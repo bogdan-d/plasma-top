@@ -7,8 +7,8 @@ use crate::config::{
     Config, apply_canonical_width, cache_live_geom, default_config_path, load_config,
     machine_source_paths, resolve_style,
 };
-use crate::domain::boundary::{ClockSnapshot, FilesystemRoots};
-use crate::domain::readings::{DisplaySnapshot, HardwareInventory};
+use crate::domain::boundary::{ClockSnapshot, FilesystemRoots, IoEvent};
+use crate::domain::readings::{DisplaySnapshot, HardwareInventory, InventoryFamily};
 use crate::domain::state::NotificationState;
 use crate::error::Result;
 use crate::notify::check_and_notify;
@@ -281,6 +281,16 @@ pub(super) fn run(
         && !state.terminate
         && poll_limit.is_none_or(|limit| state.display_publication_count < limit)
     {
+        process_io_events(
+            roots,
+            paths,
+            boundaries,
+            control,
+            &mut scheduler,
+            &mut state,
+            &command_lookup,
+            boot,
+        )?;
         let transition = scheduler.handle(SchedulerEvent::TimeAdvanced {
             at: scheduler_time(control.snapshot()),
         });
@@ -337,6 +347,93 @@ pub(super) fn run(
         boot,
     )?;
     cleanup(paths);
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn process_io_events(
+    roots: &FilesystemRoots,
+    paths: &DaemonPaths,
+    boundaries: &mut DaemonBoundaries<'_>,
+    control: &mut dyn LoopControl,
+    scheduler: &mut Scheduler,
+    state: &mut RuntimeState,
+    command_lookup: &crate::page_commands::CommandLookup,
+    boot: ClockSnapshot,
+) -> Result<()> {
+    for event in control.drain_io_events() {
+        match event {
+            IoEvent::PrepareForSleep(true) => {
+                let transition = scheduler.handle(SchedulerEvent::Suspend {
+                    at: scheduler_time(control.snapshot()),
+                });
+                execute_transition(
+                    transition,
+                    scheduler,
+                    state,
+                    roots,
+                    paths,
+                    boundaries,
+                    control,
+                    command_lookup,
+                    boot,
+                )?;
+            }
+            IoEvent::PrepareForSleep(false) => {
+                let transition = scheduler.handle(SchedulerEvent::Resume {
+                    at: scheduler_time(control.snapshot()),
+                });
+                execute_transition(
+                    transition,
+                    scheduler,
+                    state,
+                    roots,
+                    paths,
+                    boundaries,
+                    control,
+                    command_lookup,
+                    boot,
+                )?;
+            }
+            IoEvent::UpowerChanged => {
+                let jobs = state
+                    .scheduler_config(roots)
+                    .jobs
+                    .into_iter()
+                    .filter(|spec| {
+                        matches!(
+                            spec.id.kind,
+                            JobKind::SystemBattery | JobKind::PeripheralBattery
+                        ) || matches!(
+                            spec.id.source,
+                            SourceIdentity::Inventory(
+                                InventoryFamily::SystemBattery | InventoryFamily::Peripheral
+                            )
+                        )
+                    })
+                    .map(|spec| spec.id)
+                    .collect::<Vec<_>>();
+                for job in jobs {
+                    let transition = scheduler.handle(SchedulerEvent::RefreshTriggered {
+                        at: scheduler_time(control.snapshot()),
+                        job,
+                        trigger: RefreshTrigger::PeripheralChanged,
+                    });
+                    execute_transition(
+                        transition,
+                        scheduler,
+                        state,
+                        roots,
+                        paths,
+                        boundaries,
+                        control,
+                        command_lookup,
+                        boot,
+                    )?;
+                }
+            }
+        }
+    }
     Ok(())
 }
 

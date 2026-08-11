@@ -1,5 +1,6 @@
 //! External boundary contracts shared by runtime lanes.
 
+use std::collections::BTreeSet;
 use std::ffi::OsString;
 use std::fmt::{self, Display, Formatter};
 use std::path::PathBuf;
@@ -27,6 +28,25 @@ pub struct CommandOutput {
     pub stdout: Vec<u8>,
     /// Raw stderr bytes.
     pub stderr: Vec<u8>,
+    /// Bytes discarded after the combined retained-output limit was reached.
+    pub truncation: CommandTruncation,
+}
+
+/// Per-stream output bytes discarded by the command service.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct CommandTruncation {
+    /// Discarded stdout bytes.
+    pub stdout_bytes: u64,
+    /// Discarded stderr bytes.
+    pub stderr_bytes: u64,
+}
+
+impl CommandTruncation {
+    /// Returns whether any output was discarded.
+    #[must_use]
+    pub const fn is_truncated(self) -> bool {
+        self.stdout_bytes != 0 || self.stderr_bytes != 0
+    }
 }
 
 /// D-Bus bus selection.
@@ -94,49 +114,155 @@ pub trait NotificationFacade {
     fn send(&mut self, payload: &NotificationPayload) -> Result<(), NotificationError>;
 }
 
-/// Typed argument needed by the currently ported D-Bus methods.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum DbusArgument {
-    /// A D-Bus string (`s`).
-    String(String),
-    /// An empty string-to-variant dictionary (`a{sv}`).
-    EmptyStringVariantDict,
+/// Typed UPower properties used by system and peripheral battery paths.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct UpowerDeviceProperties {
+    /// Charge percentage.
+    pub percentage: Option<f64>,
+    /// UPower state enum value.
+    pub state: Option<u32>,
+    /// Current energy rate in watts.
+    pub energy_rate: Option<f64>,
+    /// Device model.
+    pub model: Option<String>,
+    /// UPower device type enum value.
+    pub kind: Option<u32>,
 }
 
-/// Exact D-Bus method request passed to production adapters and test fakes.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct DbusRequest {
-    /// Bus carrying the request.
-    pub bus: BusKind,
-    /// Remote service name.
-    pub service: String,
-    /// Remote object path.
-    pub object_path: String,
-    /// Interface containing the method.
-    pub interface: String,
-    /// Method member name.
-    pub member: String,
-    /// Ordered typed method arguments.
-    pub arguments: Vec<DbusArgument>,
-    /// Per-call timeout; `None` selects the adapter default.
-    pub timeout: Option<Duration>,
-}
-
-/// Stringly placeholder for a D-Bus response until typed facades land.
+/// Typed subset of one UDisks managed object used by SMART discovery.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DbusOutput {
-    /// Which bus produced the message.
-    pub bus: BusKind,
-    /// Remote service name.
-    pub service: String,
+pub struct UdisksManagedObject {
     /// Object path.
-    pub object_path: String,
-    /// Interface name.
-    pub interface: String,
-    /// Method or signal member name.
-    pub member: String,
-    /// Stringified payload fragments preserved for contract discussion.
-    pub body: Vec<String>,
+    pub path: String,
+    /// Interfaces exposed by the object.
+    pub interfaces: BTreeSet<String>,
+    /// `org.freedesktop.UDisks2.Block.Drive` object path when present.
+    pub drive: Option<String>,
+}
+
+/// UDisks SMART interface selected for a drive.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum UdisksSmartKind {
+    /// `org.freedesktop.UDisks2.NVMe.Controller`.
+    Nvme,
+    /// `org.freedesktop.UDisks2.Drive.Ata`.
+    Ata,
+}
+
+impl UdisksSmartKind {
+    /// Returns the D-Bus interface name.
+    #[must_use]
+    pub const fn interface(self) -> &'static str {
+        match self {
+            Self::Nvme => "org.freedesktop.UDisks2.NVMe.Controller",
+            Self::Ata => "org.freedesktop.UDisks2.Drive.Ata",
+        }
+    }
+}
+
+/// Exact typed system-bus request passed to production and fake services.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum DbusRequest {
+    /// Enumerate UPower device object paths.
+    UpowerEnumerate,
+    /// Read the UPower properties needed for one device.
+    UpowerDeviceProperties {
+        /// UPower device object path.
+        object_path: String,
+    },
+    /// Read the UDisks managed-object inventory.
+    UdisksManagedObjects,
+    /// Refresh SMART state for one drive.
+    UdisksSmartUpdate {
+        /// UDisks drive object path.
+        object_path: String,
+        /// Drive SMART interface.
+        kind: UdisksSmartKind,
+        /// Per-call timeout for the drive refresh ioctl.
+        timeout: Duration,
+    },
+    /// Read the typed SMART health property for one drive.
+    UdisksSmartProperty {
+        /// UDisks drive object path.
+        object_path: String,
+        /// Drive SMART interface and property family.
+        kind: UdisksSmartKind,
+    },
+}
+
+impl DbusRequest {
+    /// Returns stable call metadata for diagnostics and fake mismatch errors.
+    #[must_use]
+    pub fn metadata(&self) -> (BusKind, &'static str, &str, &'static str, &'static str) {
+        match self {
+            Self::UpowerEnumerate => (
+                BusKind::System,
+                "org.freedesktop.UPower",
+                "/org/freedesktop/UPower",
+                "org.freedesktop.UPower",
+                "EnumerateDevices",
+            ),
+            Self::UpowerDeviceProperties { object_path } => (
+                BusKind::System,
+                "org.freedesktop.UPower",
+                object_path,
+                "org.freedesktop.DBus.Properties",
+                "GetAll",
+            ),
+            Self::UdisksManagedObjects => (
+                BusKind::System,
+                "org.freedesktop.UDisks2",
+                "/org/freedesktop/UDisks2",
+                "org.freedesktop.DBus.ObjectManager",
+                "GetManagedObjects",
+            ),
+            Self::UdisksSmartUpdate {
+                object_path, kind, ..
+            } => (
+                BusKind::System,
+                "org.freedesktop.UDisks2",
+                object_path,
+                kind.interface(),
+                "SmartUpdate",
+            ),
+            Self::UdisksSmartProperty { object_path, kind } => (
+                BusKind::System,
+                "org.freedesktop.UDisks2",
+                object_path,
+                "org.freedesktop.DBus.Properties",
+                match kind {
+                    UdisksSmartKind::Nvme => "Get(SmartCriticalWarning)",
+                    UdisksSmartKind::Ata => "Get(SmartFailing)",
+                },
+            ),
+        }
+    }
+}
+
+/// Typed system-bus reply. Variants are never flattened into strings.
+#[derive(Debug, Clone, PartialEq)]
+pub enum DbusOutput {
+    /// UPower device object paths.
+    UpowerDevices(Vec<String>),
+    /// Selected UPower device properties.
+    UpowerDeviceProperties(UpowerDeviceProperties),
+    /// Selected UDisks managed-object data.
+    UdisksManagedObjects(Vec<UdisksManagedObject>),
+    /// Successful SMART refresh.
+    UdisksSmartUpdated,
+    /// NVMe SMART critical-warning names. An empty list is healthy.
+    UdisksNvmeCriticalWarnings(Vec<String>),
+    /// ATA failing flag.
+    UdisksAtaFailing(bool),
+}
+
+/// Coalesced async I/O event consumed by the daemon scheduler shell.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IoEvent {
+    /// UPower device inventory or properties changed.
+    UpowerChanged,
+    /// logind announced the start or end of sleep preparation.
+    PrepareForSleep(bool),
 }
 
 /// Shared boundary error contract used by command and D-Bus adapters.

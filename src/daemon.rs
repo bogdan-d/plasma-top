@@ -10,16 +10,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use signal_hook::consts::signal::{SIGINT, SIGTERM};
-use signal_hook::flag;
-
-use crate::adapters::{
-    ProductionClock, ProductionCommandRunner, ProductionDbusFacade, ProductionNotificationFacade,
-};
+use crate::adapters::{ProductionClock, ProductionIo, ProductionIoEvents};
 use crate::cli::{PageDirection as CliPageDirection, RenderPage};
 use crate::config::Config;
 use crate::domain::boundary::{
-    ClockSnapshot, CommandRunner, DbusFacade, FilesystemRoots, NotificationFacade,
+    ClockSnapshot, CommandRunner, DbusFacade, FilesystemRoots, IoEvent, NotificationFacade,
 };
 use crate::domain::readings::{DisplaySnapshot, HardwareInventory};
 use crate::error::{Error, Result};
@@ -107,11 +102,16 @@ pub trait LoopControl {
     fn sleep(&mut self, duration: Duration);
     /// Whether shutdown was requested.
     fn should_stop(&self) -> bool;
+    /// Drains async service signals available at this scheduler wake.
+    fn drain_io_events(&mut self) -> Vec<IoEvent> {
+        Vec::new()
+    }
 }
 
 struct ProductionLoopControl {
     clock: ProductionClock,
     stopped: Arc<AtomicBool>,
+    events: ProductionIoEvents,
 }
 
 impl LoopControl for ProductionLoopControl {
@@ -125,6 +125,10 @@ impl LoopControl for ProductionLoopControl {
 
     fn should_stop(&self) -> bool {
         self.stopped.load(Ordering::Relaxed)
+    }
+
+    fn drain_io_events(&mut self) -> Vec<IoEvent> {
+        self.events.drain()
     }
 }
 
@@ -167,8 +171,10 @@ fn kdeglobals_background(path: &Path) -> Option<(i32, i32, i32)> {
         let line = line.trim();
         if line.starts_with('[') {
             in_window = line == "[Colors:Window]";
-        } else if in_window && let Some(value) = line.strip_prefix("BackgroundNormal=") {
-            return parse_rgb(value);
+        } else if in_window {
+            if let Some(value) = line.strip_prefix("BackgroundNormal=") {
+                return parse_rgb(value);
+            }
         }
     }
     None
@@ -517,41 +523,61 @@ impl NotificationFacade for DynNotification<'_> {
 
 /// Runs production daemon until SIGINT/SIGTERM.
 pub fn run_daemon(config_path: Option<&Path>) -> Result<()> {
-    let stopped = Arc::new(AtomicBool::new(false));
-    flag::register(SIGTERM, Arc::clone(&stopped))
-        .map_err(|error| Error::Runtime(format!("cannot register SIGTERM: {error}")))?;
-    flag::register(SIGINT, Arc::clone(&stopped))
-        .map_err(|error| Error::Runtime(format!("cannot register SIGINT: {error}")))?;
+    let mut io = ProductionIo::start()?;
+    let stopped = io.stopped();
+    let events = io.take_event_receiver().ok_or_else(|| {
+        Error::Runtime("async I/O event receiver was already transferred".to_owned())
+    })?;
     let roots = FilesystemRoots::default();
     let paths = DaemonPaths::production();
-    let mut commands = ProductionCommandRunner;
-    let mut dbus = ProductionDbusFacade::default();
-    let mut notifications = ProductionNotificationFacade::default();
+    let mut commands = io.commands();
+    let mut dbus = io.dbus();
+    let mut notifications = io.notifications();
     let mut bolt = BoltHidFacade::default();
     #[cfg(feature = "nvml")]
     let mut nvml = gpu_nvidia::ProductionNvml::new();
-    let mut boundaries = DaemonBoundaries {
-        commands: &mut commands,
-        dbus: &mut dbus,
-        notifications: &mut notifications,
-        #[cfg(feature = "nvml")]
-        nvml: Some(&mut nvml),
-        #[cfg(not(feature = "nvml"))]
-        nvml: None,
-        bolt: Some(&mut bolt),
-    };
     let mut control = ProductionLoopControl {
         clock: ProductionClock::default(),
         stopped,
+        events,
     };
-    run_daemon_with(
-        config_path,
-        &roots,
-        &paths,
-        &mut boundaries,
-        &mut control,
-        None,
-    )
+    let result = {
+        let mut boundaries = DaemonBoundaries {
+            commands: &mut commands,
+            dbus: &mut dbus,
+            notifications: &mut notifications,
+            #[cfg(feature = "nvml")]
+            nvml: Some(&mut nvml),
+            #[cfg(not(feature = "nvml"))]
+            nvml: None,
+            bolt: Some(&mut bolt),
+        };
+        run_daemon_with(
+            config_path,
+            &roots,
+            &paths,
+            &mut boundaries,
+            &mut control,
+            None,
+        )
+    };
+    io.shutdown();
+    complete_daemon_run(result, io.critical_failure(), io.shutdown_timed_out())
+}
+
+fn complete_daemon_run(
+    result: Result<()>,
+    critical_failure: Option<crate::error::CriticalService>,
+    shutdown_timed_out: bool,
+) -> Result<()> {
+    result?;
+    if let Some(service) = critical_failure {
+        return Err(Error::CriticalService(service));
+    }
+    if shutdown_timed_out {
+        return Err(Error::CriticalShutdownTimeout);
+    }
+    Ok(())
 }
 
 /// Fast page-counter command.

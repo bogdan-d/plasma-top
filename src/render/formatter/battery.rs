@@ -88,7 +88,7 @@ impl PanelFormatter<'_> {
         }
 
         let value = if !rate_text.is_empty()
-            && ((self.unix_seconds() / BATTERY_ALTERNATE_SECONDS) % 2 == 0)
+            && (self.unix_seconds() / BATTERY_ALTERNATE_SECONDS).is_multiple_of(2)
         {
             rate_text
         } else {

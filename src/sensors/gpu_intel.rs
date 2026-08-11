@@ -326,12 +326,12 @@ pub(crate) fn read_intel_gpu_metrics_once(
         };
         for (engine, &ns) in engines {
             let prev_ns = prev_engines.get(engine).copied().unwrap_or(ns);
-            if let Some(delta) = ns.checked_sub(prev_ns)
-                && delta > 0
-            {
-                sums.entry(engine.clone())
-                    .or_insert(0)
-                    .saturating_add_assign_u64(delta);
+            if let Some(delta) = ns.checked_sub(prev_ns) {
+                if delta > 0 {
+                    sums.entry(engine.clone())
+                        .or_insert(0)
+                        .saturating_add_assign_u64(delta);
+                }
             }
         }
     }

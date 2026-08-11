@@ -25,9 +25,10 @@ pub mod fixture_loader;
 pub mod fixture_root;
 
 pub use crate::domain::boundary::{
-    BoundaryError, BusKind, ClockSnapshot, CommandOutput, CommandRunner, CommandStatus,
-    DbusArgument, DbusFacade, DbusOutput, DbusRequest, NotificationError, NotificationFacade,
-    NotificationPayload, NotificationTimeout, NotificationUrgency,
+    BoundaryError, BusKind, ClockSnapshot, CommandOutput, CommandRunner, CommandStatus, DbusFacade,
+    DbusOutput, DbusRequest, NotificationError, NotificationFacade, NotificationPayload,
+    NotificationTimeout, NotificationUrgency, UdisksManagedObject, UdisksSmartKind,
+    UpowerDeviceProperties,
 };
 pub use fake_clock::FakeClock;
 pub use fake_command_runner::{CommandCall, FakeCommandRunner};

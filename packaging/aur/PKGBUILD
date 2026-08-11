@@ -14,7 +14,7 @@ optdepends=('nvidia-utils: NVIDIA GPU metrics through NVML or nvidia-smi'
 	'iproute2: network identity and the connections tooltip page'
 	'iw: Wi-Fi SSID and signal'
 	'fastfetch: the fastfetch tooltip page')
-makedepends=('cargo' 'git')
+makedepends=('cargo>=1.87' 'git')
 provides=('plasma-top')
 conflicts=('plasma-top')
 source=("git+https://github.com/bogdan-d/plasma-top.git")

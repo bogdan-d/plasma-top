@@ -13,7 +13,7 @@ src/
   lib.rs, cli.rs             command parsing and dispatch
   daemon.rs                  lifecycle, reload, poll, publish, shutdown
   diagnostics.rs             render, probe, profiling, list-items
-  adapters.rs                host clock, commands, D-Bus, notifications
+  adapters.rs, adapters/     host clock and owned async I/O services
   domain/                    forms, metrics, tokens, readings, state, boundaries
   config/                    typed TOML, merges, assets, geometry
   sensors/                   discovery, one-attempt reads, synchronous sampling orchestration
@@ -79,9 +79,9 @@ Real placement is the intersection of metric and form surfaces. The current dema
 
 Each independently captured value can be represented as a `MetricSample` with its own monotonic capture time, so sample age is not inferred from `DisplaySnapshot::assembled_at`. Execution remains synchronous during the issue-03 transition, but publication is an independent scheduler action rather than the end of a collection barrier.
 
-Sensor modules read explicit `/proc` and `/sys` roots and use injected command, D-Bus, clock, notification, and HID boundaries. Missing hardware, unavailable services, malformed files, command failures, and permission errors degrade to absent readings where the compatibility contract requires it; one failed sensor must not block later families.
+Sensor modules read explicit `/proc` and `/sys` roots and use injected command, typed D-Bus, clock, notification, and HID boundaries. Missing hardware, unavailable services, malformed files, command failures, and permission errors degrade to absent readings where the compatibility contract requires it; one failed sensor must not block later families.
 
-Linux D-Bus access currently uses timeout-bound `busctl --json=short` calls. Desktop notifications use timeout-bound `notify-send`. Page commands and fallback tools use the same command boundary. These process-backed adapters are deliberate dependency choices, not hidden shell expansion.
+Production host effects route through one owned current-thread Tokio shell. Its bounded command service runs at most two process groups, drains both pipes concurrently, deterministically retains at most 1 MiB of combined output, kills and reaps groups on timeout or shutdown, and exposes the existing synchronous fake-friendly command trait to the issue-04 serial owner executor. Persistent bounded zbus system/session services provide typed UPower/UDisks requests, desktop notifications, UPower change events, and logind sleep events; the old `busctl`/`notify-send` production transports no longer exist.
 
 ## Rendering
 
@@ -110,7 +110,7 @@ Startup resolves config/assets, creates runtime directories, publishes page meta
 5. atomically publishes changed panel and tooltip bytes independently;
 6. sleeps until the next scheduler deadline or the 100 ms compatibility observation step.
 
-SIGINT and SIGTERM use `signal-hook`; shutdown removes daemon-owned runtime files. The service remains a normal user unit with restart-on-failure.
+SIGINT and SIGTERM are received by the Tokio shell. UPower changes coalesce into demanded battery and inventory refresh triggers. logind `PrepareForSleep(true)` sends scheduler `Suspend`; the matching false event sends `Resume`, which resets counter baselines and reconciles volatile inventory before dispatch resumes. Shutdown removes daemon-owned runtime files and gives I/O services at most 500 ms to cancel commands, kill process groups, and reject pending work. It joins only a finished I/O shell; an over-budget shell is abandoned for process exit and reported as a critical shutdown timeout. The service remains a normal user unit with restart-on-failure.
 
 ## Dependencies and verification
 

@@ -27,6 +27,7 @@ fn ok_output(program: &str, stdout: &[u8]) -> CommandOutput {
         status: CommandStatus::Exit(0),
         stdout: stdout.to_vec(),
         stderr: Vec::new(),
+        truncation: Default::default(),
     }
 }
 
@@ -37,6 +38,7 @@ fn output(program: &str, status: CommandStatus, stdout: &[u8], stderr: &[u8]) ->
         status,
         stdout: stdout.to_vec(),
         stderr: stderr.to_vec(),
+        truncation: Default::default(),
     }
 }
 

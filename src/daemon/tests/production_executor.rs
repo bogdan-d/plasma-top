@@ -143,6 +143,7 @@ impl CommandRunner for ThemeOrderingCommand {
             status: CommandStatus::Exit(0),
             stdout: b"35,38,41\n".to_vec(),
             stderr: Vec::new(),
+            truncation: Default::default(),
         })
     }
 }
@@ -169,6 +170,7 @@ impl CommandRunner for SlowReloadCommand {
                 status: CommandStatus::Exit(0),
                 stdout: b"35,38,41\n".to_vec(),
                 stderr: Vec::new(),
+                truncation: Default::default(),
             });
         }
         if program == Path::new("ip")
@@ -191,6 +193,7 @@ impl CommandRunner for SlowReloadCommand {
                 status: CommandStatus::Exit(0),
                 stdout: b"8.8.8.8 via 192.0.2.1 dev wlan0\n".to_vec(),
                 stderr: Vec::new(),
+                truncation: Default::default(),
             });
         }
         Err(BoundaryError::CommandFailed {
@@ -243,12 +246,13 @@ impl DbusFacade for FirstPaintDbus {
             self.observed.set(true);
             self.now.set(Duration::from_millis(500));
         }
+        let (bus, service, path, interface, member) = request.metadata();
         Err(BoundaryError::DbusCallFailed {
-            bus: request.bus,
-            service: request.service,
-            path: request.object_path,
-            interface: request.interface,
-            member: request.member,
+            bus,
+            service: service.to_owned(),
+            path: path.to_owned(),
+            interface: interface.to_owned(),
+            member: member.to_owned(),
             detail: String::from("blocked fixture"),
         })
     }
@@ -273,6 +277,7 @@ impl CommandRunner for NvidiaCommand {
                 status: CommandStatus::Exit(0),
                 stdout: b"60, 50, 30, 40, 5\n".to_vec(),
                 stderr: Vec::new(),
+                truncation: Default::default(),
             });
         }
         Err(BoundaryError::CommandFailed {

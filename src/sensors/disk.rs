@@ -484,12 +484,12 @@ fn decode_mount_field(value: &str) -> String {
     while index < bytes.len() {
         if bytes[index] == b'\\' && index + 3 < bytes.len() {
             let octal = &value[index + 1..index + 4];
-            if octal.as_bytes().iter().all(u8::is_ascii_digit)
-                && let Ok(code) = u8::from_str_radix(octal, 8)
-            {
-                decoded.push(char::from(code));
-                index += 4;
-                continue;
+            if octal.as_bytes().iter().all(u8::is_ascii_digit) {
+                if let Ok(code) = u8::from_str_radix(octal, 8) {
+                    decoded.push(char::from(code));
+                    index += 4;
+                    continue;
+                }
             }
         }
         decoded.push(char::from(bytes[index]));
@@ -590,10 +590,10 @@ fn hwmon_device_label(sys_root: &Path, hwmon: &Path) -> String {
                         .components()
                         .map(|component| component.as_os_str().to_string_lossy().into_owned())
                         .collect();
-                    if components.iter().any(|part| part == scsi_address)
-                        && let Some(name) = block.file_name()
-                    {
-                        return name.to_string_lossy().into_owned();
+                    if components.iter().any(|part| part == scsi_address) {
+                        if let Some(name) = block.file_name() {
+                            return name.to_string_lossy().into_owned();
+                        }
                     }
                 }
             }
@@ -698,7 +698,7 @@ fn round_half_even_ratio(numerator: u128, denominator: u128) -> u128 {
     let doubled = remainder.saturating_mul(2);
     if doubled > denominator {
         quotient.saturating_add(1)
-    } else if doubled < denominator || quotient % 2 == 0 {
+    } else if doubled < denominator || quotient.is_multiple_of(2) {
         quotient
     } else {
         quotient.saturating_add(1)

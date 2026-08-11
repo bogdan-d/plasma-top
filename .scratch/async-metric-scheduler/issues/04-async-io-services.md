@@ -1,7 +1,7 @@
 # Add async I/O services
 
 Type: task
-Status: ready-for-agent
+Status: claimed
 Blocked by: 02
 
 ## Objective

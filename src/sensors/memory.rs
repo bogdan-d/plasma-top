@@ -300,7 +300,7 @@ fn round_half_even_ratio(numerator: u128, denominator: u128) -> u128 {
     let doubled = remainder.saturating_mul(2);
     if doubled > denominator {
         quotient.saturating_add(1)
-    } else if doubled < denominator || quotient % 2 == 0 {
+    } else if doubled < denominator || quotient.is_multiple_of(2) {
         quotient
     } else {
         quotient.saturating_add(1)

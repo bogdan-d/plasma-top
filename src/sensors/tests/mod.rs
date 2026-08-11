@@ -24,7 +24,10 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::config::{Config, Mounts, Section, Surface};
-use crate::domain::boundary::{BusKind, ClockSnapshot, CommandOutput, CommandStatus, DbusOutput};
+use crate::domain::boundary::{
+    BusKind, ClockSnapshot, CommandOutput, CommandStatus, CommandTruncation, DbusOutput,
+    UdisksManagedObject, UpowerDeviceProperties,
+};
 use crate::domain::metric::Capability;
 use crate::domain::readings::{DisplaySnapshot, HardwareInventory};
 use crate::sensors::gpu_nvidia::{NvidiaMetrics, NvmlError, NvmlFacade, NvmlMetrics};
@@ -264,30 +267,22 @@ impl BoltBatteryFacade for FakeBolt {
 // ── D-Bus reply helpers ──────────────────────────────────────────────────────
 
 fn enumerate_reply(paths: &[&str]) -> DbusOutput {
-    DbusOutput {
-        bus: SYSTEM,
-        service: UPOWER_NAME.to_owned(),
-        object_path: UPOWER_PATH.to_owned(),
-        interface: UPOWER_IFACE.to_owned(),
-        member: "EnumerateDevices".to_owned(),
-        body: paths.iter().map(|s| (*s).to_owned()).collect(),
-    }
+    DbusOutput::UpowerDevices(paths.iter().map(|s| (*s).to_owned()).collect())
 }
 
-fn getall_reply(path: &str, props: &[(&str, &str)]) -> DbusOutput {
-    let mut body = Vec::new();
-    for (k, v) in props {
-        body.push((*k).to_owned());
-        body.push((*v).to_owned());
+fn getall_reply(_path: &str, props: &[(&str, &str)]) -> DbusOutput {
+    let mut output = UpowerDeviceProperties::default();
+    for (name, value) in props {
+        match *name {
+            "Percentage" => output.percentage = value.parse().ok(),
+            "State" => output.state = value.parse().ok(),
+            "EnergyRate" => output.energy_rate = value.parse().ok(),
+            "Model" => output.model = Some((*value).to_owned()),
+            "Type" => output.kind = value.parse().ok(),
+            _ => {}
+        }
     }
-    DbusOutput {
-        bus: SYSTEM,
-        service: UPOWER_NAME.to_owned(),
-        object_path: path.to_owned(),
-        interface: "org.freedesktop.DBus.Properties".to_owned(),
-        member: "GetAll".to_owned(),
-        body,
-    }
+    DbusOutput::UpowerDeviceProperties(output)
 }
 
 fn ok_cmd(program: &str, args: &[&str], stdout: &str) -> CommandOutput {
@@ -297,6 +292,7 @@ fn ok_cmd(program: &str, args: &[&str], stdout: &str) -> CommandOutput {
         status: CommandStatus::Exit(0),
         stdout: stdout.as_bytes().to_vec(),
         stderr: Vec::new(),
+        truncation: CommandTruncation::default(),
     }
 }
 

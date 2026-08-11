@@ -15,11 +15,7 @@
 //! - [`read_battery_bolt_once`] reads a Logitech Bolt receiver battery through
 //!   [`BoltBatteryFacade`]; `sensors::hid` provides production hidraw I/O.
 //!
-//! All D-Bus work flows through the shared [`DbusFacade`] trait, and every sysfs
-//! read takes an explicit sys root so tests never touch the host filesystem.
-//! The body encoding of each D-Bus reply is documented on the helper that
-//! consumes it; the production `busctl` adapter translates JSON replies into
-//! the same `Vec<String>` shapes.
+//! All D-Bus work flows through the shared typed [`DbusFacade`] trait, and every sysfs read takes an explicit sys root so tests never touch the host filesystem. Production zbus replies remain typed through this module instead of being flattened into strings.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -27,7 +23,8 @@ use std::path::Path;
 use std::time::Duration;
 
 use crate::domain::boundary::{
-    BoundaryError, BusKind, ClockSnapshot, DbusArgument, DbusFacade, DbusRequest,
+    BoundaryError, ClockSnapshot, DbusFacade, DbusOutput, DbusRequest, UdisksSmartKind,
+    UpowerDeviceProperties,
 };
 use crate::domain::metric::Capability;
 use crate::domain::readings::{
@@ -40,21 +37,6 @@ use super::disk::is_rotational;
 
 // ── D-Bus identity constants ─────────────────────────────────────────────────
 
-/// `org.freedesktop.UPower` service and interface name.
-const UPOWER_NAME: &str = "org.freedesktop.UPower";
-/// `/org/freedesktop/UPower` well-known object path.
-const UPOWER_PATH: &str = "/org/freedesktop/UPower";
-/// `org.freedesktop.UPower` manager interface (EnumerateDevices lives here).
-const UPOWER_IFACE: &str = "org.freedesktop.UPower";
-/// `org.freedesktop.UPower.Device` per-device property interface.
-const UPOWER_DEV_IFACE: &str = "org.freedesktop.UPower.Device";
-
-/// `org.freedesktop.UDisks2` service name.
-const UDISKS_NAME: &str = "org.freedesktop.UDisks2";
-/// `/org/freedesktop/UDisks2` manager object path.
-const UDISKS_PATH: &str = "/org/freedesktop/UDisks2";
-/// `org.freedesktop.DBus.ObjectManager` interface (GetManagedObjects).
-const OBJ_MANAGER_IFACE: &str = "org.freedesktop.DBus.ObjectManager";
 /// `org.freedesktop.UDisks2.Block` interface name.
 const UDISKS_BLOCK: &str = "org.freedesktop.UDisks2.Block";
 /// `org.freedesktop.UDisks2.Partition` interface name.
@@ -63,10 +45,6 @@ const UDISKS_PARTITION: &str = "org.freedesktop.UDisks2.Partition";
 const UDISKS_NVME: &str = "org.freedesktop.UDisks2.NVMe.Controller";
 /// `org.freedesktop.UDisks2.Drive.Ata` interface name.
 const UDISKS_ATA: &str = "org.freedesktop.UDisks2.Drive.Ata";
-
-/// Prefix used to encode the `Block.Drive` property inside a GetManagedObjects
-/// object chunk (avoids a second map layer in the flat body).
-const BLOCK_DRIVE_PREFIX: &str = "Block.Drive=";
 
 // ── Compatibility freshness budgets ─────────────────────────────────────────
 
@@ -203,151 +181,25 @@ fn reconcile_peripheral_source(
     }
 }
 
-/// Decoded UPower device properties retained for battery reads.
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct UpowerDeviceProps {
-    /// `Percentage` (0–100) when reported.
-    pub(crate) percentage: Option<f64>,
-    /// `State` enum (1=charging, 2=discharging, 4=fully-charged).
-    pub(crate) state: Option<i64>,
-    /// `EnergyRate` in watts when reported.
-    pub(crate) energy_rate: Option<f64>,
-    /// `Model` device name when reported.
-    pub(crate) model: Option<String>,
-    /// `Type` enum (5=mouse, 6=keyboard).
-    pub(crate) kind: Option<i64>,
-}
-
-impl UpowerDeviceProps {
-    /// Returns the battery state token for a UPower `State` value, matching
-    /// Python's `_UPOWER_STATE_MAP` (unknown states map to `BatteryState::
-    /// Unknown`).
-    const fn state_from_value(state: Option<i64>) -> BatteryState {
-        match state {
-            Some(1) => BatteryState::Charging,
-            Some(2) => BatteryState::Discharging,
-            Some(4) => BatteryState::FullyCharged,
-            _ => BatteryState::Unknown,
-        }
+fn upower_state(state: Option<u32>) -> BatteryState {
+    match state {
+        Some(1) => BatteryState::Charging,
+        Some(2) => BatteryState::Discharging,
+        Some(4) => BatteryState::FullyCharged,
+        _ => BatteryState::Unknown,
     }
 }
 
-/// One managed object decoded from UDisks2 `GetManagedObjects`.
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct ManagedObject {
-    /// Object path.
-    path: String,
-    /// Whether the object exposes `org.freedesktop.UDisks2.Block`.
-    is_block: bool,
-    /// Whether the object exposes `org.freedesktop.UDisks2.Partition`.
-    is_partition: bool,
-    /// `Block.Drive` property when the object is a block device.
-    drive_path: Option<String>,
-    /// Whether the referenced drive exposes NVMe SMART.
-    has_nvme: bool,
-    /// Whether the referenced drive exposes ATA SMART.
-    has_ata: bool,
-}
-
-// ── Body-decoding helpers ────────────────────────────────────────────────────
-
-/// Decodes a flat `[path1, path2, ...]` body into owned paths (UPower
-/// `EnumerateDevices` reply shape).
-fn parse_object_paths(body: &[String]) -> Vec<String> {
-    body.iter().filter(|s| !s.is_empty()).cloned().collect()
-}
-
-/// Decodes an interleaved `[key, val, key, val, ...]` body into a map. Stray
-/// keys without a value are ignored.
-fn parse_property_map(body: &[String]) -> BTreeMap<String, String> {
-    let mut map = BTreeMap::new();
-    let mut iter = body.iter();
-    while let Some(key) = iter.next() {
-        if key.is_empty() {
-            continue;
-        }
-        let Some(value) = iter.next() else {
-            break;
-        };
-        map.insert(key.clone(), value.clone());
-    }
-    map
-}
-
-/// Decodes a GetManagedObjects body where each object is one chunk separated
-/// from the next by an empty string. The first element of each chunk is the
-/// object path; remaining elements are interface names, plus a special
-/// `Block.Drive=<path>` entry encoding the Block interface's Drive property.
-fn parse_managed_objects(body: &[String]) -> Vec<ManagedObject> {
-    body.split(|s| s.is_empty())
-        .filter(|chunk| !chunk.is_empty())
-        .map(|chunk| {
-            let mut iter = chunk.iter();
-            let path = iter.next().cloned().unwrap_or_default();
-            let mut is_block = false;
-            let mut is_partition = false;
-            let mut drive_path = None;
-            let mut has_nvme = false;
-            let mut has_ata = false;
-            for iface in iter {
-                if iface == UDISKS_BLOCK {
-                    is_block = true;
-                } else if iface == UDISKS_PARTITION {
-                    is_partition = true;
-                } else if iface == UDISKS_NVME {
-                    has_nvme = true;
-                } else if iface == UDISKS_ATA {
-                    has_ata = true;
-                } else if let Some(drive) = iface.strip_prefix(BLOCK_DRIVE_PREFIX) {
-                    drive_path = Some(drive.to_owned());
-                }
-            }
-            ManagedObject {
-                path,
-                is_block,
-                is_partition,
-                drive_path,
-                has_nvme,
-                has_ata,
-            }
-        })
-        .collect()
-}
-
-/// Dispatches a D-Bus call through `dbus` and unwraps the body on success,
-/// returning `None` on any boundary failure. Mirrors Python's blanket
-/// `except Exception: return None` around every GDBus call.
-fn dbus_call(
-    dbus: &mut dyn DbusFacade,
-    service: &str,
-    path: &str,
-    iface: &str,
-    member: &str,
-    arguments: Vec<DbusArgument>,
-    timeout: Option<Duration>,
-) -> Option<Vec<String>> {
-    dbus_call_result(dbus, service, path, iface, member, arguments, timeout).ok()
-}
-
-fn dbus_call_result(
-    dbus: &mut dyn DbusFacade,
-    service: &str,
-    path: &str,
-    iface: &str,
-    member: &str,
-    arguments: Vec<DbusArgument>,
-    timeout: Option<Duration>,
-) -> Result<Vec<String>, BoundaryError> {
-    dbus.call(DbusRequest {
-        bus: BusKind::System,
+fn unexpected_reply(request: &DbusRequest, output: &DbusOutput) -> BoundaryError {
+    let (bus, service, path, interface, member) = request.metadata();
+    BoundaryError::DbusCallFailed {
+        bus,
         service: service.to_owned(),
-        object_path: path.to_owned(),
-        interface: iface.to_owned(),
+        path: path.to_owned(),
+        interface: interface.to_owned(),
         member: member.to_owned(),
-        arguments,
-        timeout,
-    })
-    .map(|output| output.body)
+        detail: format!("unexpected typed reply {output:?}"),
+    }
 }
 
 // ── UPower device discovery ──────────────────────────────────────────────────
@@ -362,16 +214,10 @@ fn dbus_call_result(
 /// Returns the D-Bus boundary failure so inventory owners do not confuse an
 /// unavailable service with a successful empty enumeration.
 pub fn upower_enumerate(dbus: &mut dyn DbusFacade) -> Result<Vec<String>, BoundaryError> {
-    let body = dbus_call_result(
-        dbus,
-        UPOWER_NAME,
-        UPOWER_PATH,
-        UPOWER_IFACE,
-        "EnumerateDevices",
-        Vec::new(),
-        None,
-    )?;
-    Ok(parse_object_paths(&body))
+    match dbus.call(DbusRequest::UpowerEnumerate)? {
+        DbusOutput::UpowerDevices(paths) => Ok(paths),
+        output => Err(unexpected_reply(&DbusRequest::UpowerEnumerate, &output)),
+    }
 }
 
 /// Reads the requested UPower device properties for one object path.
@@ -384,35 +230,21 @@ pub fn upower_enumerate(dbus: &mut dyn DbusFacade) -> Result<Vec<String>, Bounda
 pub(crate) fn upower_device_props(
     dbus: &mut dyn DbusFacade,
     path: &str,
-) -> Option<UpowerDeviceProps> {
+) -> Option<UpowerDeviceProperties> {
     upower_device_props_result(dbus, path).ok()
 }
 
 pub(crate) fn upower_device_props_result(
     dbus: &mut dyn DbusFacade,
     path: &str,
-) -> Result<UpowerDeviceProps, BoundaryError> {
-    let body = dbus_call_result(
-        dbus,
-        UPOWER_NAME,
-        path,
-        "org.freedesktop.DBus.Properties",
-        "GetAll",
-        vec![DbusArgument::String(UPOWER_DEV_IFACE.to_owned())],
-        None,
-    )?;
-    let map = parse_property_map(&body);
-    Ok(UpowerDeviceProps {
-        percentage: map
-            .get("Percentage")
-            .and_then(|v| v.trim().parse::<f64>().ok()),
-        state: map.get("State").and_then(|v| v.trim().parse::<i64>().ok()),
-        energy_rate: map
-            .get("EnergyRate")
-            .and_then(|v| v.trim().parse::<f64>().ok()),
-        model: map.get("Model").cloned(),
-        kind: map.get("Type").and_then(|v| v.trim().parse::<i64>().ok()),
-    })
+) -> Result<UpowerDeviceProperties, BoundaryError> {
+    let request = DbusRequest::UpowerDeviceProperties {
+        object_path: path.to_owned(),
+    };
+    match dbus.call(request.clone())? {
+        DbusOutput::UpowerDeviceProperties(properties) => Ok(properties),
+        output => Err(unexpected_reply(&request, &output)),
+    }
 }
 
 /// Returns sorted UPower object paths containing `/battery_BAT`.
@@ -446,25 +278,20 @@ pub fn detect_smart_disks(
     sys_root: &Path,
 ) -> Result<BTreeMap<String, SmartDisk>, BoundaryError> {
     let mut result = BTreeMap::new();
-    let body = dbus_call_result(
-        dbus,
-        UDISKS_NAME,
-        UDISKS_PATH,
-        OBJ_MANAGER_IFACE,
-        "GetManagedObjects",
-        Vec::new(),
-        None,
-    )?;
-    let objects = parse_managed_objects(&body);
+    let request = DbusRequest::UdisksManagedObjects;
+    let objects = match dbus.call(request.clone())? {
+        DbusOutput::UdisksManagedObjects(objects) => objects,
+        output => return Err(unexpected_reply(&request, &output)),
+    };
 
     for obj in &objects {
         if !obj.path.contains("/block_devices/") {
             continue;
         }
-        if !obj.is_block || obj.is_partition {
+        if !obj.interfaces.contains(UDISKS_BLOCK) || obj.interfaces.contains(UDISKS_PARTITION) {
             continue;
         }
-        let Some(drive_path) = obj.drive_path.as_deref() else {
+        let Some(drive_path) = obj.drive.as_deref() else {
             continue;
         };
         if drive_path.is_empty() || drive_path == "/" {
@@ -481,9 +308,9 @@ pub fn detect_smart_disks(
             continue;
         }
         let rotational = is_rotational(sys_root, label);
-        let interface = if drive.has_nvme {
+        let interface = if drive.interfaces.contains(UDISKS_NVME) {
             DiskSmartInterface::Nvme
-        } else if drive.has_ata {
+        } else if drive.interfaces.contains(UDISKS_ATA) {
             DiskSmartInterface::Ata
         } else {
             continue;
@@ -502,78 +329,44 @@ pub fn detect_smart_disks(
 
 // ── Disk SMART health ────────────────────────────────────────────────────────
 
-/// Reads one UDisks2 drive property via `Properties.Get`, returning the raw
-/// decoded variant as a string. The body is a single-element `[value]`.
-///
-/// Mirrors Python's `_udisks_prop`: a fresh `Properties.Get` (not a proxy
-/// cache) so `SmartUpdate`'s new value is visible immediately.
-fn udisks_get(
-    dbus: &mut dyn DbusFacade,
-    drive_path: &str,
-    iface: &str,
-    prop: &str,
-) -> Option<String> {
-    let body = dbus_call(
-        dbus,
-        UDISKS_NAME,
-        drive_path,
-        "org.freedesktop.DBus.Properties",
-        "Get",
-        vec![
-            DbusArgument::String(iface.to_owned()),
-            DbusArgument::String(prop.to_owned()),
-        ],
-        None,
-    )?;
-    body.into_iter().next()
-}
-
 /// Reads SMART health for one drive.
 ///
-/// Returns `Some(true)` = healthy, `Some(false)` = failing, `None` = D-Bus call failed or unsupported. NVMe reads `SmartCriticalWarning` (healthy iff the decoded warning array is empty); ATA reads `SmartFailing` (healthy iff false). A `SmartUpdate` ioctl is triggered first so the values are current.
+/// Returns `Some(true)` = healthy, `Some(false)` = failing, `None` = D-Bus call failed or unsupported. NVMe reads the `SmartCriticalWarning` string array (healthy iff empty); ATA reads `SmartFailing` (healthy iff false). A `SmartUpdate` ioctl is triggered first so the values are current.
 pub(super) fn read_disk_smart(
     dbus: &mut dyn DbusFacade,
     drive_path: &str,
     kind: DiskSmartInterface,
 ) -> Option<bool> {
-    let iface = kind.as_str_api();
+    let kind = match kind {
+        DiskSmartInterface::Nvme => UdisksSmartKind::Nvme,
+        DiskSmartInterface::Ata => UdisksSmartKind::Ata,
+    };
     // SmartUpdate(options a{sv}) — empty options. This is a real ioctl on the
     // drive (slow on ATA), hence the long TTL upstream. Failure here means we
     // cannot trust any cached property, so return None.
-    dbus.call(DbusRequest {
-        bus: BusKind::System,
-        service: UDISKS_NAME.to_owned(),
-        object_path: drive_path.to_owned(),
-        interface: iface.to_owned(),
-        member: "SmartUpdate".to_owned(),
-        arguments: vec![DbusArgument::EmptyStringVariantDict],
-        timeout: Some(SMART_UPDATE_TIMEOUT),
-    })
-    .ok()?;
-
-    match kind {
-        DiskSmartInterface::Nvme => {
-            let warning = udisks_get(dbus, drive_path, iface, "SmartCriticalWarning")?;
-            nvme_warning_is_empty(&warning)
+    let updated = dbus
+        .call(DbusRequest::UdisksSmartUpdate {
+            object_path: drive_path.to_owned(),
+            kind,
+            timeout: SMART_UPDATE_TIMEOUT,
+        })
+        .ok()?;
+    if !matches!(updated, DbusOutput::UdisksSmartUpdated) {
+        return None;
+    }
+    match dbus
+        .call(DbusRequest::UdisksSmartProperty {
+            object_path: drive_path.to_owned(),
+            kind,
+        })
+        .ok()?
+    {
+        DbusOutput::UdisksNvmeCriticalWarnings(warnings) if kind == UdisksSmartKind::Nvme => {
+            Some(warnings.is_empty())
         }
-        DiskSmartInterface::Ata => {
-            let raw = udisks_get(dbus, drive_path, iface, "SmartFailing")?;
-            let failing = parse_bool(&raw)?;
-            Some(!failing)
-        }
+        DbusOutput::UdisksAtaFailing(failing) if kind == UdisksSmartKind::Ata => Some(!failing),
+        _ => None,
     }
-}
-
-fn nvme_warning_is_empty(warning: &str) -> Option<bool> {
-    if warning.is_empty() {
-        return Some(true);
-    }
-    if !warning.starts_with('[') {
-        return Some(false);
-    }
-    serde_json::from_str::<Vec<String>>(warning)
-        .ok()
-        .map(|warnings| warnings.is_empty())
 }
 
 // ── System battery (sysfs with UPower fallback) ──────────────────────────────
@@ -728,7 +521,7 @@ fn refresh_battery_sys_cache(
     }
     let percentage = props.percentage.unwrap_or(0.0);
     cache.charge_percent = Some(percentage as i32);
-    cache.state = UpowerDeviceProps::state_from_value(props.state);
+    cache.state = upower_state(props.state);
     let mut rate = round_half_even_f64(props.energy_rate.unwrap_or(0.0));
     if rate == 0
         && matches!(
@@ -916,25 +709,6 @@ pub(super) fn attempt_battery_bolt_once(
 
 // ── Small numeric helpers ────────────────────────────────────────────────────
 
-impl DiskSmartInterface {
-    /// Returns the UDisks2 drive interface name for this SMART family.
-    const fn as_str_api(self) -> &'static str {
-        match self {
-            Self::Ata => UDISKS_ATA,
-            Self::Nvme => UDISKS_NVME,
-        }
-    }
-}
-
-/// Parses a loose boolean string (`"true"`/`"false"`, case-insensitive).
-fn parse_bool(value: &str) -> Option<bool> {
-    match value.trim().to_ascii_lowercase().as_str() {
-        "true" => Some(true),
-        "false" => Some(false),
-        _ => None,
-    }
-}
-
 /// Banker's rounding of `numerator / denominator` for non-negative integers,
 /// matching Python 3's `round()` on the equivalent float division without the
 /// precision loss. Local duplication keeps power rounding independent of
@@ -948,7 +722,7 @@ fn round_half_even_ratio(numerator: u128, denominator: u128) -> u128 {
     let doubled = remainder.saturating_mul(2);
     if doubled > denominator {
         quotient.saturating_add(1)
-    } else if doubled < denominator || quotient % 2 == 0 {
+    } else if doubled < denominator || quotient.is_multiple_of(2) {
         quotient
     } else {
         quotient.saturating_add(1)

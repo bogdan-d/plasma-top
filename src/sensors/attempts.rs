@@ -742,11 +742,11 @@ pub(crate) fn attempt_intel_usage(
         gpu_intel::IntelGpuReadOutcome::Failed => ReadOutcome::Failed,
     };
     let reading = commit_attempt(&mut state.usage, value, clock.monotonic);
-    if reading.status == AttemptStatus::Captured
-        && let Some(sample) = reading.sample.as_ref()
-    {
-        state.usage_cache.clone_from(&sample.value);
-        state.usage_cache_sample_at = Some(sample.captured_at);
+    if reading.status == AttemptStatus::Captured {
+        if let Some(sample) = reading.sample.as_ref() {
+            state.usage_cache.clone_from(&sample.value);
+            state.usage_cache_sample_at = Some(sample.captured_at);
+        }
     }
     IntelUsageResult { reading }
 }
@@ -894,10 +894,10 @@ fn read_brightness(sys_root: &Path) -> Option<i32> {
         }
         let cur = read_trimmed_i64(&cur_f);
         let max = read_trimmed_i64(&max_f);
-        if let (Some(cur), Some(max)) = (cur, max)
-            && max > 0
-        {
-            return Some(((cur * 100) / max) as i32);
+        if let (Some(cur), Some(max)) = (cur, max) {
+            if max > 0 {
+                return Some(((cur * 100) / max) as i32);
+            }
         }
     }
     None

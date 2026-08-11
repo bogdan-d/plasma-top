@@ -1,38 +1,27 @@
 use super::*;
 
-use crate::domain::boundary::BoundaryError;
+use crate::domain::boundary::{BoundaryError, UdisksSmartKind};
 use crate::domain::readings::{DiskSmartInterface, SmartDisk};
 
 fn enqueue_smart(dbus: &mut FakeDbus, drive: &str, warning: &str) {
-    dbus.enqueue(
-        SYSTEM,
-        "org.freedesktop.UDisks2",
-        drive,
-        "org.freedesktop.UDisks2.NVMe.Controller",
-        "SmartUpdate",
-        DbusOutput {
-            bus: SYSTEM,
-            service: "org.freedesktop.UDisks2".to_owned(),
+    dbus.enqueue_request(
+        crate::domain::boundary::DbusRequest::UdisksSmartUpdate {
             object_path: drive.to_owned(),
-            interface: "org.freedesktop.UDisks2.NVMe.Controller".to_owned(),
-            member: "SmartUpdate".to_owned(),
-            body: Vec::new(),
+            kind: UdisksSmartKind::Nvme,
+            timeout: Duration::from_secs(15),
         },
+        DbusOutput::UdisksSmartUpdated,
     );
-    dbus.enqueue(
-        SYSTEM,
-        "org.freedesktop.UDisks2",
-        drive,
-        "org.freedesktop.DBus.Properties",
-        "Get",
-        DbusOutput {
-            bus: SYSTEM,
-            service: "org.freedesktop.UDisks2".to_owned(),
+    dbus.enqueue_request(
+        crate::domain::boundary::DbusRequest::UdisksSmartProperty {
             object_path: drive.to_owned(),
-            interface: "org.freedesktop.DBus.Properties".to_owned(),
-            member: "Get".to_owned(),
-            body: vec![warning.to_owned()],
+            kind: UdisksSmartKind::Nvme,
         },
+        DbusOutput::UdisksNvmeCriticalWarnings(if warning == "[]" || warning.is_empty() {
+            Vec::new()
+        } else {
+            vec![warning.to_owned()]
+        }),
     );
 }
 

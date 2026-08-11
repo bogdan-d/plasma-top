@@ -191,6 +191,7 @@ impl CommandRunner for SerialCommands {
             status: CommandStatus::Exit(0),
             stdout: b"sample\n".to_vec(),
             stderr: Vec::new(),
+            truncation: Default::default(),
         })
     }
 }
@@ -199,12 +200,13 @@ struct AbsentDbus;
 
 impl DbusFacade for AbsentDbus {
     fn call(&mut self, request: DbusRequest) -> std::result::Result<DbusOutput, BoundaryError> {
+        let (bus, service, path, interface, member) = request.metadata();
         Err(BoundaryError::DbusCallFailed {
-            bus: request.bus,
-            service: request.service,
-            path: request.object_path,
-            interface: request.interface,
-            member: request.member,
+            bus,
+            service: service.to_owned(),
+            path: path.to_owned(),
+            interface: interface.to_owned(),
+            member: member.to_owned(),
             detail: String::from("fixture absent"),
         })
     }
@@ -479,7 +481,7 @@ fn failed_hardware_reconciliation_retains_inventory_and_retries_promptly() {
     let discovery = JobId::with_source(
         OwnerId::Discovery,
         JobKind::HardwareDiscovery,
-        SourceIdentity::Inventory(crate::domain::readings::InventoryFamily::Network),
+        SourceIdentity::Inventory(InventoryFamily::Network),
     );
     let mut demand = DemandPlan::default();
     demand.hidden.insert(discovery.clone());

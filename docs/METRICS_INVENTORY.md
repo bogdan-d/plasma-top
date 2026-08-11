@@ -6,13 +6,13 @@ This document maps PlasmaTop metric samples to their real acquisition paths. Use
 
 PlasmaTop does not use a general system-monitoring crate such as `sysinfo`. Most metric samples are parsed directly from Linux `/proc` and `/sys` files with Rust's standard library. Filesystem capacity uses `nix`'s safe `statvfs` wrapper, Logitech Bolt uses `nix::poll` plus direct `hidraw` I/O, and NVIDIA can use the optional `nvml-wrapper` integration.
 
-Execution is synchronous and single-threaded during the issue-03 transition. `src/daemon.rs` stores each domain owner separately; the pure scheduler emits typed jobs, and `src/sensors/scheduled.rs` borrows the matching owner for one cadence-free attempt at a time. Due jobs retain deterministic owner/source ordering:
+Owner dispatch remains serial during issue 04. `src/daemon.rs` stores each domain owner separately; the pure scheduler emits typed jobs, and `src/sensors/scheduled.rs` borrows the matching owner for one cadence-free attempt at a time. Commands and D-Bus calls cross bounded async services while the executor preserves deterministic owner/source ordering:
 
 ```text
 CPU and panel processes -> memory -> network -> disks/SMART/temperatures/fans -> batteries/HID -> NVIDIA GPU -> Intel GPU -> GPU history -> brightness/status files
 ```
 
-Every source finishes before the next source starts. Loops over mounts, drives, fans, or batteries are represented as independent keyed jobs but still execute sequentially. Direct file reads, syscalls, NVML calls, HID reads, and subprocess waits therefore block the daemon thread. Scheduler publication deadlines never wait logically, but a blocking attempt can still delay when the serial executor observes and performs a due publication; issue 04/05 move these boundaries off the event path.
+Every owner source finishes before the next source starts. Loops over mounts, drives, fans, or batteries are represented as independent keyed jobs but still execute sequentially. Command waits and typed D-Bus waits are owned by the Tokio shell, with bounded concurrency and cancellation, while the issue-04 compatibility executor still waits synchronously for each typed reply. Direct file reads, syscalls, NVML calls, and HID reads remain synchronous until owner cutover in issue 05.
 
 The hidden demand set contains resolved panel items, enabled notifications, and configured graph histories. Presented-main demand adds tooltip items, and selected-page demand adds page-owned work. CPU and memory have no unconditional exception. Shared owner reads can feed several metrics, and no owner overlaps itself.
 
@@ -72,7 +72,7 @@ Relevant code: `src/sensors/network.rs` and the network section of `src/sensors/
 | Disk read/write rate | `/proc/diskstats` | Direct Rust file read; sector-counter diff using 512-byte sectors | Every requested poll; first sample seeds the diff; device changes reset it |
 | Disk temperature | Discovered `nvme` or `drivetemp` hwmon `temp*_input` files | Direct Rust file read | 30-second freshness budget per drive |
 | Fan speed | Discovered hwmon `fan*_input` files | Direct Rust file read | 30-second freshness budget per fan |
-| SMART health | UDisks2 `SmartUpdate` and property calls | External `busctl --system --json=short` processes through the D-Bus facade | Per-drive configurable SSD/HDD freshness budget; calls are sequential; SMART update timeout is 15 seconds |
+| SMART health | UDisks2 `SmartUpdate` and typed property calls | Persistent system zbus service | Per-drive configurable SSD/HDD freshness budget; owner calls are sequential; SMART update timeout is 15 seconds |
 
 SMART acquisition is the disk path with the largest individual timeout. One refresh may require multiple D-Bus calls for each drive, and configured drives are processed one at a time.
 
@@ -83,8 +83,8 @@ Relevant code: `src/sensors/disk.rs`, `src/sensors/hwmon.rs`, and SMART function
 | Reading | Primary source | Method | Normal cadence and notes |
 | --- | --- | --- | --- |
 | System battery | `/sys/class/power_supply/<id>/...` | Direct Rust file reads | Preferred path; 30-second freshness budget |
-| System battery fallback | UPower properties | External `busctl --system --json=short` processes through the D-Bus facade | Used when sysfs cannot provide the battery; 30-second freshness budget |
-| UPower mouse/keyboard battery | UPower device properties | External `busctl --system --json=short` processes through the D-Bus facade | 30-second freshness budget |
+| System battery fallback | UPower properties | Persistent typed system zbus service | Used when sysfs cannot provide the battery; 30-second maximum reconciliation plus signal-triggered refresh |
+| UPower mouse/keyboard battery | UPower device properties | Persistent typed system zbus service | 30-second maximum reconciliation plus signal-triggered refresh |
 | Logitech Bolt mouse/keyboard battery | `/dev/hidraw*`, discovered through `/sys/class/hidraw` | Direct HID++ report writes/reads using standard file I/O and `nix::poll` | One-hour freshness budget; a configured panel item is a real startup blocker; each report read has a 1-second timeout and a query accepts at most 10 reads |
 
 Production D-Bus calls default to a 5-second timeout unless a request supplies another value. Demanded system and UPower peripheral source inventory is reconciled every 30 seconds; other demanded hardware families use a 60-second reconciliation budget.
@@ -132,13 +132,13 @@ Deep-dive page bodies are built only for the selected page. Page changes are che
 
 | Crate | Acquisition role |
 | --- | --- |
-| Rust standard library | `/proc` and `/sys` reads, directory walks, symlink inspection, direct file I/O, subprocess spawning, clocks, and synchronous daemon control |
-| `nix` | Safe `statvfs` filesystem-capacity call and `poll(2)` timeout around Bolt HID reads; also supports unrelated runtime locking/user boundaries |
+| Rust standard library | `/proc` and `/sys` reads, directory walks, symlink inspection, direct file I/O, clocks, and synchronous owner control |
+| `nix` | Safe `statvfs`, Bolt HID `poll(2)`, and command process-group kill wrappers; also supports runtime locking/user boundaries |
 | `nvml-wrapper` | Optional safe, runtime-loaded NVML integration for NVIDIA metrics |
-| `wait-timeout` | Bounded synchronous waits for every production subprocess |
-| `serde_json` | Decodes `busctl --json=short` output into the internal D-Bus facade format |
+| `tokio` | Current-thread command, timeout, pipe-drain, bounded-channel, timer, and Unix signal services |
+| `zbus` | Persistent typed UPower/UDisks/session-notification calls plus UPower/logind signal streams |
 
-`toml`, `serde`, `miniz_oxide`, and `signal-hook` are production dependencies but do not acquire metrics: they handle configuration, graph compression, and signals.
+`toml`, `serde`, and `miniz_oxide` are production dependencies but do not acquire metrics; they handle configuration and graph compression.
 
 ## External executable inventory
 
@@ -149,7 +149,6 @@ Metric and page acquisition:
 | `ip` | Current route, interface, and local IP | 3 seconds per call; identity freshness budget is 10 seconds |
 | `iw` | Wi-Fi SSID and signal | 3 seconds per call; identity freshness budget is 10 seconds |
 | `nvidia-smi` | NVIDIA fallback metrics | 5 seconds; freshness budget is 3 seconds |
-| `busctl` | UPower batteries and UDisks2 discovery/SMART | 5-second default per call; SMART update uses 15 seconds; source-specific freshness budgets apply |
 | `ss` | Connections tooltip page | 5 seconds; zero freshness budget; selected-page only |
 | `fastfetch` | System-info tooltip page | 5 seconds; 30-second freshness budget; selected-page only |
 | `script` | Optional pseudo-terminal wrapper for `fastfetch` | Shares page command's 5-second timeout |
@@ -158,7 +157,6 @@ Related external processes that do not acquire normal metrics:
 
 | Executable | Purpose |
 | --- | --- |
-| `notify-send` | Desktop notifications; blocking call with a 5-second timeout |
 | `kreadconfig6` | Plasma color-scheme lookup at startup and after theme changes; 2-second timeout |
 | `plasma-systemmonitor` | Default click target for tooltip pages; launched on user action |
 | `cat` | Applet-side reading of published HTML after watched file changes; not started by sensor collection |
@@ -167,7 +165,9 @@ Commands run directly without shell expansion. The exception is the deliberate `
 
 ## Blocking and failure model
 
-The production command runner starts one child and waits synchronously with `wait-timeout`. On timeout it kills and reaps the child, then returns an absent/error result to the caller. The production D-Bus facade is also synchronous because each D-Bus call starts and waits for `busctl`.
+The production command handle sends typed program/argv/timeout requests to a bounded Tokio service. At most two child process groups run at once; pipe drains cannot deadlock, retained output is capped, and timeout/shutdown kills the full process group before the direct child is reaped. The synchronous owner compatibility handle waits for the typed service reply, but no production path bypasses the service.
+
+The system and session zbus services own persistent connections and bounded request queues. Calls are limited to two in flight per bus. Disconnected requests fail promptly while one serialized bounded-backoff reconnect continues independently. UPower and UDisks replies remain typed through sensor consumption rather than becoming generic string bodies. Desktop notification `Notify` calls carry the existing title, body, icon, critical urgency, and never-expire timeout directly on the session bus.
 
 Sensor failures are isolated logically: a missing file, malformed value, unavailable service, permission error, command failure, or timeout normally produces `None` or an empty reading, allowing later sensor families to run. This isolation does not make work concurrent; elapsed time before a timeout still delays everything that follows it.
 
@@ -185,7 +185,7 @@ Highest-value questions:
 
 1. Which `collect` sections dominate cold and warm profiles on the target machine?
 2. Are process count, mount count, drive count, or Intel DRM client count making a direct scan expensive?
-3. Are `busctl`, `ip`, `iw`, or `nvidia-smi` frequently reaching timeout rather than returning quickly?
+3. Are typed D-Bus calls, `ip`, `iw`, or `nvidia-smi` frequently reaching timeout rather than returning quickly?
 4. Is release packaging enabling NVML, avoiding the recurring `nvidia-smi` process?
 5. Are configured items or notifications requesting capabilities that are not useful on this machine?
 6. Is the selected connections page repeatedly running `ss` on its zero freshness budget?
@@ -201,7 +201,7 @@ Low-risk optimization levers already supported are removing unused metric capabi
 - Separate owner state and reconciliation interfaces: matching domain modules under `src/sensors/`
 - One-attempt result contracts and source reads: `src/sensors/attempts.rs`, `src/sensors/attempts/`, and matching owner modules under `src/sensors/`
 - Hardware inventory discovery and reconciliation: `src/sensors/discovery.rs`
-- Subprocess, D-Bus, notification, and clock adapters: `src/adapters.rs`
+- Subprocess, D-Bus, notification, signal, and clock services: `src/adapters.rs` and `src/adapters/`
 - Command-backed tooltip pages: `src/page_commands.rs`
 - Metric-to-capability mapping: `src/domain/metric.rs` and `src/domain/registry.rs`
 - `MetricSample`, `HardwareInventory`, and `DisplaySnapshot` contracts: `src/domain/readings.rs`

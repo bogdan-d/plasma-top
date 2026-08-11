@@ -506,9 +506,9 @@ fn detect_has_backlight_outcome(sys_root: &Path) -> io::Result<bool> {
 // ── Peripheral hardware-inventory discovery ─────────────────────────────────
 
 /// UPower type enum values used by the peripheral classifier.
-const UPOWER_TYPE_MOUSE: i64 = 5;
+const UPOWER_TYPE_MOUSE: u32 = 5;
 /// UPower keyboard device type.
-const UPOWER_TYPE_KEYBOARD: i64 = 6;
+const UPOWER_TYPE_KEYBOARD: u32 = 6;
 
 /// Discovers Logitech hidpp battery UPower paths for the mouse/keyboard.
 ///

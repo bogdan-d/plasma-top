@@ -34,11 +34,3 @@ fn bat_name_from_id_extracts_power_supply_name() {
     assert_eq!(bat_name_from_id("BAT0"), "BAT0");
     assert_eq!(bat_name_from_id("battery_BAT1"), "BAT1");
 }
-
-#[test]
-fn parse_bool_accepts_case_insensitive_true_false() {
-    assert_eq!(parse_bool("true"), Some(true));
-    assert_eq!(parse_bool("FALSE"), Some(false));
-    assert_eq!(parse_bool("  True  "), Some(true));
-    assert_eq!(parse_bool("yes"), None);
-}

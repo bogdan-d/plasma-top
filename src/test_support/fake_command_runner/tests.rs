@@ -9,6 +9,7 @@ fn ok_output(program: &str, payload: &[u8]) -> CommandOutput {
         status: CommandStatus::Exit(0),
         stdout: payload.to_vec(),
         stderr: Vec::new(),
+        truncation: Default::default(),
     }
 }
 

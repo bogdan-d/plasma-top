@@ -4,6 +4,7 @@ use crate::domain::boundary::{
     BoundaryError, CommandOutput, CommandStatus, DbusOutput, DbusRequest, NotificationError,
     NotificationPayload,
 };
+use crate::error::CriticalService;
 use std::cell::Cell;
 use std::collections::VecDeque;
 
@@ -15,6 +16,23 @@ fn rgb_and_luma_match_python_boundaries() {
     assert_eq!(parse_rgb("bad"), None);
     assert!(!is_light_rgb((127, 127, 127)));
     assert!(is_light_rgb((255, 255, 255)));
+}
+
+#[test]
+fn critical_service_exit_is_a_daemon_error_after_cleanup() {
+    let error = complete_daemon_run(Ok(()), Some(CriticalService::SystemDbus), false)
+        .expect_err("critical system service exit must fail the daemon");
+    assert!(matches!(
+        error,
+        Error::CriticalService(CriticalService::SystemDbus)
+    ));
+}
+
+#[test]
+fn shutdown_timeout_is_a_daemon_error_after_cleanup() {
+    let error = complete_daemon_run(Ok(()), None, true)
+        .expect_err("over-budget I/O shutdown must fail the daemon");
+    assert!(matches!(error, Error::CriticalShutdownTimeout));
 }
 
 #[test]
@@ -59,12 +77,13 @@ struct AbsentDbus;
 
 impl DbusFacade for AbsentDbus {
     fn call(&mut self, request: DbusRequest) -> std::result::Result<DbusOutput, BoundaryError> {
+        let (bus, service, path, interface, member) = request.metadata();
         Err(BoundaryError::DbusCallFailed {
-            bus: request.bus,
-            service: request.service,
-            path: request.object_path,
-            interface: request.interface,
-            member: request.member,
+            bus,
+            service: service.to_owned(),
+            path: path.to_owned(),
+            interface: interface.to_owned(),
+            member: member.to_owned(),
             detail: "fixture absent".into(),
         })
     }
@@ -103,6 +122,8 @@ struct FakeControl {
     saw_panel: bool,
     saw_tooltip: bool,
     saw_page_one: bool,
+    io_events: VecDeque<IoEvent>,
+    drained_io_events: usize,
 }
 
 impl LoopControl for FakeControl {
@@ -133,6 +154,12 @@ impl LoopControl for FakeControl {
 
     fn should_stop(&self) -> bool {
         false
+    }
+
+    fn drain_io_events(&mut self) -> Vec<IoEvent> {
+        let events = self.io_events.drain(..).collect::<Vec<_>>();
+        self.drained_io_events = self.drained_io_events.saturating_add(events.len());
+        events
     }
 }
 
@@ -281,6 +308,7 @@ fn config_page_removal_prunes_command_owner_before_failed_readd() {
             status: CommandStatus::Exit(0),
             stdout: b"pre-removal\n".to_vec(),
             stderr: Vec::new(),
+            truncation: Default::default(),
         })]),
     };
     assert_eq!(
@@ -517,6 +545,13 @@ fn isolated_lifecycle_paints_wakes_keeps_last_good_and_cleans_up() {
         saw_panel: false,
         saw_tooltip: false,
         saw_page_one: false,
+        io_events: VecDeque::from([
+            IoEvent::UpowerChanged,
+            IoEvent::UpowerChanged,
+            IoEvent::PrepareForSleep(true),
+            IoEvent::PrepareForSleep(false),
+        ]),
+        drained_io_events: 0,
     };
 
     let result = run_daemon_with(
@@ -530,6 +565,7 @@ fn isolated_lifecycle_paints_wakes_keeps_last_good_and_cleans_up() {
 
     assert!(result.is_ok(), "{result:?}");
     assert!(control.saw_panel && control.saw_tooltip);
+    assert_eq!(control.drained_io_events, 4);
     assert!(control.saw_page_one, "page wake did not republish tooltip");
     assert!(
         commands.calls.get() > 0,

@@ -557,12 +557,14 @@ impl Scheduler {
                         .history_source
                         .as_ref()
                         .is_none_or(|source| source_samples.get(source).copied() == Some(true));
-                    if history_ready && let Some(deadline) = runtime.nominal_due {
-                        runtime.mark_history_pending(latest_due_at_or_before(
-                            deadline,
-                            runtime.spec.freshness,
-                            self.now,
-                        ));
+                    if history_ready {
+                        if let Some(deadline) = runtime.nominal_due {
+                            runtime.mark_history_pending(latest_due_at_or_before(
+                                deadline,
+                                runtime.spec.freshness,
+                                self.now,
+                            ));
+                        }
                     }
                 } else {
                     runtime.mark_pending(self.now);
@@ -685,11 +687,12 @@ impl Scheduler {
     }
 
     fn trigger(&mut self, job: JobId) {
-        if self.current_demand().contains(&job)
-            && let Some(runtime) = self.jobs.get_mut(&job)
-            && runtime.spec.timing != TimingClass::History
-        {
-            runtime.mark_pending(self.now);
+        if self.current_demand().contains(&job) {
+            if let Some(runtime) = self.jobs.get_mut(&job) {
+                if runtime.spec.timing != TimingClass::History {
+                    runtime.mark_pending(self.now);
+                }
+            }
         }
     }
 
@@ -725,10 +728,11 @@ impl Scheduler {
             ) && runtime
                 .nominal_due
                 .is_some_and(|deadline| deadline <= self.now)
-                && let Some(deadline) = runtime.nominal_due
             {
-                runtime.nominal_due =
-                    Some(advance_past(deadline, runtime.spec.freshness, self.now));
+                if let Some(deadline) = runtime.nominal_due {
+                    runtime.nominal_due =
+                        Some(advance_past(deadline, runtime.spec.freshness, self.now));
+                }
             }
         }
         self.awaiting_resume_inventory = true;
@@ -850,10 +854,11 @@ impl Scheduler {
         if self
             .next_display
             .is_some_and(|deadline| deadline <= self.now)
-            && let Some(deadline) = self.next_display
         {
-            self.next_display = Some(advance_past(deadline, self.display_interval, self.now));
-            self.reanchor_fast_jobs();
+            if let Some(deadline) = self.next_display {
+                self.next_display = Some(advance_past(deadline, self.display_interval, self.now));
+                self.reanchor_fast_jobs();
+            }
         }
         self.issue_publish(reason, true, self.effective_presented, actions);
     }

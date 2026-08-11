@@ -32,7 +32,7 @@ PlasmaTop renders CPU, memory, drives, GPU, temperatures, batteries, network and
 ## Requirements
 
 - **KDE Plasma 6**
-- **Rust 1.85+ and Cargo** to build from source; neither is needed after install.
+- **Rust 1.87+ and Cargo** to build from source; neither is needed after install.
 - A **Nerd Font** for the glyphs (the applet defaults to *NotoSansM Nerd Font Mono*). Pick it in the widget's *Appearance* page.
 - **Optional feature dependencies**
   - `nvidia-utils` for NVIDIA metrics through NVML or `nvidia-smi`.

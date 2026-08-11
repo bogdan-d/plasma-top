@@ -19,7 +19,7 @@ Do not copy historical measurements into a current benchmark report. Rerun them.
 The daemon spends most of its time asleep. Work belongs to four boundaries:
 
 1. `/proc`, `/sys`, and device I/O in `src/sensors/`;
-2. timeout-bound commands and `busctl` calls in `src/adapters.rs`;
+2. bounded command and persistent zbus calls in `src/adapters/`;
 3. pure Rust formatting and chart rasterization in `src/render/`;
 4. Qt RichText parsing/layout in plasmashell.
 
@@ -64,16 +64,16 @@ During the first 90 seconds, `src/daemon.rs` logs when demanded slow metric samp
 
 Canonical tooltip width is recomputed from a bounded, maxed display snapshot on first paint and each normal publication pass. This keeps width correct after mounts, hardware inventory, or identity changes. Memoization is justified only if profiling shows this render contributes material work.
 
-## Process-backed boundaries
+## Async I/O boundaries
 
 PlasmaTop minimizes subprocess work but is not fork-free.
 
 - Plasma uses `cat` after watched HTML changes.
-- D-Bus requests use timeout-bound `busctl --json=short`.
-- Notifications use timeout-bound `notify-send`.
 - `nvidia-smi` is the retained fallback sample source when NVML is unavailable.
 - `ip`, `iw`, `ss`, and `fastfetch` run only when included in the current demand set.
 - system-update and server checks read files produced by external jobs rather than starting package managers or network probes inside the poll loop.
+
+All daemon and diagnostic subprocesses use one bounded Tokio command service with two child slots. Each child owns a process group, stdout and stderr drain concurrently, final output retains no more than 1 MiB with deterministic stdout-first allocation, and timeout or shutdown kills the group and explicitly reaps the direct child. UPower, UDisks, desktop notifications, and sleep signals use persistent zbus connections instead of helper processes. Each bus permits two in-flight calls; disconnection fails waiting calls promptly and one serialized exponential reconnect loop is capped at two seconds, avoiding request-driven reconnect storms.
 
 Hardware presence uses sysfs instead of tools such as `lspci`. Historical measurement found NVIDIA detection through `lspci` took roughly 2000 ms while the equivalent sysfs walk took roughly 2 ms. Keep detection in-process.
 

@@ -200,10 +200,10 @@ fn discover_hardware_populates_paths_and_flags_from_fixtures() {
     // SMART is enabled by default, but the fake has no managed-object reply.
     assert!(hw.disk_smart_drives.is_empty());
     let trace = dbus.call_trace();
-    assert_eq!(trace[0].member, "EnumerateDevices"); // system batteries
-    assert_eq!(trace[1].member, "GetManagedObjects"); // SMART disks
-    assert_eq!(trace[2].member, "EnumerateDevices"); // peripherals
-    assert_eq!(trace[3].member, "GetAll");
+    assert_eq!(trace[0].metadata().4, "EnumerateDevices"); // system batteries
+    assert_eq!(trace[1].metadata().4, "GetManagedObjects"); // SMART disks
+    assert_eq!(trace[2].metadata().4, "EnumerateDevices"); // peripherals
+    assert_eq!(trace[3].metadata().4, "GetAll");
 }
 
 #[test]
@@ -442,21 +442,18 @@ fn discover_hardware_enumerates_smart_drives_when_enabled() {
         "/org/freedesktop/UDisks2",
         "org.freedesktop.DBus.ObjectManager",
         "GetManagedObjects",
-        DbusOutput {
-            bus: SYSTEM,
-            service: "org.freedesktop.UDisks2".to_owned(),
-            object_path: "/org/freedesktop/UDisks2".to_owned(),
-            interface: "org.freedesktop.DBus.ObjectManager".to_owned(),
-            member: "GetManagedObjects".to_owned(),
-            body: vec![
-                "/org/freedesktop/UDisks2/block_devices/nvme0n1".to_owned(),
-                "org.freedesktop.UDisks2.Block".to_owned(),
-                "Block.Drive=/org/freedesktop/UDisks2/drives/NVMe_1".to_owned(),
-                String::new(),
-                "/org/freedesktop/UDisks2/drives/NVMe_1".to_owned(),
-                "org.freedesktop.UDisks2.NVMe.Controller".to_owned(),
-            ],
-        },
+        DbusOutput::UdisksManagedObjects(vec![
+            UdisksManagedObject {
+                path: "/org/freedesktop/UDisks2/block_devices/nvme0n1".to_owned(),
+                interfaces: BTreeSet::from(["org.freedesktop.UDisks2.Block".to_owned()]),
+                drive: Some("/org/freedesktop/UDisks2/drives/NVMe_1".to_owned()),
+            },
+            UdisksManagedObject {
+                path: "/org/freedesktop/UDisks2/drives/NVMe_1".to_owned(),
+                interfaces: BTreeSet::from(["org.freedesktop.UDisks2.NVMe.Controller".to_owned()]),
+                drive: None,
+            },
+        ]),
     );
     let mut commands = FakeCommandRunner::new();
     let cfg = cfg_panel(&["disk_smart:pair"]);
@@ -467,9 +464,9 @@ fn discover_hardware_enumerates_smart_drives_when_enabled() {
     assert_eq!(drive.object_path, "/org/freedesktop/UDisks2/drives/NVMe_1");
     assert!(!drive.rotational);
     let trace = dbus.call_trace();
-    assert_eq!(trace[0].member, "EnumerateDevices");
-    assert_eq!(trace[1].member, "GetManagedObjects");
-    assert_eq!(trace[2].member, "EnumerateDevices");
+    assert_eq!(trace[0].metadata().4, "EnumerateDevices");
+    assert_eq!(trace[1].metadata().4, "GetManagedObjects");
+    assert_eq!(trace[2].metadata().4, "EnumerateDevices");
 }
 
 // ── needs_periph_rescan ──────────────────────────────────────────────────────
@@ -653,14 +650,7 @@ fn reload_inventory_retains_failures_clears_confirmed_absence_and_readds() {
         "/org/freedesktop/UDisks2",
         "org.freedesktop.DBus.ObjectManager",
         "GetManagedObjects",
-        DbusOutput {
-            bus: SYSTEM,
-            service: "org.freedesktop.UDisks2".to_owned(),
-            object_path: "/org/freedesktop/UDisks2".to_owned(),
-            interface: "org.freedesktop.DBus.ObjectManager".to_owned(),
-            member: "GetManagedObjects".to_owned(),
-            body: Vec::new(),
-        },
+        DbusOutput::UdisksManagedObjects(Vec::new()),
     );
     empty_dbus.enqueue(
         SYSTEM,
@@ -704,21 +694,18 @@ fn reload_inventory_retains_failures_clears_confirmed_absence_and_readds() {
         "/org/freedesktop/UDisks2",
         "org.freedesktop.DBus.ObjectManager",
         "GetManagedObjects",
-        DbusOutput {
-            bus: SYSTEM,
-            service: "org.freedesktop.UDisks2".to_owned(),
-            object_path: "/org/freedesktop/UDisks2".to_owned(),
-            interface: "org.freedesktop.DBus.ObjectManager".to_owned(),
-            member: "GetManagedObjects".to_owned(),
-            body: vec![
-                "/org/freedesktop/UDisks2/block_devices/nvme0n1".to_owned(),
-                "org.freedesktop.UDisks2.Block".to_owned(),
-                "Block.Drive=/drives/NVMe".to_owned(),
-                String::new(),
-                "/drives/NVMe".to_owned(),
-                "org.freedesktop.UDisks2.NVMe.Controller".to_owned(),
-            ],
-        },
+        DbusOutput::UdisksManagedObjects(vec![
+            UdisksManagedObject {
+                path: "/org/freedesktop/UDisks2/block_devices/nvme0n1".to_owned(),
+                interfaces: BTreeSet::from(["org.freedesktop.UDisks2.Block".to_owned()]),
+                drive: Some("/drives/NVMe".to_owned()),
+            },
+            UdisksManagedObject {
+                path: "/drives/NVMe".to_owned(),
+                interfaces: BTreeSet::from(["org.freedesktop.UDisks2.NVMe.Controller".to_owned()]),
+                drive: None,
+            },
+        ]),
     );
     readd_dbus.enqueue(
         SYSTEM,

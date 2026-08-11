@@ -333,6 +333,7 @@ fn collect_failure_in_one_capability_does_not_block_others() {
             status: CommandStatus::Exit(1),
             stdout: Vec::new(),
             stderr: Vec::new(),
+            truncation: Default::default(),
         },
     );
     let mut dbus = FakeDbus::new();
