@@ -10,7 +10,7 @@ The pure scheduler dispatches typed jobs through bounded per-owner channels, and
 
 The hidden demand set contains resolved panel items, enabled notifications, and configured graph histories. Presented-main demand adds tooltip items, and selected-page demand adds page-owned work. CPU and memory have no unconditional exception. Shared owner reads can feed several metrics, and no owner overlaps itself.
 
-Display publication is a separate scheduler deadline. Fast jobs become due 50 ms beforehand; late jobs carry retained values, missed job/history ticks are skipped, and no catch-up burst or owner overlap occurs. The daemon sleeps until the next scheduler deadline or the 100 ms compatibility observation step.
+Display publication is a separate scheduler deadline. Fast jobs become due 50 ms beforehand; late jobs carry retained values, missed job/history ticks are skipped, and no catch-up burst or owner overlap occurs. The daemon sleeps until the next scheduler deadline, inotify event, I/O completion, or lifecycle signal.
 
 ## Acquisition inventory
 
@@ -104,14 +104,14 @@ Relevant code: `src/sensors/gpu_nvidia.rs`, `src/sensors/gpu_intel.rs`, and the 
 | Reading | Primary source | Method | Normal cadence and notes |
 | --- | --- | --- | --- |
 | Screen brightness | First usable `/sys/class/backlight/<device>/brightness` and `max_brightness` pair | Direct Rust file reads | Every requested poll |
-| Pending system updates | Configured `system_updates.file` | Direct Rust file read of a count produced by another job | Every requested poll; PlasmaTop does not run a package manager |
-| Server status | Configured `server_check.file` | Direct Rust file read of a status produced by another job | Every requested poll; PlasmaTop does not perform the network probe |
+| Pending system updates | Configured `system_updates.file` | Direct Rust file read of a count produced by another job | Initial read plus inotify changes; PlasmaTop does not run a package manager |
+| Server status | Configured `server_check.file` | Direct Rust file read of a status produced by another job | Initial read plus inotify changes; PlasmaTop does not perform the network probe |
 
 The update and server-check producers are outside the daemon. Optimizing or changing their schedule must happen in the jobs that write those files, not in sensor collection.
 
 ## Deep-dive page inventory
 
-Deep-dive page bodies are built only for the selected page. Page changes are checked at scheduler wakes no more than 100 ms apart, update page demand, and can republish the tooltip without running unrelated jobs. Until the issue-06 presentation lease protocol lands, the production compatibility adapter reports the tooltip as presented.
+Deep-dive page bodies are built only for the selected page while at least one presentation lease is live. Inotify-delivered page changes use a 50 ms logical-source debounce, update page demand, and target republished tooltip HTML in under 100 ms without running unrelated jobs. Hover, pinning, and planar/full representation create or refresh per-instance leases every 30 seconds; dismissal removes a lease, stale leases expire after 90 seconds, and any remaining live instance keeps tooltip demand active. When the last lease disappears, tooltip builds and writes stop immediately, the last file remains for immediate reactivation, and active tooltip-only work receives a one-second grace before cancellation.
 
 | Page | Source | Blocking/retention behavior |
 | --- | --- | --- |

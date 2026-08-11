@@ -73,12 +73,13 @@ print_dry_run() {
         print_command kpackagetool6 --type Plasma/Applet --install '$APPLET_STAGE'
         print_command kbuildsycoca6
 
-        printf '\n5. Activate user service\n'
+        printf '\n5. Enable user service\n'
         print_command systemctl --user daemon-reload
         print_command systemctl --user enable plasma-top
+        printf '  On first install, restart the service and verify it is active.\n'
         print_command systemctl --user restart plasma-top
         print_command systemctl --user is-active --quiet plasma-top
-        printf '  On applet upgrade, restart plasmashell when kstart is available.\n'
+        printf '  On upgrade, leave the running daemon and loaded applet matched; log out and back in to activate the new pair.\n'
     else
         printf '\n2. Replace system files\n'
         print_command ${SUDO:+$SUDO} rm -rf "$LIBDIR"
@@ -105,8 +106,10 @@ print_dry_run() {
             print_command kbuildsycoca6
             print_command systemctl --user daemon-reload
             print_command systemctl --user enable plasma-top
+            printf '  On first install:\n'
             print_command systemctl --user restart plasma-top
-            printf '  On applet upgrade, restart plasmashell when kstart is available.\n'
+            print_command systemctl --user status plasma-top --no-pager
+            printf '  On upgrade, leave the running daemon untouched and log out and back in to activate the new daemon and applet together.\n'
         fi
     fi
 }
@@ -358,24 +361,25 @@ if [[ "$MODE" == user ]]; then
     command -v kbuildsycoca6 >/dev/null && kbuildsycoca6 >/dev/null 2>&1 || true
     systemctl --user daemon-reload
     systemctl --user enable plasma-top
-    if ! systemctl --user restart plasma-top || ! systemctl --user is-active --quiet plasma-top; then
-        echo "[error] files installed, but service activation failed" >&2
-        echo "Recover: systemctl --user restart plasma-top" >&2
-        echo "Inspect: journalctl --user -u plasma-top -n 100" >&2
-        exit 1
-    fi
-    if [[ "$applet_upgraded" == true ]] && command -v kstart >/dev/null; then
-        killall plasmashell 2>/dev/null || true
-        kstart plasmashell >/dev/null 2>&1 &
-    fi
-    echo "PlasmaTop installed for current user. Service is active."
-    if [[ "$applet_upgraded" == false ]]; then
+    if [[ "$owned_install" == true || "$applet_upgraded" == true ]]; then
+        echo "PlasmaTop upgraded for current user. The running daemon was left untouched."
+        echo "Log out and back in before using the upgraded applet; daemon and applet versions must change together."
+    else
+        if ! systemctl --user restart plasma-top || ! systemctl --user is-active --quiet plasma-top; then
+            echo "[error] files installed, but service activation failed" >&2
+            echo "Recover: systemctl --user restart plasma-top" >&2
+            echo "Inspect: journalctl --user -u plasma-top -n 100" >&2
+            exit 1
+        fi
+        echo "PlasmaTop installed for current user. Service is active."
         echo "Add the 'PlasmaTop' widget to a panel."
     fi
     exit 0
 fi
 
 # Native package-compatible installation.
+install_tree_existed=false
+if [[ -e "$LIBDIR" || -L "$LIBDIR" ]]; then install_tree_existed=true; fi
 $SUDO rm -rf -- "$LIBDIR"
 $SUDO install -d "$LIBDIR"
 $SUDO cp -r "$REPO_DIR/style" "$REPO_DIR/lang" "$REPO_DIR/config" "$LIBDIR/"
@@ -405,14 +409,12 @@ fi
 command -v kbuildsycoca6 >/dev/null && kbuildsycoca6 >/dev/null 2>&1 || true
 systemctl --user daemon-reload
 systemctl --user enable plasma-top
-systemctl --user restart plasma-top
-if [[ "$applet_upgraded" == true ]] && command -v kstart >/dev/null; then
-    killall plasmashell 2>/dev/null || true
-    kstart plasmashell >/dev/null 2>&1 &
-fi
-
-echo "PlasmaTop installed system-wide. Service status:"
-systemctl --user status plasma-top --no-pager || true
-if [[ "$applet_upgraded" == false ]]; then
+if [[ "$install_tree_existed" == true || "$applet_upgraded" == true ]]; then
+    echo "PlasmaTop upgraded system-wide. The running daemon was left untouched."
+    echo "Log out and back in before using the upgraded applet; daemon and applet versions must change together."
+else
+    systemctl --user restart plasma-top
+    echo "PlasmaTop installed system-wide. Service status:"
+    systemctl --user status plasma-top --no-pager || true
     echo "First install: add the 'PlasmaTop' widget to a panel."
 fi

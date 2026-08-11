@@ -246,6 +246,14 @@ PlasmoidItem {
 	// reliably on the first hover. readOutputs reads it (with `expanded`) as the gate
 	// on the tooltip's share of each watcher notification.
 	property bool tooltipHovered: false
+	readonly property bool planar: plasmoid.formFactor === PlasmaCore.Types.Planar
+	readonly property bool presented: tooltipHovered || expanded || planar
+
+	PresentationLease {
+		presented: widget.presented
+		instanceId: Number(plasmoid.id)
+		backendCommand: plasmoid.configuration.backendCommand
+	}
 
 	// Desktop "no background" look: with the widget transparent on the wallpaper,
 	// the daemon's own base colors (grey labels, cyan titles, dark "good"/"active"
@@ -351,35 +359,18 @@ PlasmoidItem {
 		execOnce(config.tooltipCommand)
 	}
 
-	// One clock, and it is not ours: the daemon's poll_interval. It writes panel.html
-	// and tooltip.html back to back on every poll, and we read on the notification
-	// rather than on a tick of our own — so a frame reaches the panel as soon as it
-	// exists, instead of aging up to a poll first, and a poll_interval the applet
-	// never hears about can no longer alias against our own rate.
-	//
-	// Watching the DIRECTORY, not the files, is load-bearing: the daemon publishes by
-	// writing a tmp and renaming over the target, which swaps the inode out from under
-	// any watch on the file itself. This is inotify (FolderListModel), not an mtime
-	// poll — verified to catch every write at a 700ms cadence, faster than mtime's 1s
-	// granularity could resolve. Nothing else may live in that directory; see
-	// src/runtime/mod.rs.
+	// Watch the directory because atomic publication replaces file inodes; applet reads on watcher notifications instead of owning a display clock.
 	FolderListModel {
 		id: outputWatcher
 		folder: config.runtimeUrl
 		nameFilters: ["*.html"]
 		showDirs: false
-		// nameFilters picks the model's ROWS, it does not filter notifications: every
-		// write in the directory notifies every model watching it. That costs nothing
-		// here — the daemon writes both files every poll anyway, so there is nothing
-		// to tell apart. One poll emits a handful of signals (two files, each with a
-		// rename-over tmp); the debounce collapses them into exactly one read.
+		// nameFilters filters rows, not notifications; debounce coalesces atomic publication bursts into one read.
 		onDataChanged: readDebounce.restart()
 		onRowsInserted: readDebounce.restart()
 	}
 
-	// Not a clock: no rate of its own, only a coalescing window. Restarted by every
-	// notification, so it fires once the directory has been quiet for 50ms — i.e.
-	// once per poll, after the last rename, with both files complete on disk.
+	// This timer only coalesces watcher notifications after the runtime directory stays quiet for 50ms.
 	Timer {
 		id: readDebounce
 		interval: 50
@@ -410,30 +401,21 @@ PlasmoidItem {
 
 	function readOutputs() {
 		widget.runCommand()
-		// The tooltip read stays lazy — the panel's is not. Qt reparses and relays out
-		// the tooltip's RichText on every text change, so re-reading it while nobody is
-		// looking is work for no one. There is no catching up to do when a hover starts:
-		// the daemon renders every poll regardless, so the file is always fresh.
-		if (widget.tooltipHovered || widget.expanded)
+		// The tooltip read stays lazy — the panel's is not. Qt reparses and relays out the tooltip's RichText on every text change, so re-reading it while nobody is looking is work for no one.
+		// Presentation reads the retained frame immediately; watcher notifications then deliver activation and scheduled refreshes.
+		if (widget.presented)
 			widget.runTooltipCommand()
 	}
 
 	Component.onCompleted: {
-		// The watcher only speaks when the directory CHANGES, so without a read at load
-		// the panel would stay blank until the daemon's next poll. The tooltip seed also
-		// gives ToolTipArea.enabled something to be true about before the first hover —
-		// see tooltipArea below.
+		// The watcher only speaks when the directory changes, so read once at load instead of waiting for the daemon's next publication.
 		widget.runCommand()
-		widget.runTooltipCommand()
 	}
 
 	Plasmoid.onActivated: widget.performClick()
 
-	// Pinning (the full-representation popup) opens the tooltip gate: readOutputs
-	// keeps it live from here on, the same lazy refresh the hover gets. The read
-	// right now is what fills the popup before the first poll lands in it.
-	onExpandedChanged: {
-		if (widget.expanded)
+	onPresentedChanged: {
+		if (widget.presented)
 			widget.runTooltipCommand()
 	}
 
@@ -570,13 +552,9 @@ PlasmoidItem {
 		HoverHandler {
 			id: panelHover
 			onHoveredChanged: {
-				if (widget.expanded)
-					return   // pinned: onExpandedChanged owns the refresh
 				// tooltipHovered IS the gate readOutputs consults; setting it is what
 				// opens and closes the tooltip's share of the watcher.
 				widget.tooltipHovered = hovered
-				if (hovered)
-					widget.runTooltipCommand()   // show the current frame, don't wait for the next
 			}
 		}
 

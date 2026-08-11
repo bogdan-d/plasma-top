@@ -41,15 +41,9 @@ pub(super) struct RuntimeState {
     pub(super) render_generation: u64,
     pub(super) css_path: PathBuf,
     pub(super) overlay_path: Option<PathBuf>,
-    pub(super) config_stamp: Option<SystemTime>,
-    pub(super) machine_stamps: Vec<Option<SystemTime>>,
-    pub(super) plasma_stamp: Option<SystemTime>,
-    pub(super) geom_stamp: Option<SystemTime>,
     pub(super) kde_stamp: Option<SystemTime>,
     pub(super) css_stamp: Option<SystemTime>,
     pub(super) overlay_stamp: Option<SystemTime>,
-    pub(super) updates_stamp: Option<SystemTime>,
-    pub(super) server_stamp: Option<SystemTime>,
     pub(super) theme_reconciliation_pending: bool,
     pub(super) panel_html: Option<String>,
     pub(super) tooltip_html: Option<String>,
@@ -77,14 +71,11 @@ pub(super) struct RuntimeState {
 
 impl RuntimeState {
     pub(super) fn new(
-        config_path: Option<&Path>,
         paths: &DaemonPaths,
         cfg: Config,
         hw: HardwareInventory,
         active: Vec<Page>,
     ) -> Self {
-        let watch_path = config_path.map_or_else(default_config_path, Path::to_path_buf);
-        let machine_paths = machine_source_paths(config_path);
         let light = super::super::kdeglobals_background(&paths.kdeglobals)
             .is_some_and(super::super::is_light_rgb);
         let css_path = resolve_style(if light {
@@ -98,15 +89,9 @@ impl RuntimeState {
             .then(|| resolve_style("style-overlay.css"));
         let css = read_css(&css_path, overlay_path.as_deref());
         Self {
-            config_stamp: mtime(&watch_path),
-            machine_stamps: machine_paths.iter().map(|path| mtime(path)).collect(),
-            plasma_stamp: mtime(&paths.plasma_config),
-            geom_stamp: mtime(&paths.geom),
             kde_stamp: mtime(&paths.kdeglobals),
             css_stamp: mtime(&css_path),
             overlay_stamp: overlay_path.as_deref().and_then(mtime),
-            updates_stamp: nonempty_mtime(&cfg.system_updates.file),
-            server_stamp: nonempty_mtime(&cfg.server_check.file),
             theme_reconciliation_pending: true,
             cfg,
             hw,
@@ -409,10 +394,10 @@ impl RuntimeState {
         )
     }
 
-    pub(super) fn update_style(&mut self, paths: &DaemonPaths) -> bool {
+    pub(super) fn update_style(&mut self, paths: &DaemonPaths, force: bool) -> bool {
         let kde_stamp = mtime(&paths.kdeglobals);
-        let mut changed = false;
-        if kde_stamp != self.kde_stamp {
+        let mut changed = force;
+        if force || kde_stamp != self.kde_stamp {
             self.kde_stamp = kde_stamp;
             self.theme_reconciliation_pending = true;
             let light = super::super::kdeglobals_background(&paths.kdeglobals)
@@ -427,6 +412,13 @@ impl RuntimeState {
                 changed = true;
             }
         }
+        if let Some(name) = self.css_path.file_name() {
+            let path = resolve_style(&name.to_string_lossy());
+            if path != self.css_path {
+                self.css_path = path;
+                changed = true;
+            }
+        }
         let overlay = self
             .cfg
             .display
@@ -434,9 +426,13 @@ impl RuntimeState {
             .then(|| resolve_style("style-overlay.css"));
         changed |= overlay != self.overlay_path;
         self.overlay_path = overlay;
+        self.reload_style_files(changed)
+    }
+
+    pub(super) fn reload_style_files(&mut self, force: bool) -> bool {
         let css_stamp = mtime(&self.css_path);
         let overlay_stamp = self.overlay_path.as_deref().and_then(mtime);
-        changed |= css_stamp != self.css_stamp || overlay_stamp != self.overlay_stamp;
+        let changed = force || css_stamp != self.css_stamp || overlay_stamp != self.overlay_stamp;
         if changed {
             self.css_stamp = css_stamp;
             self.overlay_stamp = overlay_stamp;
@@ -623,8 +619,4 @@ pub(super) fn load_replacement(config_path: Option<&Path>) -> Result<Config> {
 
 pub(super) fn build_replacement_pages(cfg: &Config) -> Vec<Page> {
     build_pages(&cfg.pages.order)
-}
-
-pub(super) fn nonempty_mtime(path: &str) -> Option<SystemTime> {
-    (!path.is_empty()).then(|| mtime(Path::new(path))).flatten()
 }

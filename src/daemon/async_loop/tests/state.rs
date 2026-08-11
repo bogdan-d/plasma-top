@@ -7,7 +7,7 @@ fn stale_generation_completion_is_rejected_before_commit() {
     let cfg = Config::default();
     let hw = HardwareInventory::default();
     let active = build_pages(&cfg.pages.order);
-    let runtime_state = RuntimeState::new(None, &paths, cfg, hw.clone(), active);
+    let runtime_state = RuntimeState::new(&paths, cfg, hw.clone(), active);
     let mut scheduler = Scheduler::new();
     let initial = startup(&mut scheduler, vec![job(OwnerId::Cpu, JobKind::Cpu, false)]);
     let ticket = started_ticket(&initial);
@@ -50,7 +50,7 @@ fn completion_merges_only_inventory_owned_by_its_job() {
         ..HardwareInventory::default()
     };
     let active = build_pages(&cfg.pages.order);
-    let mut runtime_state = RuntimeState::new(None, &paths, cfg, hw.clone(), active);
+    let mut runtime_state = RuntimeState::new(&paths, cfg, hw.clone(), active);
     hw.net_device = Some(String::from("wlan0"));
     let completion = worker::JobCompletion {
         ticket: JobTicket {
@@ -87,8 +87,7 @@ fn intel_frequency_completion_cannot_replace_decoder_outcome() {
     fs::create_dir_all(&paths.state).expect("state root");
     let cfg = Config::default();
     let active = build_pages(&cfg.pages.order);
-    let mut runtime_state =
-        RuntimeState::new(None, &paths, cfg, HardwareInventory::default(), active);
+    let mut runtime_state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
     runtime_state.nvidia_decoder_outcome = Some((
         SourceIdentity::Device(String::from("nvidia")),
         crate::sensors::gpu_history::DecoderOutcome::Value(37),
@@ -133,8 +132,7 @@ fn replaced_intel_source_cannot_feed_new_source_history() {
     fs::create_dir_all(&paths.state).expect("state root");
     let cfg = Config::default();
     let active = build_pages(&cfg.pages.order);
-    let mut runtime_state =
-        RuntimeState::new(None, &paths, cfg, HardwareInventory::default(), active);
+    let mut runtime_state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
     runtime_state.intel_decoder_outcome = Some((
         SourceIdentity::Device(String::from("intel:0000:00:02.0")),
         crate::sensors::gpu_history::DecoderOutcome::Value(42),
@@ -158,8 +156,7 @@ fn intel_usage_completion_feeds_matching_history_source() {
     fs::create_dir_all(&paths.state).expect("state root");
     let cfg = Config::default();
     let active = build_pages(&cfg.pages.order);
-    let mut runtime_state =
-        RuntimeState::new(None, &paths, cfg, HardwareInventory::default(), active);
+    let mut runtime_state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
     let pci = String::from("0000:00:02.0");
     let completion = worker::JobCompletion {
         ticket: JobTicket {
@@ -220,8 +217,7 @@ fn gpu_history_selects_sample_at_or_before_nominal_deadline() {
     fs::create_dir_all(&paths.state).expect("state root");
     let cfg = Config::default();
     let active = build_pages(&cfg.pages.order);
-    let mut runtime_state =
-        RuntimeState::new(None, &paths, cfg, HardwareInventory::default(), active);
+    let mut runtime_state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
     let source = SourceIdentity::Device(String::from("nvidia"));
     let mut samples = RetainedMetricSample::default();
     samples.record_value(
@@ -287,7 +283,7 @@ fn panel_only_publication_leaves_existing_tooltip_unchanged() {
     fs::write(&paths.tooltip, "existing tooltip").expect("existing tooltip");
     let cfg = Config::default();
     let active = build_pages(&cfg.pages.order);
-    let mut state = RuntimeState::new(None, &paths, cfg, HardwareInventory::default(), active);
+    let mut state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
     state.panel_html = Some(String::from("stale panel"));
     state.tooltip_html = Some(String::from("existing tooltip"));
     let roots = FilesystemRoots {
@@ -344,7 +340,7 @@ fn tooltip_only_publication_writes_tooltip_without_touching_panel() {
     fs::write(&paths.panel, "existing panel").expect("existing panel");
     let cfg = Config::default();
     let active = build_pages(&cfg.pages.order);
-    let mut state = RuntimeState::new(None, &paths, cfg, HardwareInventory::default(), active);
+    let mut state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
     state.panel_html = Some(String::from("existing panel"));
     let roots = FilesystemRoots {
         runtime_root: Some(paths.runtime.clone()),
@@ -392,5 +388,75 @@ fn tooltip_only_publication_writes_tooltip_without_touching_panel() {
         b"existing panel"
     );
     assert_eq!(state.panel_html.as_deref(), Some("existing panel"));
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn forced_style_rescan_rereads_bytes_when_mtime_is_preserved() {
+    let (root, paths) = test_paths("forced-style-rescan");
+    fs::create_dir_all(&paths.state).expect("state root");
+    let style = root.join("style.css");
+    fs::write(&style, ".old { color: red; }").expect("initial style");
+    let preserved = fs::metadata(&style)
+        .expect("style metadata")
+        .modified()
+        .expect("style mtime");
+    let cfg = Config::default();
+    let active = build_pages(&cfg.pages.order);
+    let mut state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
+    state.css_path = style.clone();
+    state.overlay_path = None;
+    state.css_stamp = Some(preserved);
+    state.css = String::from("old");
+    fs::write(&style, ".new { color: blue; }").expect("replacement style");
+    fs::File::options()
+        .write(true)
+        .open(&style)
+        .expect("open style")
+        .set_modified(preserved)
+        .expect("preserve mtime");
+
+    assert!(state.reload_style_files(true));
+    assert!(state.css.contains(".new"));
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn forced_theme_rescan_reselects_style_when_mtime_is_preserved() {
+    let (root, paths) = test_paths("forced-theme-rescan");
+    fs::create_dir_all(&paths.state).expect("state root");
+    fs::write(
+        &paths.kdeglobals,
+        "[Colors:Window]\nBackgroundNormal=0,0,0\n",
+    )
+    .expect("initial theme");
+    let preserved = fs::metadata(&paths.kdeglobals)
+        .expect("theme metadata")
+        .modified()
+        .expect("theme mtime");
+    let cfg = Config::default();
+    let active = build_pages(&cfg.pages.order);
+    let mut state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
+    assert_eq!(
+        state.css_path.file_name().and_then(|name| name.to_str()),
+        Some("style-dark.css")
+    );
+    fs::write(
+        &paths.kdeglobals,
+        "[Colors:Window]\nBackgroundNormal=255,255,255\n",
+    )
+    .expect("replacement theme");
+    fs::File::options()
+        .write(true)
+        .open(&paths.kdeglobals)
+        .expect("open theme")
+        .set_modified(preserved)
+        .expect("preserve mtime");
+
+    assert!(state.update_style(&paths, true));
+    assert_eq!(
+        state.css_path.file_name().and_then(|name| name.to_str()),
+        Some("style-light.css")
+    );
     let _ = fs::remove_dir_all(root);
 }

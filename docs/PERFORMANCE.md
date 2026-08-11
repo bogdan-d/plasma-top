@@ -27,7 +27,7 @@ Formatting is deterministic and allocation-heavy relative to arithmetic, but har
 
 ## Pay only for the selected page
 
-The pure scheduler models hidden, presented-main, and selected-page demand. Until the presentation lease protocol lands, the production compatibility adapter reports the tooltip as presented, so current visible behavior remains unchanged while only the selected page body is built.
+The scheduler models hidden, presented-main, and selected-page demand from the production presentation leases. Hidden demand contains panel metrics, enabled notifications, and configured graph histories; main-tooltip and selected-page jobs are added only while at least one tooltip lease is live. Dismissal stops tooltip builds and writes immediately, leaves the last `tooltip.html` intact, and gives active tooltip-only work a one-second grace before cancellation.
 
 - `processes` uses a page-owned `/proc` diff sample while selected; panel process data has a separate 15-second freshness budget.
 - `cpu_cores` sampling and history run only while that page is selected and presented by scheduler input.
@@ -35,7 +35,7 @@ The pure scheduler models hidden, presented-main, and selected-page demand. Unti
 - `fastfetch` runs only while selected and has a 30-second freshness budget.
 - `graphs` rasterizes PNGs only while selected; required histories are sampled while the page is configured.
 
-Selected-page state is checked at scheduler wakes no more than 100 ms apart. A page change updates demand and republishes the tooltip without waiting a full `display.poll_interval` or running unrelated work.
+Selected-page state is watched through nonblocking inotify with a 50 ms logical-source debounce. A page change updates demand and targets republished tooltip HTML in under 100 ms without waiting for `display.poll_interval` or running unrelated work.
 
 ## Current sample and freshness policy
 
@@ -71,7 +71,7 @@ PlasmaTop minimizes subprocess work but is not fork-free.
 - Plasma uses `cat` after watched HTML changes.
 - `nvidia-smi` is the retained fallback sample source when NVML is unavailable.
 - `ip`, `iw`, `ss`, and `fastfetch` run only when included in the current demand set.
-- system-update and server checks read files produced by external jobs rather than starting package managers or network probes inside the poll loop.
+- system-update and server checks read files initially and after inotify changes rather than starting package managers or network probes.
 
 All daemon and diagnostic subprocesses use one bounded Tokio command service with two child slots. Each child owns a process group, stdout and stderr drain concurrently, final output retains no more than 1 MiB with deterministic stdout-first allocation, and timeout or shutdown kills the group and explicitly reaps the direct child. UPower, UDisks, desktop notifications, and sleep signals use persistent zbus connections instead of helper processes. Each bus permits two in-flight calls; disconnection fails waiting calls promptly and one serialized exponential reconnect loop is capped at two seconds, avoiding request-driven reconnect storms.
 
@@ -97,11 +97,11 @@ Do not reintroduce `<table>` on any render path. Keep the 8 px inset in the plas
 
 `pidstat -h` reports `%CPU` in field 8; `$(NF-1)` is the CPU/core id, not the percentage.
 
-## Watch-driven applet
+## Watch-driven applet and presentation leases
 
-The applet has no timer. `FolderListModel` watches the runtime directory and coalesces the panel/tooltip rename burst with a 50 ms debounce. One display rate, `display.poll_interval`, avoids timer aliasing and stale frames.
+`FolderListModel` watches the runtime directory and coalesces the panel/tooltip rename burst with a 50 ms debounce. The 30-second lease heartbeat while presented is the only steady-state recurring QML timer introduced by the presentation protocol, and it stops while hidden; existing one-shot/debounce, bootstrap-until-first-frame, and wheel-gesture timers retain their separate roles. One display rate, `display.poll_interval`, avoids timer aliasing and stale frames.
 
-Reading still starts `cat`; the watch aligns that work with actual publication rather than a free-running timer. Tooltip reads remain gated on hover or pin, while panel reads do not. Historical table-free measurements were:
+Reading still starts `cat`; the watch aligns that work with actual publication rather than a free-running display timer. Tooltip rendering, writes, and reads are gated by hover, pin, or planar/full representation, while panel work is not. On activation QML reads the retained tooltip immediately; the daemon's bounded activation refresh then replaces it when fresh demanded work completes or reaches its 100 ms deadline. Historical table-free measurements were:
 
 | plasmashell state | CPU |
 |---|---:|

@@ -97,6 +97,12 @@ ln -s "$TMP/symlink-target" "$XDG_DATA_HOME/plasma-top"
 if "$REPO_DIR/install.sh" >/dev/null 2>&1; then exit 1; fi
 rm -f -- "$XDG_DATA_HOME/plasma-top"
 
+if FAIL_SERVICE=1 "$REPO_DIR/install.sh" >"$TMP/activation-failure.log" 2>&1; then
+    exit 1
+fi
+grep -Fq 'journalctl --user -u plasma-top -n 100' "$TMP/activation-failure.log"
+"$REPO_DIR/uninstall.sh" >/dev/null
+
 "$REPO_DIR/install.sh"
 USER_ROOT="$XDG_DATA_HOME/plasma-top"
 LAUNCHER="$HOME/.local/bin/plasma-top"
@@ -110,6 +116,9 @@ grep -Fq "&quot;$LAUNCHER&quot; page prev" "$FAKE_APPLET/contents/config/main.xm
 grep -Fq "&quot;$LAUNCHER&quot; page next" "$FAKE_APPLET/contents/config/main.xml"
 if grep -q -- '--global' "$FAKE_LOG"; then exit 1; fi
 if grep -q '^sudo ' "$FAKE_LOG"; then exit 1; fi
+grep -Fq 'systemctl --user restart plasma-top' "$FAKE_LOG"
+grep -Fq 'systemctl --user is-active --quiet plasma-top' "$FAKE_LOG"
+if grep -Eq '^(killall|kstart) ' "$FAKE_LOG"; then exit 1; fi
 "$LAUNCHER" list-items >/dev/null
 [[ ! -L "$USER_ROOT/plasma-top" ]]
 if grep -Fq "$REPO_DIR" "$LAUNCHER"; then exit 1; fi
@@ -137,19 +146,28 @@ diff -u \
     <(sed 's|^ExecStart=.*|ExecStart=<launcher> daemon|' "$REPO_DIR/service/plasma-top-user.service")
 
 printf 'stale\n' >"$USER_ROOT/stale"
-"$REPO_DIR/install.sh"
+: >"$FAKE_LOG"
+"$REPO_DIR/install.sh" >"$TMP/upgrade.log"
 [[ ! -e "$USER_ROOT/stale" ]]
 grep -q -- '--upgrade' "$FAKE_LOG"
+if grep -Fq 'systemctl --user restart plasma-top' "$FAKE_LOG"; then exit 1; fi
+if grep -Fq 'systemctl --user is-active --quiet plasma-top' "$FAKE_LOG"; then exit 1; fi
+if grep -Eq '^(killall|kstart) ' "$FAKE_LOG"; then exit 1; fi
+grep -Fq 'Log out and back in' "$TMP/upgrade.log"
+
+# An owned upgrade still waits for login when the applet registry needs a fresh install.
+rm -f "$FAKE_APPLET_STATE"
+: >"$FAKE_LOG"
+"$REPO_DIR/install.sh" >"$TMP/unregistered-upgrade.log"
+grep -q -- '--install' "$FAKE_LOG"
+if grep -Fq 'systemctl --user restart plasma-top' "$FAKE_LOG"; then exit 1; fi
+grep -Fq 'Log out and back in' "$TMP/unregistered-upgrade.log"
 
 # Unsafe state roots fail before owned files are touched.
 if XDG_CACHE_HOME=/ "$REPO_DIR/uninstall.sh" >/dev/null 2>&1; then exit 1; fi
 if XDG_RUNTIME_DIR=/ "$REPO_DIR/uninstall.sh" >/dev/null 2>&1; then exit 1; fi
 [[ -x "$USER_ROOT/plasma-top" && -x "$LAUNCHER" ]]
 
-if FAIL_SERVICE=1 "$REPO_DIR/install.sh" >"$TMP/activation-failure.log" 2>&1; then
-    exit 1
-fi
-grep -Fq 'journalctl --user -u plasma-top -n 100' "$TMP/activation-failure.log"
 "$LAUNCHER" list-items >/dev/null
 
 "$REPO_DIR/uninstall.sh"

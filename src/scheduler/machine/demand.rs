@@ -59,6 +59,8 @@ impl Scheduler {
                 let before = self.current_demand_for(false, &self.selected_page);
                 let after = self.current_demand();
                 self.activate_jobs(&before, &after, true);
+            }
+            if !was_presented {
                 self.issue_publish(PublishReason::TooltipActivated, false, true, actions);
             }
         } else if was_presented && self.effective_presented {
@@ -80,7 +82,9 @@ impl Scheduler {
             let after = self.current_demand();
             self.cancel_demand_ended(&before, &after, actions);
             self.activate_jobs(&before, &after, true);
-            self.issue_publish(PublishReason::PageChanged, false, true, actions);
+            if self.presented {
+                self.issue_publish(PublishReason::PageChanged, false, true, actions);
+            }
         }
     }
 

@@ -10,16 +10,15 @@ usage() {
     cat <<'EOF'
 Usage: tools/plasma_live_matrix.sh [--no-build] [--interactive|--planar]
 
-Uses KDE's plasmoidviewer to exercise real horizontal and vertical compact
-representations, then its planar representation. Automatic checks prove load,
-QML-owned geometry publication, orientation, watcher refresh, lazy tooltip
-reads, and runtime-root discipline. --interactive keeps a horizontal instance
-open for hover/pin/wheel/resize validation. --planar opens the desktop form for
-background/outline/font/config-page validation.
+Uses KDE's plasmoidviewer to exercise real horizontal and vertical compact representations, then its planar representation.
+Automatic checks prove load, presentation leases, geometry publication, orientation, watcher refresh, lazy tooltip reads, planar activation, multiple instances, and runtime-root discipline.
+On X11, automatic checks also exercise real hover presentation and dismissal; Wayland records this check as skipped because plasmoidviewer ignores requested window coordinates.
+--interactive keeps a horizontal instance open for hover/pin/wheel/resize validation.
+--planar opens the desktop form for background/outline/font/config-page validation.
 
 Evidence is written to .test-artifacts/plasma/live/.
-No system or production runtime path is modified. On immutable hosts,
-plasmoidviewer may be a Distrobox export.
+No system or production runtime path is modified.
+On immutable hosts, plasmoidviewer may be a Distrobox export or supplied by an existing Distrobox named plasma-top-plasma-sdk.
 EOF
 }
 
@@ -92,9 +91,17 @@ if command -v distrobox >/dev/null 2>&1 &&
     distrobox list 2>/dev/null | grep -q "| $viewer_container "; then
     viewer="distrobox"
 elif command -v plasmoidviewer >/dev/null 2>&1; then
+    viewer_path="$(command -v plasmoidviewer)"
+    if grep -Fqx '# distrobox_binary' "$viewer_path" 2>/dev/null; then
+        exported_container="$(awk '$1 == "#" && $2 == "name:" { print $3; exit }' "$viewer_path")"
+        if [[ -n "$exported_container" ]] && ! distrobox list 2>/dev/null | grep -q "| $exported_container "; then
+            echo "plasmoidviewer export targets missing Distrobox: $exported_container" >&2
+            exit 1
+        fi
+    fi
     viewer="host"
 else
-    echo "plasmoidviewer unavailable (install plasma-sdk or create $viewer_container)" >&2
+    echo "plasmoidviewer unavailable: install plasma-sdk or provide existing Distrobox $viewer_container" >&2
     exit 1
 fi
 for command in python3 awk; do
@@ -164,6 +171,11 @@ EOF
 cat >"$test_root/bin/plasma-top" <<EOF
 #!/usr/bin/env bash
 printf '%s\\tplasma-top\\t%s\\n' "\$(date +%s.%N)" "\$*" >>"\$PLASMA_TOP_QML_TRACE"
+failure_marker="$test_root/fail-next-\$1"
+if [[ -e "\$failure_marker" ]]; then
+    rm -f "\$failure_marker"
+    exit 1
+fi
 exec "$test_root/bin/backend" "\$@"
 EOF
 chmod +x "$test_root/bin/backend" "$test_root/bin/cat" "$test_root/bin/plasma-top"
@@ -214,7 +226,6 @@ wait_for_file() {
 runtime_root="$XDG_RUNTIME_DIR/plasma-top"
 state_root="$runtime_root/state"
 wait_for_file "$runtime_root/panel.html"
-wait_for_file "$runtime_root/tooltip.html"
 
 start_viewer() {
     local formfactor="$1" location="$2" size="$3" log="$4"
@@ -257,11 +268,67 @@ count_reads() {
     awk -F '\t' -v suffix="/$name" '$2 == "cat" && $3 ~ suffix "$" {n++} END {print n+0}' "$PLASMA_TOP_QML_TRACE"
 }
 
+count_actions() {
+    local action="$1"
+    awk -F '\t' -v action="$action" '$2 == "plasma-top" && $3 ~ "^" action " [1-9][0-9]*$" {n++} END {print n+0}' "$PLASMA_TOP_QML_TRACE"
+}
+
+lease_count() {
+    find "$state_root/presented" -maxdepth 1 -type f -printf '%f\n' 2>/dev/null | awk '/^[1-9][0-9]*$/ {n++} END {print n+0}'
+}
+
+wait_for_no_leases() {
+    for _ in $(seq 1 120); do
+        [[ "$(lease_count)" == 0 ]] && return 0
+        kill -0 "$daemon_pid" 2>/dev/null || break
+        sleep 0.05
+    done
+    return 1
+}
+
+expire_stale_lease() {
+    local lease_path="$1"
+    [[ -e "$lease_path" ]] || return 0
+    touch -d '2000-01-01 00:00:00 UTC' "$lease_path" 2>/dev/null || {
+        [[ ! -e "$lease_path" ]] && return 0
+        return 1
+    }
+    for _ in $(seq 1 120); do
+        [[ ! -e "$lease_path" ]] && return 0
+        kill -0 "$daemon_pid" 2>/dev/null || break
+        sleep 0.05
+    done
+    return 1
+}
+
+wait_for_tooltip_change() {
+    local before="$1"
+    for _ in $(seq 1 120); do
+        [[ "$(stat -c %y "$runtime_root/tooltip.html")" != "$before" ]] && return 0
+        kill -0 "$daemon_pid" 2>/dev/null || break
+        sleep 0.05
+    done
+    return 1
+}
+
+verify_qml_static_contract() {
+    local lease_qml="$repo_dir/plasmoid/package/contents/ui/PresentationLease.qml"
+    grep -Fq 'interval: 30000' "$lease_qml"
+    grep -Fq 'running: root.presented' "$lease_qml"
+    grep -Fq 'property int retriesRemaining: 1' "$lease_qml"
+    grep -Fq 'Component.onDestruction:' "$lease_qml"
+    grep -Fq 'command("dismiss")' "$lease_qml"
+    echo "PASS QML heartbeat presented-only=30s retry_budget=one clean-removal dismiss=best-effort" >>"$artifact_root/automatic.txt"
+}
+
 verify_compact_case() {
     local formfactor="$1" location="$2" size="$3" expected_vertical="$4"
     local log="$test_root/logs/$formfactor.log"
     rm -f "$state_root/geom"
     : >"$PLASMA_TOP_QML_TRACE"
+    if [[ "$formfactor" == horizontal ]]; then
+        : >"$test_root/fail-next-dismiss"
+    fi
     YDOTOOL_SOCKET="$ydotool_socket" ydotool mousemove --absolute -x 4000 -y 1700
     start_viewer "$formfactor" "$location" "$size" "$log"
     sleep 0.5
@@ -309,11 +376,44 @@ verify_compact_case() {
         echo "$formfactor watcher did not refresh panel.html" >&2
         return 1
     }
-    [[ "$tooltip_after" == "$tooltip_before" ]] || {
+    [[ "$tooltip_before" == 0 && "$tooltip_after" == 0 ]] || {
         echo "$formfactor tooltip read while neither hovered nor pinned" >&2
         cp "$PLASMA_TOP_QML_TRACE" "$artifact_root/commands-$formfactor-failed.tsv"
         return 1
     }
+    [[ "$(count_actions present)" == 0 && "$(lease_count)" == 0 ]] || {
+        echo "$formfactor reported presentation while hidden" >&2
+        return 1
+    }
+    if [[ "$formfactor" == horizontal ]]; then
+        (("$(count_actions dismiss)" == 2)) || {
+            echo "dismiss failure did not receive exactly one prompt retry" >&2
+            return 1
+        }
+    fi
+
+    if [[ "$formfactor" == horizontal && -z "${WAYLAND_DISPLAY:-}" ]]; then
+        tooltip_before="$(count_reads tooltip.html)"
+        YDOTOOL_SOCKET="$ydotool_socket" ydotool mousemove --absolute -x 1050 -y 1040
+        for _ in $(seq 1 120); do
+            if (("$(count_actions present)" > 0)) && (("$(lease_count)" > 0)) && (("$(count_reads tooltip.html)" > tooltip_before)); then
+                break
+            fi
+            sleep 0.05
+        done
+        if ! (("$(count_actions present)" > 0)) || ! (("$(lease_count)" > 0)) || ! (("$(count_reads tooltip.html)" > tooltip_before)); then
+            echo "horizontal hover did not present and read retained tooltip" >&2
+            return 1
+        fi
+        YDOTOOL_SOCKET="$ydotool_socket" ydotool mousemove --absolute -x 0 -y 1700
+        wait_for_no_leases || {
+            echo "horizontal hover exit did not dismiss presentation" >&2
+            return 1
+        }
+        echo "PASS horizontal hover presentation=create,read,dismiss" >>"$artifact_root/automatic.txt"
+    elif [[ "$formfactor" == horizontal ]]; then
+        echo "SKIP horizontal hover automatic: Wayland ignores plasmoidviewer coordinates" >>"$artifact_root/automatic.txt"
+    fi
 
     cp "$PLASMA_TOP_QML_TRACE" "$artifact_root/commands-$formfactor.tsv"
     cp "$state_root/geom" "$artifact_root/geom-$formfactor"
@@ -325,9 +425,120 @@ verify_compact_case() {
     stop_viewer
 }
 
+verify_planar_case() {
+    local log="$test_root/logs/planar.log"
+    : >"$PLASMA_TOP_QML_TRACE"
+    : >"$test_root/fail-next-present"
+    start_viewer planar desktop 900x900 "$log"
+
+    for _ in $(seq 1 120); do
+        if (($(lease_count) > 0)) && [[ -s "$runtime_root/tooltip.html" ]]; then
+            break
+        fi
+        kill -0 "$viewer_pid" 2>/dev/null || break
+        sleep 0.05
+    done
+    kill -0 "$viewer_pid" 2>/dev/null || {
+        echo "planar plasmoidviewer exited during launch" >&2
+        cat "$log" >&2
+        return 1
+    }
+    (($(lease_count) > 0)) || {
+        echo "planar QML did not create a presentation lease" >&2
+        return 1
+    }
+    [[ -s "$runtime_root/tooltip.html" ]] || {
+        echo "daemon did not publish tooltip.html for planar presentation" >&2
+        return 1
+    }
+    (($(count_actions present) > 0)) || {
+        echo "planar present command missing from trace" >&2
+        return 1
+    }
+    (($(count_actions present) == 2)) || {
+        echo "present failure did not receive exactly one prompt retry" >&2
+        return 1
+    }
+    sleep 0.2
+    (($(count_reads tooltip.html) > 0)) || {
+        echo "planar QML did not read retained tooltip" >&2
+        return 1
+    }
+    if grep -Eiq '(^| )(error|fatal):|failed to load|is not installed|ReferenceError|TypeError|binding loop' "$log"; then
+        echo "planar QML errors detected" >&2
+        cat "$log" >&2
+        return 1
+    fi
+
+    cp "$PLASMA_TOP_QML_TRACE" "$artifact_root/commands-planar.tsv"
+    cp "$log" "$artifact_root/planar.log"
+    lease="$(find "$state_root/presented" -maxdepth 1 -type f -printf '%f\n' 2>/dev/null | awk '/^[1-9][0-9]*$/ { print; exit }')"
+    stop_viewer
+    if [[ -n "$lease" && -e "$state_root/presented/$lease" ]] && ! expire_stale_lease "$state_root/presented/$lease"; then
+        echo "daemon did not expire planar crash lease" >&2
+        return 1
+    fi
+    echo "PASS planar presentation lease=create,read crash=expired-if-retained present_retry=one" >>"$artifact_root/automatic.txt"
+}
+
+verify_multiple_leases() {
+    "$test_root/bin/plasma-top" present 900001
+    "$test_root/bin/plasma-top" present 900002
+    [[ -e "$state_root/presented/900001" && -e "$state_root/presented/900002" ]] || {
+        echo "multiple presentation leases were not created" >&2
+        return 1
+    }
+    "$test_root/bin/plasma-top" dismiss 900001
+    [[ ! -e "$state_root/presented/900001" && -e "$state_root/presented/900002" ]] || {
+        echo "dismissing one instance disturbed another lease" >&2
+        return 1
+    }
+    tooltip_before="$(stat -c %y "$runtime_root/tooltip.html")"
+    "$test_root/bin/plasma-top" page next
+    wait_for_tooltip_change "$tooltip_before" || {
+        echo "daemon stopped tooltip publication while second lease remained" >&2
+        return 1
+    }
+    "$test_root/bin/plasma-top" dismiss 900002
+    [[ ! -e "$state_root/presented/900002" ]] || {
+        echo "final presentation lease was not removed" >&2
+        return 1
+    }
+    sleep 1.2
+    tooltip_before="$(stat -c %y "$runtime_root/tooltip.html")"
+    "$test_root/bin/plasma-top" page prev
+    sleep 0.5
+    [[ "$(stat -c %y "$runtime_root/tooltip.html")" == "$tooltip_before" ]] || {
+        echo "daemon published tooltip after final lease dismissal" >&2
+        return 1
+    }
+    echo "PASS multiple presentation leases active-after-one hidden-after-last" >>"$artifact_root/automatic.txt"
+}
+
+seed_retained_tooltip() {
+    "$test_root/bin/plasma-top" present 990000
+    wait_for_file "$runtime_root/tooltip.html"
+    "$test_root/bin/plasma-top" dismiss 990000
+    wait_for_no_leases
+    sleep 1.2
+}
+
+verify_stale_expiry() {
+    local lease_path="$state_root/presented/900003"
+    "$test_root/bin/plasma-top" present 900003
+    [[ -e "$lease_path" ]] || return 1
+    expire_stale_lease "$lease_path"
+    echo "PASS stale presentation lease expired after safe backdate" >>"$artifact_root/automatic.txt"
+}
+
 : >"$artifact_root/automatic.txt"
+verify_qml_static_contract
+seed_retained_tooltip
 verify_compact_case horizontal topedge 1200x80 0
 verify_compact_case vertical leftedge 80x1200 1
+verify_planar_case
+verify_multiple_leases
+verify_stale_expiry
 
 expected_entries=$'panel.html\nstate\ntooltip.html'
 actual_entries="$(find "$runtime_root" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)"

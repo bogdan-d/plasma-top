@@ -40,11 +40,13 @@ The daemon and applet independently derive `<runtime>` as `$XDG_RUNTIME_DIR/plas
     geom                     usable_px glyph_advance vertical tooltip_advance
     page                     current tooltip page counter
     npages                   published page count
+    presented/
+      <instance-id>          numeric per-applet presentation lease
 ```
 
-Only panel and tooltip HTML persist directly in the watched directory. Atomic publication creates a transient PID-qualified sibling, then renames it over the destination. Other churn belongs under `state/`; adding a persistent top-level file would trigger unnecessary applet refresh work. Readers see either complete old or complete new content. Page updates use `flock` to avoid lost mouse-wheel increments.
+Only panel and tooltip HTML persist directly in the watched directory. Atomic publication creates a transient PID-qualified sibling, then renames it over the destination. Other churn belongs under `state/`; adding a persistent top-level file would trigger unnecessary applet refresh work. Readers see either complete old or complete new content. Page updates use `flock` to avoid lost mouse-wheel increments. The daemon watches stable parent directories with nonblocking inotify, debounces each logical source for 50 ms, and rescans and re-arms after overflow, ignored watches, or directory recreation; there is no periodic file polling fallback.
 
-The applet watches this directory and uses `cat` only after a file change. It publishes geometry to `state/geom`, allowing the daemon to auto-fit bars, columns, sparks, and graph pixels. `display.poll_interval` is the system's only display clock.
+The applet watches this directory and uses `cat` only after a file change. It publishes geometry to `state/geom`, allowing the daemon to auto-fit bars, columns, sparks, and graph pixels. Each presented applet refreshes its numeric lease every 30 seconds; the daemon expires leases after 90 seconds. `display.poll_interval` remains the system's only display cadence.
 
 ## Config and assets
 
@@ -97,7 +99,9 @@ Graphs are raster PNGs built in `render/chart.rs` with a small pure-Rust pixel p
 
 Page zero is the full tooltip. Configured deep pages are `processes`, `cpu_cores`, `connections`, `fastfetch`, and `graphs`. Only the selected page body is built. Commands, process scans, and chart rasterization therefore cost nothing while another page is selected.
 
-Wheel and click actions run `plasma-top page next|prev` and `plasma-top click`. The daemon checks selected-page state at scheduler wakes no more than 100 ms apart, changes page demand, and republishes only the tooltip without running unrelated jobs. Middle-click pinning remains QML-owned. Until the issue-06 lease protocol exists, production uses an explicit compatibility input that treats the tooltip as presented; pure scheduler tests cover hidden, presented-main, selected-page, and one-second deactivation-grace policy.
+Wheel and click actions run `plasma-top page next|prev` and `plasma-top click`. Hover, pinning, and planar/full representation run `plasma-top present <instance-id>` and `plasma-top dismiss <instance-id>`; any live per-applet lease means the tooltip is presented. The daemon watches page and lease state, changes demand, and republishes only the tooltip without running unrelated jobs. Presentation shows the retained `tooltip.html` immediately, then permits one bounded activation refresh. Dismissal stops tooltip builds and writes immediately while a one-second work-only grace avoids cancelling page jobs during brief hover gaps; after the grace, tooltip-only demand and disposable page work stop. Multiple instances aggregate safely because one remaining live lease keeps presentation active.
+
+The daemon and loaded QML must come from the same package version because the lease protocol has no mixed-version readiness fallback. Upgrades leave the old daemon and old loaded QML running until logout; the next login activates both new versions together. Restarting only one side during this window is unsupported.
 
 ## Daemon lifecycle
 
@@ -108,9 +112,9 @@ Startup resolves config/assets, creates runtime directories, publishes page meta
 3. evaluates notifications only for accepted notification-eligible captures after first panel publication, independently of an aggregate counter's completion classification;
 4. assembles retained samples and renders only when the scheduler emits a publication action;
 5. atomically publishes changed panel and tooltip bytes independently;
-6. sleeps until the next scheduler deadline or the 100 ms compatibility observation step.
+6. sleeps until the next scheduler deadline, inotify event, I/O completion, or lifecycle signal.
 
-SIGINT and SIGTERM are received by the Tokio shell. UPower changes coalesce into demanded battery and inventory refresh triggers. logind `PrepareForSleep(true)` sends scheduler `Suspend`; the matching false event sends `Resume`, which resets counter baselines and reconciles volatile inventory before dispatch resumes. Shutdown removes daemon-owned runtime files and gives I/O services at most 500 ms to cancel commands, kill process groups, and reject pending work. It joins only a finished I/O shell; an over-budget shell is abandoned for process exit and reported as a critical shutdown timeout. The service remains a normal user unit with restart-on-failure.
+SIGINT and SIGTERM are received by the Tokio shell. UPower changes coalesce into demanded battery and inventory refresh triggers. logind `PrepareForSleep(true)` sends scheduler `Suspend`; the matching false event sends `Resume`, which resets counter baselines and reconciles volatile inventory before dispatch resumes. Shutdown removes live panel and control files, retains the last-good tooltip for immediate activation after restart, and gives I/O services at most 500 ms to cancel commands, kill process groups, and reject pending work. It joins only a finished I/O shell; an over-budget shell is abandoned for process exit and reported as a critical shutdown timeout. The service remains a normal user unit with restart-on-failure.
 
 ## Dependencies and verification
 

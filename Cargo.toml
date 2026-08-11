@@ -31,7 +31,7 @@ nvml = ["dep:nvml-wrapper"]
 # boundaries internally.
 # License: MIT. GPL-2.0-or-later compatible. No native build script; pure-Rust
 # bindings over libc. See `DEPENDENCIES.md` for the full review row.
-nix = { version = "0.31", default-features = false, features = ["fs", "poll", "process", "signal", "user"] }
+nix = { version = "0.31", default-features = false, features = ["fs", "inotify", "poll", "process", "signal", "user"] }
 # TOML parser used by production config loading and test fixtures. It remains a
 # hard dependency because `config.toml` and `machines.toml` require it; the
 # `test-support` feature gates test helpers, not the parser.
@@ -60,9 +60,9 @@ miniz_oxide = "0.9"
 # License: MIT OR Apache-2.0. GPL-2.0-or-later compatible. See `DEPENDENCIES.md`.
 nvml-wrapper = { version = "0.12", optional = true, default-features = false }
 # Current-thread async runtime for bounded process, D-Bus, timer, channel, and
-# Unix signal services. The select macro drives the daemon shell; filesystem,
-# networking, and multithreaded runtime features remain disabled.
-tokio = { version = "1", default-features = false, features = ["io-util", "macros", "process", "rt", "signal", "sync", "time"] }
+# Unix signal services. `net` supplies Unix `AsyncFd` reactor registration;
+# Tokio filesystem and multithreaded runtime features remain disabled.
+tokio = { version = "1", default-features = false, features = ["io-util", "macros", "net", "process", "rt", "signal", "sync", "time"] }
 # Persistent pure-Rust D-Bus transport. Defaults are disabled so zbus uses only
 # its Tokio integration rather than also selecting async-io.
 zbus = { version = "5", default-features = false, features = ["tokio"] }

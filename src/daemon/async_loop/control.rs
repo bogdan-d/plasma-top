@@ -6,22 +6,25 @@ use tokio::task::{JoinError, JoinHandle, JoinSet};
 
 use crate::adapters::ProductionClock;
 use crate::domain::boundary::{ClockSnapshot, IoEvent};
+use crate::file_watch::{FileWatcher, WatchSource};
 use crate::scheduler::{
     JobKind, OwnerId, RefreshTrigger, Scheduler, SchedulerAction, SchedulerEvent, SchedulerTime,
 };
 
 use super::state::RuntimeState;
 use super::worker::{DispatchValidity, OwnerCompletion, OwnerMessage};
-use super::{FIRST_PAINT_DEADLINE, PAGE_WAKE_INTERVAL, enqueue, now};
+use super::{FIRST_PAINT_DEADLINE, enqueue, now};
 
 pub(super) enum LoopWake {
     OwnerExit(Option<Result<OwnerId, JoinError>>),
     NotificationExit,
     Shutdown,
     Completion(Option<OwnerCompletion>),
+    Files(std::io::Result<std::collections::BTreeSet<WatchSource>>),
     Sleep,
 }
 
+#[cfg(test)]
 pub(super) async fn wait_for_wake(
     owner_tasks: &mut JoinSet<OwnerId>,
     notification_task: &mut JoinHandle<()>,
@@ -35,6 +38,25 @@ pub(super) async fn wait_for_wake(
         _ = notification_task => LoopWake::NotificationExit,
         _ = shutdown.changed() => LoopWake::Shutdown,
         completion = completions.recv() => LoopWake::Completion(completion),
+        () = tokio::time::sleep(sleep_for) => LoopWake::Sleep,
+    }
+}
+
+pub(super) async fn wait_for_wake_with_files(
+    owner_tasks: &mut JoinSet<OwnerId>,
+    notification_task: &mut JoinHandle<()>,
+    shutdown: &mut watch::Receiver<bool>,
+    completions: &mut mpsc::Receiver<OwnerCompletion>,
+    file_watcher: &mut FileWatcher,
+    sleep_for: Duration,
+) -> LoopWake {
+    tokio::select! {
+        biased;
+        exit = owner_tasks.join_next(), if !owner_tasks.is_empty() => LoopWake::OwnerExit(exit),
+        _ = notification_task => LoopWake::NotificationExit,
+        _ = shutdown.changed() => LoopWake::Shutdown,
+        completion = completions.recv() => LoopWake::Completion(completion),
+        changed = file_watcher.changed() => LoopWake::Files(changed),
         () = tokio::time::sleep(sleep_for) => LoopWake::Sleep,
     }
 }
@@ -70,11 +92,11 @@ pub(super) fn sleep_duration(
     boot: ClockSnapshot,
     now: ClockSnapshot,
 ) -> Duration {
-    let scheduler_sleep = scheduler.next_wake().map_or(PAGE_WAKE_INTERVAL, |wake| {
-        wake.duration()
-            .saturating_sub(now.monotonic)
-            .min(PAGE_WAKE_INTERVAL)
-    });
+    let scheduler_sleep = scheduler
+        .next_wake()
+        .map_or(Duration::from_secs(86_400), |wake| {
+            wake.duration().saturating_sub(now.monotonic)
+        });
     state
         .deferred_first_paint
         .as_ref()

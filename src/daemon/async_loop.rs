@@ -3,6 +3,7 @@ use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 use tokio::sync::{Semaphore, mpsc};
 use tokio::task::JoinSet;
@@ -14,6 +15,7 @@ use crate::adapters::{
 use crate::config::{cache_live_geom, load_config};
 use crate::domain::boundary::{ClockSnapshot, FilesystemRoots, NotificationPayload};
 use crate::error::{Error, Result};
+use crate::file_watch::FileWatcher;
 use crate::notify::check_and_notify;
 use crate::scheduler::{
     InventoryUpdate, JobKind, OwnerId, PageId, RefreshTrigger, Scheduler, SchedulerAction,
@@ -21,14 +23,14 @@ use crate::scheduler::{
 };
 use crate::sensors::{discover_local_hardware, discover_local_hardware_attempt};
 
-use super::{
-    DaemonPaths, PAGE_WAKE_INTERVAL, cleanup, mtime, page_index, publish_pages, write_atomic,
-};
+use super::{DaemonPaths, cleanup, page_index, publish_pages, write_atomic};
 
 #[path = "async_loop/completion.rs"]
 mod completion;
 #[path = "async_loop/control.rs"]
 mod control;
+#[path = "async_loop/files.rs"]
+mod files;
 #[path = "async_loop/notifications.rs"]
 mod notifications;
 #[path = "async_loop/reload.rs"]
@@ -44,7 +46,11 @@ use completion::{
     reconcile_inventory_publication, should_trigger_nvidia_fallback, suppress_tooltip_refresh,
     transition_starts_job,
 };
-use control::{LoopWake, preempt_for_shutdown, process_io_events, sleep_duration, wait_for_wake};
+#[cfg(test)]
+use control::wait_for_wake;
+use control::{
+    LoopWake, preempt_for_shutdown, process_io_events, sleep_duration, wait_for_wake_with_files,
+};
 use state::RuntimeState;
 use worker::{
     DispatchValidity, JobInput, OwnerMessage, OwnerSenders, RescanInput, invalidate_readings,
@@ -53,7 +59,7 @@ use worker::{
 const NOTIFICATION_CHANNEL_CAPACITY: usize = 8;
 const BLOCKING_LANE_CAPACITY: usize = 1;
 const OWNER_PENDING_CAPACITY: usize = 1024;
-const FIRST_PAINT_DEADLINE: std::time::Duration = std::time::Duration::from_millis(200);
+const FIRST_PAINT_DEADLINE: Duration = Duration::from_millis(200);
 
 pub(super) struct DaemonServices {
     pub(super) commands: ProductionCommandRunner,
@@ -94,8 +100,16 @@ pub(super) async fn run(
     let cpu_count = std::thread::available_parallelism().map_or(1, std::num::NonZero::get);
     let hw = discover_local_hardware(&roots.sys_root, &roots.proc_root, &cfg, cpu_count);
     let active = publish_pages(paths, &cfg)?;
-    let mut state = RuntimeState::new(config_path, paths, cfg, hw, active);
+    let mut state = RuntimeState::new(paths, cfg, hw, active);
     let (watch_path, machine_paths) = state::config_watch_paths(config_path);
+    let mut file_watcher = FileWatcher::new(files::watch_targets(
+        &watch_path,
+        &machine_paths,
+        paths,
+        &state,
+    ))
+    .map_err(|error| Error::Runtime(format!("file watch installation failed: {error}")))?;
+    let mut presentation = files::presentation_status(paths, &clock)?;
     let blocking_lane = Arc::new(Semaphore::new(BLOCKING_LANE_CAPACITY));
     let (completion_sender, mut completions) = mpsc::channel(worker::COMPLETION_CHANNEL_CAPACITY);
     let mut owner_tasks = JoinSet::new();
@@ -136,7 +150,7 @@ pub(super) async fn run(
         &mut actions,
         scheduler.handle(SchedulerEvent::TooltipPresented {
             at: now(&clock),
-            presented: true,
+            presented: presentation.leases.presented,
         }),
     );
     let (_, selected) = state.selected_page(paths);
@@ -148,6 +162,23 @@ pub(super) async fn run(
         }),
     );
     cache_live_geom();
+    let armed_sources = file_watcher.rescan_sources();
+    files::process_and_stabilize(
+        armed_sources,
+        &mut file_watcher,
+        &watch_path,
+        &machine_paths,
+        config_path,
+        roots,
+        paths,
+        cpu_count,
+        &mut scheduler,
+        &mut state,
+        &clock,
+        &mut actions,
+        &mut owner_messages,
+        &mut presentation,
+    )?;
 
     loop {
         preempt_for_shutdown(
@@ -247,34 +278,17 @@ pub(super) async fn run(
             critical_failure(component, &mut scheduler, &clock, &mut actions);
             continue;
         }
-        reload::check(
-            config_path,
-            roots,
-            paths,
-            cpu_count,
-            &watch_path,
-            &machine_paths,
-            &mut scheduler,
-            &mut state,
-            &clock,
-            &mut actions,
-            &mut owner_messages,
-        )?;
-        let (_, selected) = state.selected_page(paths);
-        enqueue(
-            &mut actions,
-            scheduler.handle(SchedulerEvent::SelectedPageChanged {
-                at: now(&clock),
-                page: selected,
-            }),
-        );
-        reload::trigger_external_changes(&mut scheduler, &mut state, &clock, &mut actions);
-        if state.update_style(paths) {
-            enqueue(
+        if presentation
+            .deadline
+            .is_some_and(|expiry| expiry <= clock.snapshot().monotonic)
+        {
+            files::update_presentation(
+                &mut presentation,
+                paths,
+                &clock,
+                &mut scheduler,
                 &mut actions,
-                scheduler.handle(SchedulerEvent::DisplayRefreshRequested { at: now(&clock) }),
-            );
-            request_selected_graph(&mut scheduler, &state, paths, &clock, &mut actions);
+            )?;
         }
         if state.first_paint_published && state.theme_reconciliation_pending {
             state.theme_reconciliation_pending = false;
@@ -310,12 +324,20 @@ pub(super) async fn run(
             continue;
         }
 
-        let sleep_for = sleep_duration(&scheduler, &state, boot, clock.snapshot());
-        match wait_for_wake(
+        let snapshot = clock.snapshot();
+        let sleep_for = presentation.deadline.map_or_else(
+            || sleep_duration(&scheduler, &state, boot, snapshot),
+            |expiry| {
+                sleep_duration(&scheduler, &state, boot, snapshot)
+                    .min(expiry.saturating_sub(snapshot.monotonic))
+            },
+        );
+        match wait_for_wake_with_files(
             &mut owner_tasks,
             &mut notification_task,
             &mut shutdown,
             &mut completions,
+            &mut file_watcher,
             sleep_for,
         )
         .await
@@ -328,6 +350,26 @@ pub(super) async fn run(
                 critical_failure("notification task", &mut scheduler, &clock, &mut actions);
             }
             LoopWake::Shutdown | LoopWake::Sleep => {}
+            LoopWake::Files(changed) => {
+                let changed = changed
+                    .map_err(|error| Error::Runtime(format!("file watch failed: {error}")))?;
+                files::process_and_stabilize(
+                    changed,
+                    &mut file_watcher,
+                    &watch_path,
+                    &machine_paths,
+                    config_path,
+                    roots,
+                    paths,
+                    cpu_count,
+                    &mut scheduler,
+                    &mut state,
+                    &clock,
+                    &mut actions,
+                    &mut owner_messages,
+                    &mut presentation,
+                )?;
+            }
             LoopWake::Completion(completion) => match completion {
                 Some(completion) => {
                     let completion_at = now(&clock);

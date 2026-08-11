@@ -1,3 +1,5 @@
+#![allow(clippy::expect_used)]
+
 use super::*;
 
 fn parse(arguments: &[&str]) -> Result<Cli, CliError> {
@@ -69,6 +71,28 @@ fn parses_page_direction() {
             }),
         })
     );
+}
+
+#[test]
+fn parses_strict_presentation_instance() {
+    for command in ["present", "dismiss"] {
+        let cli = parse(&["plasma-top", command, "42"]).expect("valid lease command");
+        assert_eq!(cli.command.name(), command);
+    }
+}
+
+#[test]
+fn rejects_invalid_presentation_instances_and_trailing_arguments() {
+    for value in ["0", "-1", "+1", "abc"] {
+        assert!(matches!(
+            parse(&["plasma-top", "present", value]),
+            Err(CliError::InvalidInstanceId { .. })
+        ));
+    }
+    assert!(matches!(
+        parse(&["plasma-top", "dismiss", "1", "extra"]),
+        Err(CliError::UnknownArgument { .. })
+    ));
 }
 
 #[test]

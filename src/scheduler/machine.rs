@@ -860,6 +860,10 @@ impl Scheduler {
         tooltip: bool,
         actions: &mut Vec<SchedulerAction>,
     ) {
+        let tooltip = tooltip && self.presented;
+        if !panel && !tooltip {
+            return;
+        }
         if reason == PublishReason::TooltipRefresh
             && actions.iter().any(|action| {
                 matches!(

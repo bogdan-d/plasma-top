@@ -415,7 +415,7 @@ fn insert_before_tooltip_close(mut html: String, footer: &str) -> String {
 }
 
 fn cleanup(paths: &DaemonPaths) {
-    for path in [&paths.panel, &paths.tooltip, &paths.page, &paths.npages] {
+    for path in [&paths.panel, &paths.page, &paths.npages] {
         let _ = fs::remove_file(path);
     }
 }

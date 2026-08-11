@@ -6,6 +6,8 @@ use std::ffi::OsString;
 use std::fmt::{self, Display, Formatter};
 use std::path::PathBuf;
 
+use crate::runtime::presentation::InstanceId;
+
 /// Parsed top-level CLI state.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Cli {
@@ -34,6 +36,10 @@ pub enum Command {
     ListItems,
     /// Future page-step entry point.
     Page(PageCommand),
+    /// Refreshes one applet instance's presentation lease.
+    Present(PresentationCommand),
+    /// Removes one applet instance's presentation lease.
+    Dismiss(PresentationCommand),
     /// Future click entry point.
     Click,
 }
@@ -127,6 +133,13 @@ pub struct PageCommand {
     pub direction: PageDirection,
 }
 
+/// Parsed presentation lease command.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PresentationCommand {
+    /// Strict positive numeric Plasma applet instance identifier.
+    pub instance: InstanceId,
+}
+
 /// Page stepping direction for the future `page` command.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PageDirection {
@@ -166,6 +179,13 @@ pub enum CliError {
         command: &'static str,
         /// The flag whose value was invalid.
         flag: &'static str,
+        /// The rejected value.
+        value: String,
+    },
+    /// A presentation instance id was not a strict positive decimal integer.
+    InvalidInstanceId {
+        /// The owning command.
+        command: &'static str,
         /// The rejected value.
         value: String,
     },
@@ -217,6 +237,8 @@ impl Cli {
             "profiling" => Command::Profiling(parse_config_command("profiling", tail)?),
             "list-items" => parse_list_items_command(tail)?,
             "page" => Command::Page(parse_page_command(tail)?),
+            "present" => Command::Present(parse_presentation_command("present", tail)?),
+            "dismiss" => Command::Dismiss(parse_presentation_command("dismiss", tail)?),
             "click" => parse_click_command(tail)?,
             _ => {
                 return Err(CliError::UnknownCommand {
@@ -243,6 +265,8 @@ impl Command {
             Self::Profiling(_) => "profiling",
             Self::ListItems => "list-items",
             Self::Page(_) => "page",
+            Self::Present(_) => "present",
+            Self::Dismiss(_) => "dismiss",
             Self::Click => "click",
         }
     }
@@ -257,7 +281,7 @@ impl Display for CliError {
             ),
             Self::UnknownCommand { command } => write!(
                 formatter,
-                "usage: plasma-top [-h] <command> ...\nplasma-top: error: argument <command>: invalid choice: '{command}' (choose from 'daemon', 'render', 'probe', 'profiling', 'list-items', 'page', 'click')"
+                "usage: plasma-top [-h] <command> ...\nplasma-top: error: argument <command>: invalid choice: '{command}' (choose from 'daemon', 'render', 'probe', 'profiling', 'list-items', 'page', 'click', 'present', 'dismiss')"
             ),
             Self::UnknownArgument { command, argument } => {
                 write!(
@@ -294,6 +318,11 @@ impl Display for CliError {
                     usage_text(command)
                 )
             }
+            Self::InvalidInstanceId { command, value } => write!(
+                formatter,
+                "{}\nplasma-top {command}: error: instance-id must be a positive decimal integer: '{value}'",
+                usage_text(command)
+            ),
         }
     }
 }
@@ -308,6 +337,8 @@ fn usage_text(command: &str) -> &'static str {
         "profiling" => "usage: plasma-top profiling [-h] [--config PATH]",
         "list-items" => "usage: plasma-top list-items [-h]",
         "page" => "usage: plasma-top page [-h] {next,prev}",
+        "present" => "usage: plasma-top present [-h] instance-id",
+        "dismiss" => "usage: plasma-top dismiss [-h] instance-id",
         "click" => "usage: plasma-top click [-h]",
         _ => "usage: plasma-top [-h] <command> ...",
     }
@@ -357,6 +388,8 @@ pub(crate) fn subcommand_help(command: &str) -> &'static str {
         "page" => {
             "usage: plasma-top page [-h] {next,prev}\n\npositional arguments:\n  {next,prev}  Move to the next/previous page (wraps around)\n\noptions:\n  -h, --help   show this help message and exit"
         }
+        "present" => "usage: plasma-top present [-h] instance-id",
+        "dismiss" => "usage: plasma-top dismiss [-h] instance-id",
         "render" => {
             "usage: plasma-top render [-h] [--config PATH]\n                        [--component {panel,tooltip,both}]\n                        [--format {text,html}]\n                        [--layout {auto,horizontal,vertical}]\n                        [--page {full,processes,connections,fastfetch,cpu_cores,graphs}]\n\noptions:\n  -h, --help            show this help message and exit\n  --config PATH         Path to the TOML (default:\n                        ~/.config/plasma-top/config.toml, else the shipped\n                        config)\n  --component {panel,tooltip,both}\n                        What to render (default: both)\n  --format {text,html}  text = stripped to stdout; html =\n                        /tmp/plasma-top_render_* files (default: text)\n  --layout {auto,horizontal,vertical}\n                        Forces the panel orientation (horizontal = column,\n                        vertical = inline bar); auto = detection like the\n                        daemon (default)\n  --page {full,processes,connections,fastfetch,cpu_cores,graphs}\n                        Render a tooltip deep-dive page (any page, even one\n                        not in pages.order) instead of the full view; implies\n                        --component tooltip. Image pages (graphs) show only\n                        their legends in text format"
         }
@@ -372,6 +405,8 @@ fn command_name_static(command: &str) -> &'static str {
         "profiling" => "profiling",
         "list-items" => "list-items",
         "page" => "page",
+        "present" => "present",
+        "dismiss" => "dismiss",
         "click" => "click",
         _ => "",
     }
@@ -515,6 +550,24 @@ fn parse_page_command(mut args: TailArgs) -> Result<PageCommand, CliError> {
     };
 
     Ok(PageCommand { direction })
+}
+
+fn parse_presentation_command(
+    command: &'static str,
+    mut args: TailArgs,
+) -> Result<PresentationCommand, CliError> {
+    let value = into_text(args.take_value(command, "instance-id")?)?;
+    let instance = value.parse().map_err(|_| CliError::InvalidInstanceId {
+        command,
+        value: value.clone(),
+    })?;
+    if let Some(argument) = args.pop_front() {
+        return Err(CliError::UnknownArgument {
+            command,
+            argument: into_text(argument)?,
+        });
+    }
+    Ok(PresentationCommand { instance })
 }
 
 fn parse_click_command(mut args: TailArgs) -> Result<Command, CliError> {

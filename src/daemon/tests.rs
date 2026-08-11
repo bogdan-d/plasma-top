@@ -40,6 +40,24 @@ fn shutdown_timeout_is_a_daemon_error_after_cleanup() {
 }
 
 #[test]
+fn cleanup_preserves_last_good_tooltip() {
+    let (root, _roots, paths, _config_path) = integration_tree();
+    fs::create_dir_all(&paths.state).expect("runtime state");
+    fs::write(&paths.panel, "panel").expect("panel");
+    fs::write(&paths.tooltip, "tooltip").expect("tooltip");
+    fs::write(&paths.page, "0").expect("page");
+    fs::write(&paths.npages, "1").expect("npages");
+
+    cleanup(&paths);
+
+    assert!(!paths.panel.exists());
+    assert!(fs::read_to_string(&paths.tooltip).is_ok_and(|text| text == "tooltip"));
+    assert!(!paths.page.exists());
+    assert!(!paths.npages.exists());
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn css_comments_and_whitespace_are_stripped() {
     let dir = std::env::temp_dir().join(format!("plasma-top-css-{}", std::process::id()));
     let _ = fs::create_dir_all(&dir);
@@ -575,8 +593,9 @@ fn isolated_lifecycle_paints_wakes_keeps_last_good_and_cleans_up() {
         commands.calls.get() > 0,
         "production call path not exercised"
     );
-    for path in [&paths.panel, &paths.tooltip, &paths.page, &paths.npages] {
+    for path in [&paths.panel, &paths.page, &paths.npages] {
         assert!(!path.exists(), "cleanup left {}", path.display());
     }
+    assert!(paths.tooltip.exists(), "cleanup removed retained tooltip");
     let _ = fs::remove_dir_all(root);
 }

@@ -241,6 +241,78 @@ fn duplicate_hidden_observation_does_not_extend_grace() {
 }
 
 #[test]
+fn hidden_grace_keeps_demand_but_never_publishes_tooltip() {
+    let mut fixture = demand_fixture();
+    let activated = fixture.scheduler.handle(SchedulerEvent::TooltipPresented {
+        at: SchedulerTime::ZERO,
+        presented: true,
+    });
+    let main_ticket = starts(&activated)
+        .into_iter()
+        .find(|ticket| ticket.job == fixture.main)
+        .expect("main tooltip start");
+    let _ = fixture.scheduler.handle(SchedulerEvent::TooltipPresented {
+        at: at_millis(1),
+        presented: false,
+    });
+    let completed = finish(
+        &mut fixture.scheduler,
+        at_millis(2),
+        main_ticket,
+        CompletionKind::Captured,
+    );
+    let refresh = fixture
+        .scheduler
+        .handle(SchedulerEvent::TooltipRefreshRequested { at: at_millis(3) });
+    let config = fixture
+        .scheduler
+        .handle(SchedulerEvent::DisplayRefreshRequested { at: at_millis(4) });
+    let page = fixture
+        .scheduler
+        .handle(SchedulerEvent::SelectedPageChanged {
+            at: at_millis(5),
+            page: PageId::CpuCores,
+        });
+    let deadline = fixture
+        .scheduler
+        .handle(SchedulerEvent::TimeAdvanced { at: at_millis(100) });
+
+    for transition in [&completed, &refresh, &config, &page, &deadline] {
+        assert!(
+            publications(transition)
+                .iter()
+                .all(|(_, _, _, tooltip)| !tooltip)
+        );
+    }
+}
+
+#[test]
+fn representation_within_grace_immediately_republishes_retained_tooltip() {
+    let mut fixture = demand_fixture();
+    let _ = fixture.scheduler.handle(SchedulerEvent::TooltipPresented {
+        at: SchedulerTime::ZERO,
+        presented: true,
+    });
+    let _ = fixture.scheduler.handle(SchedulerEvent::TooltipPresented {
+        at: at_millis(1),
+        presented: false,
+    });
+
+    let represented = fixture.scheduler.handle(SchedulerEvent::TooltipPresented {
+        at: at_millis(500),
+        presented: true,
+    });
+
+    assert!(
+        publications(&represented)
+            .iter()
+            .any(|(_, reason, panel, tooltip)| {
+                *reason == PublishReason::TooltipActivated && !panel && *tooltip
+            })
+    );
+}
+
+#[test]
 fn signal_and_file_bursts_coalesce_while_job_runs() {
     let updates = job(OwnerId::External, JobKind::UpdatesFile);
     let mut scheduler = Scheduler::new();

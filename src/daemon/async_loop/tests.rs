@@ -350,7 +350,7 @@ fn first_paint_deadline_writes_real_panel_without_owner_completion() {
     let cfg = Config::default();
     let hw = HardwareInventory::default();
     let active = build_pages(&cfg.pages.order);
-    let mut runtime_state = RuntimeState::new(None, &paths, cfg, hw, active);
+    let mut runtime_state = RuntimeState::new(&paths, cfg, hw, active);
     let roots = FilesystemRoots {
         runtime_root: Some(paths.runtime.clone()),
         ..FilesystemRoots::default()
@@ -400,8 +400,7 @@ fn graphs_page_change_publishes_selected_placeholder_not_previous_page() {
     let mut cfg = Config::default();
     cfg.pages.order = vec![String::from("graphs")];
     let active = build_pages(&cfg.pages.order);
-    let mut runtime_state =
-        RuntimeState::new(None, &paths, cfg, HardwareInventory::default(), active);
+    let mut runtime_state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
     runtime_state.tooltip_html = Some(String::from("OLD PAGE"));
     runtime_state.rendered_graph = Some((PageId::Graphs, 0, String::from("OLD GRAPH")));
     let roots = FilesystemRoots {
@@ -438,8 +437,7 @@ fn graph_completion_from_old_style_generation_is_rejected() {
     fs::create_dir_all(&paths.state).expect("state root");
     let cfg = Config::default();
     let active = build_pages(&cfg.pages.order);
-    let mut runtime_state =
-        RuntimeState::new(None, &paths, cfg, HardwareInventory::default(), active);
+    let mut runtime_state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
     runtime_state.style_generation = 2;
     let mut scheduler = Scheduler::new();
     let transition = startup(
@@ -588,7 +586,7 @@ fn suspend_preempts_start_actions_already_queued_for_dispatch() {
     fs::create_dir_all(&paths.state).expect("state root");
     let cfg = Config::default();
     let active = build_pages(&cfg.pages.order);
-    let state = RuntimeState::new(None, &paths, cfg, HardwareInventory::default(), active);
+    let state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
     let mut scheduler = Scheduler::new();
     let transition = startup(&mut scheduler, vec![job(OwnerId::Cpu, JobKind::Cpu, false)]);
     let mut actions = VecDeque::from(transition.actions);
@@ -617,7 +615,7 @@ fn final_suspend_prunes_intermediate_resume_rescan() {
     fs::create_dir_all(&paths.state).expect("state root");
     let cfg = Config::default();
     let active = build_pages(&cfg.pages.order);
-    let state = RuntimeState::new(None, &paths, cfg, HardwareInventory::default(), active);
+    let state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
     let mut scheduler = Scheduler::new();
     let _ = startup(&mut scheduler, Vec::new());
     let mut actions = VecDeque::new();
@@ -652,7 +650,7 @@ fn rescan_completion_from_prior_lifecycle_is_rejected() {
     fs::create_dir_all(&paths.state).expect("state root");
     let cfg = Config::default();
     let active = build_pages(&cfg.pages.order);
-    let mut state = RuntimeState::new(None, &paths, cfg, HardwareInventory::default(), active);
+    let mut state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
     let mut scheduler = Scheduler::new();
     let _ = startup(&mut scheduler, Vec::new());
     let validity = DispatchValidity::default();

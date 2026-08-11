@@ -1,7 +1,7 @@
 # Add event and presentation protocol
 
 Type: task
-Status: ready-for-agent
+Status: resolved
 Blocked by: 06
 
 ## Objective

@@ -85,6 +85,10 @@
 		<entry name="desktopOutlineColor" type="string">
 			<default>#000000</default>
 		</entry>
+		<!-- Replaceable backend used by the applet's internal presentation protocol; tests override it with a disposable trace wrapper. -->
+		<entry name="backendCommand" type="string">
+			<default>/usr/bin/plasma-top</default>
+		</entry>
 		<!-- Absolute path to the system CLI: /usr/bin is always on the panel's
 		     PATH, and being explicit keeps it independent of the shell env. -->
 		<entry name="clickCommand" type="string">
@@ -114,4 +118,3 @@
 	</group>
 
 </kcfg>
-

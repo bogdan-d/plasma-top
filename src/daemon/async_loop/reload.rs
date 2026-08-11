@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use super::*;
 
 #[allow(clippy::too_many_arguments)]
@@ -8,44 +6,27 @@ pub(super) fn check(
     roots: &FilesystemRoots,
     paths: &DaemonPaths,
     cpu_count: usize,
-    watch_path: &Path,
-    machine_paths: &[PathBuf],
     scheduler: &mut Scheduler,
     state: &mut RuntimeState,
     clock: &ProductionClock,
     actions: &mut VecDeque<SchedulerAction>,
     owner_messages: &mut VecDeque<(OwnerId, OwnerMessage)>,
-) -> Result<()> {
-    let config_stamp = mtime(watch_path);
-    let machine_stamps = machine_paths
-        .iter()
-        .map(|path| mtime(path))
-        .collect::<Vec<_>>();
-    let plasma_stamp = mtime(&paths.plasma_config);
-    let geom_stamp = mtime(&paths.geom);
-    let changed_config = config_stamp != state.config_stamp
-        || machine_stamps != state.machine_stamps
-        || plasma_stamp != state.plasma_stamp
-        || geom_stamp != state.geom_stamp;
-    state.config_stamp = config_stamp;
-    state.machine_stamps = machine_stamps;
-    state.plasma_stamp = plasma_stamp;
-    state.geom_stamp = geom_stamp;
-    if !changed_config {
-        return Ok(());
-    }
+) -> Result<bool> {
     cache_live_geom();
     let new_cfg = match state::load_replacement(config_path) {
         Ok(cfg) => cfg,
         Err(error) => {
             eprintln!("[reload] config reload failed, keeping previous: {error}");
-            return Ok(());
+            return Ok(false);
         }
     };
     let discovery =
         discover_local_hardware_attempt(&roots.sys_root, &roots.proc_root, &new_cfg, cpu_count);
     let mut hw = state.hw.clone();
     discovery.merge_into(&mut hw);
+    if new_cfg == state.cfg && hw == state.hw {
+        return Ok(false);
+    }
     let hardware_changed = hw != state.hw;
     let pages = state::build_replacement_pages(&new_cfg);
     write_atomic(&paths.npages, &pages.len().to_string())?;
@@ -108,34 +89,25 @@ pub(super) fn check(
         );
     }
     request_selected_graph(scheduler, state, paths, clock, actions);
-    Ok(())
+    Ok(true)
 }
 
-pub(super) fn trigger_external_changes(
+pub(super) fn trigger_external_change(
+    kind: JobKind,
     scheduler: &mut Scheduler,
     state: &mut RuntimeState,
     clock: &ProductionClock,
     actions: &mut VecDeque<SchedulerAction>,
 ) {
-    let updates = state::nonempty_mtime(&state.cfg.system_updates.file);
-    let server = state::nonempty_mtime(&state.cfg.server_check.file);
-    let changed = [
-        (updates != state.updates_stamp).then_some(JobKind::UpdatesFile),
-        (server != state.server_stamp).then_some(JobKind::ServerFile),
-    ];
-    state.updates_stamp = updates;
-    state.server_stamp = server;
     let config = state.scheduler_config();
-    for kind in changed.into_iter().flatten() {
-        if let Some(job) = config.jobs.iter().find(|spec| spec.id.kind == kind) {
-            enqueue(
-                actions,
-                scheduler.handle(SchedulerEvent::RefreshTriggered {
-                    at: now(clock),
-                    job: job.id.clone(),
-                    trigger: RefreshTrigger::FileChanged,
-                }),
-            );
-        }
+    if let Some(job) = config.jobs.iter().find(|spec| spec.id.kind == kind) {
+        enqueue(
+            actions,
+            scheduler.handle(SchedulerEvent::RefreshTriggered {
+                at: now(clock),
+                job: job.id.clone(),
+                trigger: RefreshTrigger::FileChanged,
+            }),
+        );
     }
 }

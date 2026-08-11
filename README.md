@@ -17,7 +17,7 @@ System stats in your **KDE Plasma** panel, plus a rich, paginated tooltip — dr
   </tr>
 </table>
 
-PlasmaTop renders CPU, memory, drives, GPU, temperatures, batteries, network and load as HTML that a bundled Plasma applet displays. The daemon runs in memory and atomically writes the panel and tooltip under `$XDG_RUNTIME_DIR/plasma-top` (falling back to `/tmp/plasma-top-$UID` when unavailable), and the applet just cats them, so display refresh needs no browser, shell pipeline, or per-metric process. Optional command-backed sensors and pages remain isolated behind timeout-bound adapters.
+PlasmaTop renders CPU, memory, drives, GPU, temperatures, batteries, network and load as HTML that a bundled Plasma applet displays. The daemon runs in memory and atomically writes the panel and tooltip under `$XDG_RUNTIME_DIR/plasma-top` (falling back to `/tmp/plasma-top-$UID` when unavailable), and the applet just cats them, so display refresh needs no browser, shell pipeline, or per-metric process. While no tooltip is presented, tooltip-only collection and rendering stop and the last `tooltip.html` remains available for immediate display on the next hover, pin, or desktop presentation. Optional command-backed sensors and pages remain isolated behind timeout-bound adapters.
 
 ## Features
 
@@ -64,7 +64,7 @@ Arch packaging metadata lives under `packaging/aur/`. It builds the locked nativ
 
 Then add the widget: **right-click a panel → Add Widgets → search "PlasmaTop"**.
 
-Re-run the same install command to upgrade. Remove a user install with `./uninstall.sh`, or a system install with `./uninstall.sh --system`. Configuration survives either command. Preview removals with `--dry-run` or its `--dry` alias. If an existing widget keeps stale action paths after switching install modes, remove and re-add that widget; the installer never rewrites Plasma's configuration database.
+Re-run the same install command to upgrade, then log out and back in before using PlasmaTop. The daemon and loaded applet use a matched visibility protocol, so the installer leaves both current processes untouched during upgrade; restarting only `plasma-top` or only `plasmashell` can mix versions and is unsupported. First install still activates the daemon immediately. Remove a user install with `./uninstall.sh`, or a system install with `./uninstall.sh --system`. Configuration survives either command. Preview removals with `--dry-run` or its `--dry` alias. If an existing widget keeps stale action paths after switching install modes, remove and re-add that widget; the installer never rewrites Plasma's configuration database.
 
 ## Configuration
 
@@ -74,7 +74,7 @@ The installed tree under **/usr/lib/plasma-top/** holds read-only defaults; your
 - **Machines** — got more than one PC? The shipped machines.toml is just a how-to; list your machines in ~/.config/plasma-top/machines.toml, each with a detection rule and its tweaks. The one matching the current host is merged on top of the config — one synced config works everywhere.
 - **Style** — the shipped style/style-dark.css and style-light.css hold colors and spacing; drop a same-named file in ~/.config/plasma-top/style/ to override it. config.toml never carries colors. Glyphs live in style/icons.toml, labels in lang/en.toml.
 
-Everything hot-reloads: editing the TOML/CSS, switching the Global Theme, or moving the panel between edges re-adapts the daemon on the next poll — no restart needed.
+Everything hot-reloads without a restart: inotify notices TOML/CSS creation or edits, Global Theme changes, and panel geometry changes, then the daemon coalesces each source for 50 ms before applying it. Page and presentation controls target updated tooltip HTML in under 100 ms.
 
 ## CLI
 

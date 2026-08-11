@@ -61,7 +61,7 @@ fn invalid_command_is_stderr_and_failure() {
     assert!(output.stdout.is_empty());
     assert_eq!(
         String::from_utf8(output.stderr).expect("utf8 error"),
-        "usage: plasma-top [-h] <command> ...\nplasma-top: error: argument <command>: invalid choice: 'unknown' (choose from 'daemon', 'render', 'probe', 'profiling', 'list-items', 'page', 'click')\n"
+        "usage: plasma-top [-h] <command> ...\nplasma-top: error: argument <command>: invalid choice: 'unknown' (choose from 'daemon', 'render', 'probe', 'profiling', 'list-items', 'page', 'click', 'present', 'dismiss')\n"
     );
 }
 

@@ -8,7 +8,7 @@ fn shutdown_preempts_pending_completion_and_stale_work() {
     fs::create_dir_all(&paths.state).expect("state root");
     let cfg = Config::default();
     let active = build_pages(&cfg.pages.order);
-    let mut state = RuntimeState::new(None, &paths, cfg, HardwareInventory::default(), active);
+    let mut state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
     let mut scheduler = Scheduler::new();
     let initial = startup(&mut scheduler, vec![job(OwnerId::Cpu, JobKind::Cpu, false)]);
     let ticket = started_ticket(&initial);

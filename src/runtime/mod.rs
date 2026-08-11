@@ -16,6 +16,9 @@
 //!         page
 //!         npages
 //!         page.lock
+//!         presented.lock
+//!         presented/
+//!             <positive-instance-id>
 //! ```
 //!
 //! State files change on every wheel notch and every panel resize; keeping
@@ -32,6 +35,7 @@ use nix::unistd::getuid;
 
 pub mod atomic;
 pub mod page;
+pub mod presentation;
 
 /// Returns the per-user runtime root.
 ///
@@ -92,6 +96,12 @@ pub fn npages_file() -> PathBuf {
 #[must_use]
 pub fn lock_file() -> PathBuf {
     state_dir().join("page.lock")
+}
+
+/// Returns the directory containing per-applet tooltip presentation leases.
+#[must_use]
+pub fn presented_dir() -> PathBuf {
+    state_dir().join("presented")
 }
 
 /// Creates the runtime tree (root + `state/`).

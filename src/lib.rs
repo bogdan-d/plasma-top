@@ -25,6 +25,7 @@ pub mod daemon;
 pub mod diagnostics;
 pub mod domain;
 pub mod error;
+pub(crate) mod file_watch;
 pub mod notify;
 pub mod page_commands;
 pub mod render;
@@ -69,6 +70,12 @@ pub fn run(args: impl IntoIterator<Item = OsString>) -> Result<()> {
         Command::Profiling(command) => diagnostics::run_profiling(command.config.as_deref()),
         Command::ListItems => diagnostics::run_list_items(),
         Command::Page(command) => daemon::run_page(command.direction),
+        Command::Present(command) => {
+            runtime::presentation::present(command.instance).map_err(Into::into)
+        }
+        Command::Dismiss(command) => {
+            runtime::presentation::dismiss(command.instance).map_err(Into::into)
+        }
         Command::Click => daemon::run_click(),
     }
 }
