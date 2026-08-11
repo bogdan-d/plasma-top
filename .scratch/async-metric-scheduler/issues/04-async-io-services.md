@@ -1,7 +1,7 @@
 # Add async I/O services
 
 Type: task
-Status: claimed
+Status: resolved
 Blocked by: 02
 
 ## Objective
@@ -30,3 +30,7 @@ Introduce bounded async command and D-Bus boundaries while preserving determinis
 ## Validation
 
 Run focused adapter tests, `cargo tree` dependency review, and the full Rust gates from `docs/DEVELOPMENT.md`.
+
+## Answer
+
+Implemented in `5fbe6ce` (`feat: add bounded async I/O services`). PlasmaTop now routes production commands, typed UPower/UDisks calls, desktop notifications, UPower events, logind sleep events, and termination signals through bounded Tokio/zbus services while retaining serial owner dispatch. Rust 1.87 is the enforced minimum, legacy process-backed boundary dependencies are removed, focused acceptance tests pass, fresh scoped review is clean, and all repository validation gates pass.
