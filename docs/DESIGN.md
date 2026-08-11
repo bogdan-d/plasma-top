@@ -2,7 +2,7 @@
 
 ## Problem and goal
 
-PlasmaTop replaced a shell script that repeatedly started processes for every sensor and render. That design cost roughly 2 W on the original machine. The current system keeps hardware inventory, metric samples, histories, formatting, and owner state in one synchronous Rust daemon. Plasma receives ready-to-display HTML rather than owning sensor logic or another polling clock.
+PlasmaTop replaced a shell script that repeatedly started processes for every sensor and render. That design cost roughly 2 W on the original machine. The current system keeps hardware inventory, metric samples, histories, formatting, and owner state behind one current-thread Tokio daemon shell. Plasma receives ready-to-display HTML rather than owning sensor logic or another polling clock.
 
 Compatibility drives the shape: the Rust backend preserves the applet, config, runtime files, CLI, sensor formulas, rendering, and graceful absence behavior.
 
@@ -16,7 +16,7 @@ src/
   adapters.rs, adapters/     host clock and owned async I/O services
   domain/                    forms, metrics, tokens, readings, state, boundaries
   config/                    typed TOML, merges, assets, geometry
-  sensors/                   discovery, one-attempt reads, synchronous sampling orchestration
+  sensors/                   discovery, one-attempt reads, and owner state
   render/                    cells, dispatch, formatter, mono layout, pages, chart
   runtime/                   paths, atomic publication, locked page state
 
@@ -75,13 +75,13 @@ Real placement is the intersection of metric and form surfaces. The current dema
 
 ## Readings and state
 
-`HardwareInventory` contains the latest discovered paths, devices, and feature flags and is owned by discovery in `src/sensors/discovery.rs`. `DisplaySnapshot` retains the latest independently captured metric samples for publication. CPU, memory, network, disk, process, power, NVIDIA, Intel GPU, external-file, and GPU-history state live as separate values at daemon or diagnostic composition scope. Each matching sensor module owns its cache reconciliation and source invalidation rules. `src/sensors/coordinator.rs` provides only short-lived borrowed `OwnerRefs`; it owns no domain state. `src/scheduler/` owns deterministic cadence, demand, deadlines, backoff, coalescing, generations, cancellation acknowledgement, and lifecycle policy, while `src/sensors/scheduled.rs` executes emitted work serially through cadence-free one-attempt functions. Cancellation retains the owner reservation until the executor acknowledges it, and every queued start is revalidated immediately before I/O. Notification latches remain separate in `src/domain/state.rs`.
+`HardwareInventory` contains the latest discovered paths, devices, and feature flags and is owned by discovery in `src/sensors/discovery.rs`. `DisplaySnapshot` retains the latest independently captured metric samples for publication. CPU, memory, network, disk, process, power, NVIDIA, Intel GPU, external-file, and GPU-history state live in independent bounded owner loops. Each matching sensor module owns its cache reconciliation and source invalidation rules. `src/sensors/coordinator.rs` provides only short-lived borrowed `OwnerRefs`; it owns no domain state. `src/scheduler/` owns deterministic cadence, demand, deadlines, backoff, coalescing, generations, cancellation acknowledgement, and lifecycle policy, while `src/sensors/scheduled.rs` executes one cadence-free attempt for the matching owner. Cancellation retains the owner reservation until the executor acknowledges it, and every queued start is revalidated immediately before I/O. Notification latches remain separate in `src/domain/state.rs`.
 
-Each independently captured value can be represented as a `MetricSample` with its own monotonic capture time, so sample age is not inferred from `DisplaySnapshot::assembled_at`. Execution remains synchronous during the issue-03 transition, but publication is an independent scheduler action rather than the end of a collection barrier.
+Each independently captured value can be represented as a `MetricSample` with its own monotonic capture time, so sample age is not inferred from `DisplaySnapshot::assembled_at`. Owner completions apply only their owned fields after ticket, generation, source, and run-order checks. Publication is an independent scheduler action rather than the end of a collection barrier.
 
 Sensor modules read explicit `/proc` and `/sys` roots and use injected command, typed D-Bus, clock, notification, and HID boundaries. Missing hardware, unavailable services, malformed files, command failures, and permission errors degrade to absent readings where the compatibility contract requires it; one failed sensor must not block later families.
 
-Production host effects route through one owned current-thread Tokio shell. Its bounded command service runs at most two process groups, drains both pipes concurrently, deterministically retains at most 1 MiB of combined output, kills and reaps groups on timeout or shutdown, and exposes the existing synchronous fake-friendly command trait to the issue-04 serial owner executor. Persistent bounded zbus system/session services provide typed UPower/UDisks requests, desktop notifications, UPower change events, and logind sleep events; the old `busctl`/`notify-send` production transports no longer exist.
+Production orchestration runs on a manually built current-thread Tokio shell with bounded per-owner and completion channels. One explicitly bounded blocking lane isolates process scans, `statvfs`, HID, NVML, graph rasterization, and synchronous command/D-Bus client waits from publication deadlines. The bounded command service runs at most two process groups, drains both pipes concurrently, deterministically retains at most 1 MiB of combined output, and kills and reaps groups on timeout or shutdown. Persistent bounded zbus system/session services provide typed UPower/UDisks requests, desktop notifications, UPower change events, and logind sleep events; the old `busctl`/`notify-send` production transports no longer exist.
 
 ## Rendering
 

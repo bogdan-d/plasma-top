@@ -1,13 +1,39 @@
 use std::collections::BTreeSet;
 
 use crate::scheduler::{
-    CancelReason, DemandPlan, JobId, PublishReason, SchedulerAction, TimingClass,
+    CancelReason, DemandPlan, InventoryUpdate, JobId, PublishReason, SchedulerAction, TimingClass,
 };
 
 use super::policy::is_cancelled_page_work;
 use super::{ACTIVATION_REFRESH_TIMEOUT, DEACTIVATION_GRACE, Scheduler};
 
 impl Scheduler {
+    pub(super) fn change_inventory(
+        &mut self,
+        update: InventoryUpdate,
+        actions: &mut Vec<SchedulerAction>,
+    ) {
+        let resumes_dispatch = update.resume_acknowledgement == self.awaiting_resume_inventory
+            && self.awaiting_resume_inventory.is_some();
+        let demand_before_inventory = self.current_demand();
+        self.inventory_generation = update.generation;
+        self.demand = update.demand;
+        self.replace_jobs(update.jobs, CancelReason::SourceReplaced, actions);
+        if resumes_dispatch {
+            self.awaiting_resume_inventory = None;
+        }
+        let demand_after_inventory = self.current_demand();
+        self.activate_jobs(
+            &demand_before_inventory,
+            &demand_after_inventory,
+            self.effective_presented,
+        );
+        self.refresh_demand(false, actions);
+        if resumes_dispatch {
+            self.refresh_all_demanded();
+        }
+    }
+
     pub(super) fn change_demand(&mut self, demand: DemandPlan, actions: &mut Vec<SchedulerAction>) {
         let before = self.current_demand();
         self.demand = demand;
@@ -58,7 +84,7 @@ impl Scheduler {
         }
     }
 
-    fn activate_jobs(
+    pub(super) fn activate_jobs(
         &mut self,
         before: &BTreeSet<JobId>,
         after: &BTreeSet<JobId>,
@@ -136,6 +162,16 @@ impl Scheduler {
                         reason: CancelReason::DemandEnded,
                     });
                 }
+            }
+        }
+    }
+
+    fn refresh_all_demanded(&mut self) {
+        let demanded = self.current_demand();
+        for (id, runtime) in &mut self.jobs {
+            if demanded.contains(id) && runtime.spec.timing != TimingClass::History {
+                runtime.mark_pending(self.now);
+                runtime.retry_due = None;
             }
         }
     }

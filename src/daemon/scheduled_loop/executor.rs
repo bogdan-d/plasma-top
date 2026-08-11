@@ -134,6 +134,7 @@ pub(super) fn execute_transition(
                             generation: state.inventory_generation,
                             jobs: config.jobs,
                             demand: config.demand,
+                            resume_acknowledgement: None,
                         },
                     }));
                 }
@@ -178,7 +179,10 @@ pub(super) fn execute_transition(
             QueuedAction::Scheduler(SchedulerAction::ResetCounterBaseline { job }) => {
                 reset_counter_baseline(&job, state.owners.refs());
             }
-            QueuedAction::Scheduler(SchedulerAction::RescanHardware { kind }) => {
+            QueuedAction::Scheduler(SchedulerAction::RescanHardware {
+                kind,
+                resume_reconciliation,
+            }) => {
                 rescan(kind, state, roots, boundaries);
                 state.inventory_generation = state.inventory_generation.next();
                 let config = state.scheduler_config(roots);
@@ -188,6 +192,7 @@ pub(super) fn execute_transition(
                         generation: state.inventory_generation,
                         jobs: config.jobs,
                         demand: config.demand,
+                        resume_acknowledgement: resume_reconciliation,
                     },
                 }));
             }

@@ -107,6 +107,7 @@ fn newly_emitted_correctness_trace_precedes_retained_start() {
         },
         SchedulerAction::RescanHardware {
             kind: RescanKind::Hardware,
+            resume_reconciliation: None,
         },
         SchedulerAction::ApplyBackoff {
             job: newly_emitted.job.clone(),

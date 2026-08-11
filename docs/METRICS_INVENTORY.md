@@ -6,13 +6,7 @@ This document maps PlasmaTop metric samples to their real acquisition paths. Use
 
 PlasmaTop does not use a general system-monitoring crate such as `sysinfo`. Most metric samples are parsed directly from Linux `/proc` and `/sys` files with Rust's standard library. Filesystem capacity uses `nix`'s safe `statvfs` wrapper, Logitech Bolt uses `nix::poll` plus direct `hidraw` I/O, and NVIDIA can use the optional `nvml-wrapper` integration.
 
-Owner dispatch remains serial during issue 04. `src/daemon.rs` stores each domain owner separately; the pure scheduler emits typed jobs, and `src/sensors/scheduled.rs` borrows the matching owner for one cadence-free attempt at a time. Commands and D-Bus calls cross bounded async services while the executor preserves deterministic owner/source ordering:
-
-```text
-CPU and panel processes -> memory -> network -> disks/SMART/temperatures/fans -> batteries/HID -> NVIDIA GPU -> Intel GPU -> GPU history -> brightness/status files
-```
-
-Every owner source finishes before the next source starts. Loops over mounts, drives, fans, or batteries are represented as independent keyed jobs but still execute sequentially. Command waits and typed D-Bus waits are owned by the Tokio shell, with bounded concurrency and cancellation, while the issue-04 compatibility executor still waits synchronously for each typed reply. Direct file reads, syscalls, NVML calls, and HID reads remain synchronous until owner cutover in issue 05.
+The pure scheduler dispatches typed jobs through bounded per-owner channels, and `src/sensors/scheduled.rs` borrows only the matching owner for one cadence-free attempt at a time. Different owners progress independently while a stateful owner never overlaps itself. One bounded blocking lane contains broad process scans, `statvfs`, HID, NVML, graph rasterization, and synchronous waits on the bounded command and D-Bus services, leaving the current-thread publication shell deadline-reliable.
 
 The hidden demand set contains resolved panel items, enabled notifications, and configured graph histories. Presented-main demand adds tooltip items, and selected-page demand adds page-owned work. CPU and memory have no unconditional exception. Shared owner reads can feed several metrics, and no owner overlaps itself.
 
@@ -165,13 +159,11 @@ Commands run directly without shell expansion. The exception is the deliberate `
 
 ## Blocking and failure model
 
-The production command handle sends typed program/argv/timeout requests to a bounded Tokio service. At most two child process groups run at once; pipe drains cannot deadlock, retained output is capped, and timeout/shutdown kills the full process group before the direct child is reaped. The synchronous owner compatibility handle waits for the typed service reply, but no production path bypasses the service.
+The production command handle sends typed program/argv/timeout requests to a bounded Tokio service. At most two child process groups run at once; pipe drains cannot deadlock, retained output is capped, and timeout/shutdown kills the full process group before the direct child is reaped. Owner-side synchronous waits stay in the blocking lane, and no production path bypasses the service.
 
 The system and session zbus services own persistent connections and bounded request queues. Calls are limited to two in flight per bus. Disconnected requests fail promptly while one serialized bounded-backoff reconnect continues independently. UPower and UDisks replies remain typed through sensor consumption rather than becoming generic string bodies. Desktop notification `Notify` calls carry the existing title, body, icon, critical urgency, and never-expire timeout directly on the session bus.
 
-Sensor failures are isolated logically: a missing file, malformed value, unavailable service, permission error, command failure, or timeout normally produces `None` or an empty reading, allowing later sensor families to run. This isolation does not make work concurrent; elapsed time before a timeout still delays everything that follows it.
-
-A rough worst-case pass is the sum of sequential slow operations that are both demanded and due under their freshness budgets. Per-command timeout values are ceilings, not expected timings, but multiple D-Bus calls or drives can accumulate beyond one timeout period.
+Sensor failures are isolated: a missing file, malformed value, unavailable service, permission error, command failure, or timeout normally produces `None` or an empty reading without delaying scheduled publication. The single blocking lane deliberately bounds risky synchronous work; queued work can become stale and is revalidated before I/O or rejected by generation/order guards on completion.
 
 ## Optimization map
 
@@ -190,13 +182,14 @@ Highest-value questions:
 5. Are configured items or notifications requesting capabilities that are not useful on this machine?
 6. Is the selected connections page repeatedly running `ss` on its zero freshness budget?
 
-Low-risk optimization levers already supported are removing unused metric capabilities, enabling NVML in packaging, increasing configurable SMART/history intervals where freshness permits, and avoiding expensive deep-dive pages when not needed. Before adding threads or async code, profile whether a specific sequential boundary causes visible latency; concurrency would add state, cancellation, publication-order, and shutdown complexity to a daemon whose common procfs/sysfs reads are normally cheap.
+Low-risk optimization levers already supported are removing unused metric capabilities, enabling NVML in packaging, increasing configurable SMART/history intervals where freshness permits, and avoiding expensive deep-dive pages when not needed. Retune owner or blocking-lane breadth only from profiling evidence; the conservative single lane intentionally trades slow-boundary throughput for bounded concurrency and simple ordering.
 
 ## Source map
 
 - Publication lifecycle, selected-page wake behavior, and final process-page display-snapshot assembly: `src/daemon.rs`
 - Pure cadence, demand, deadline, backoff, identity, and lifecycle policy: `src/scheduler/`
-- Production job catalog and serial execution: `src/sensors/catalog.rs` and `src/sensors/scheduled.rs`
+- Production owner orchestration: `src/daemon/async_loop.rs` and `src/daemon/async_loop/`
+- Production job catalog and one-attempt execution: `src/sensors/catalog.rs` and `src/sensors/scheduled.rs`
 - Short-lived borrowed owner wiring and collection boundaries: `src/sensors/coordinator.rs`
 - Separate owner state and reconciliation interfaces: matching domain modules under `src/sensors/`
 - One-attempt result contracts and source reads: `src/sensors/attempts.rs`, `src/sensors/attempts/`, and matching owner modules under `src/sensors/`

@@ -58,6 +58,9 @@ pub(crate) struct RunId(pub(crate) u64);
 pub(crate) struct PublicationId(pub(crate) u64);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct ResumeReconciliationId(pub(crate) u64);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct HistoryDeadline(SchedulerTime);
 
 impl HistoryDeadline {
@@ -324,6 +327,7 @@ pub(crate) struct InventoryUpdate {
     pub(crate) generation: InventoryGeneration,
     pub(crate) jobs: Vec<JobSpec>,
     pub(crate) demand: DemandPlan,
+    pub(crate) resume_acknowledgement: Option<ResumeReconciliationId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -387,6 +391,9 @@ pub(crate) enum SchedulerEvent {
     DisplayRefreshRequested {
         at: SchedulerTime,
     },
+    TooltipRefreshRequested {
+        at: SchedulerTime,
+    },
     JobFinished {
         at: SchedulerTime,
         ticket: JobTicket,
@@ -432,6 +439,7 @@ impl SchedulerEvent {
             | Self::TooltipPresented { at, .. }
             | Self::SelectedPageChanged { at, .. }
             | Self::DisplayRefreshRequested { at }
+            | Self::TooltipRefreshRequested { at }
             | Self::JobFinished { at, .. }
             | Self::JobCancelled { at, .. }
             | Self::RefreshTriggered { at, .. }
@@ -497,6 +505,7 @@ pub(crate) enum SchedulerAction {
     },
     RescanHardware {
         kind: RescanKind,
+        resume_reconciliation: Option<ResumeReconciliationId>,
     },
     ApplyBackoff {
         job: JobId,

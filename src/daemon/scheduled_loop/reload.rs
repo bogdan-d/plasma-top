@@ -75,6 +75,7 @@ pub(super) fn apply_config(
                 generation: state.inventory_generation,
                 jobs: config.jobs,
                 demand: config.demand,
+                resume_acknowledgement: None,
             },
         })
     });

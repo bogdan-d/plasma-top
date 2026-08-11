@@ -60,9 +60,12 @@ miniz_oxide = "0.9"
 # License: MIT OR Apache-2.0. GPL-2.0-or-later compatible. See `DEPENDENCIES.md`.
 nvml-wrapper = { version = "0.12", optional = true, default-features = false }
 # Current-thread async runtime for bounded process, D-Bus, timer, channel, and
-# Unix signal services. No macros, filesystem, networking, or multithreaded
-# runtime features are enabled.
-tokio = { version = "1", default-features = false, features = ["io-util", "process", "rt", "signal", "sync", "time"] }
+# Unix signal services. The select macro drives the daemon shell; filesystem,
+# networking, and multithreaded runtime features remain disabled.
+tokio = { version = "1", default-features = false, features = ["io-util", "macros", "process", "rt", "signal", "sync", "time"] }
 # Persistent pure-Rust D-Bus transport. Defaults are disabled so zbus uses only
 # its Tokio integration rather than also selecting async-io.
 zbus = { version = "5", default-features = false, features = ["tokio"] }
+
+[dev-dependencies]
+tokio = { version = "1", default-features = false, features = ["test-util"] }

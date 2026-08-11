@@ -16,7 +16,7 @@ pub use dbus::{ProductionDbusFacade, ProductionNotificationFacade};
 pub use shell::{ProductionIo, ProductionIoEvents};
 
 /// Process-lifetime monotonic clock paired with wall time.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ProductionClock {
     origin: Instant,
 }

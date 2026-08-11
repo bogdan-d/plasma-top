@@ -15,6 +15,20 @@ fn started_panel_scheduler() -> (Scheduler, JobId, JobTicket) {
     (scheduler, cpu, ticket)
 }
 
+fn resume_reconciliation(transition: &Transition) -> ResumeReconciliationId {
+    transition
+        .actions
+        .iter()
+        .find_map(|action| match action {
+            SchedulerAction::RescanHardware {
+                kind: RescanKind::VolatileInventoryAndRoute,
+                resume_reconciliation,
+            } => *resume_reconciliation,
+            _ => None,
+        })
+        .expect("resume reconciliation")
+}
+
 #[test]
 fn notifications_arm_only_after_first_panel_publication() {
     let (mut scheduler, cpu, ticket) = started_panel_scheduler();
@@ -92,12 +106,7 @@ fn resume_resets_counter_baselines_rescans_and_refreshes_demand() {
     }
     let resumed = scheduler.handle(SchedulerEvent::Resume { at: at_seconds(5) });
 
-    assert!(resumed.actions.iter().any(|action| matches!(
-        action,
-        SchedulerAction::RescanHardware {
-            kind: RescanKind::VolatileInventoryAndRoute
-        }
-    )));
+    let resume_reconciliation = resume_reconciliation(&resumed);
     assert!(resumed.actions.iter().any(|action| {
         matches!(action, SchedulerAction::ResetCounterBaseline { job } if job == &cpu)
     }));
@@ -112,9 +121,46 @@ fn resume_resets_counter_baselines_rescans_and_refreshes_demand() {
                 spec
             }],
             demand: plan([cpu.clone()], [], []),
+            resume_acknowledgement: Some(resume_reconciliation),
         },
     });
     assert!(starts(&refreshed).iter().any(|ticket| ticket.job == cpu));
+}
+
+#[test]
+fn unrelated_inventory_during_resume_does_not_release_reconciliation_gate() {
+    let stale = job(OwnerId::Cpu, JobKind::Cpu);
+    let reconciled = job(OwnerId::Power, JobKind::SystemBattery);
+    let mut scheduler = Scheduler::new();
+    let _ = startup(
+        &mut scheduler,
+        config(Duration::from_secs(1), Vec::new(), []),
+    );
+    let _ = scheduler.handle(SchedulerEvent::Suspend { at: at_millis(1) });
+    let resumed = scheduler.handle(SchedulerEvent::Resume { at: at_millis(2) });
+    let resume_reconciliation = resume_reconciliation(&resumed);
+
+    let unrelated = scheduler.handle(SchedulerEvent::InventoryChanged {
+        at: at_millis(2),
+        update: InventoryUpdate {
+            generation: InventoryGeneration(2),
+            jobs: vec![JobSpec::fast(stale.clone(), Duration::from_secs(1))],
+            demand: plan([stale], [], []),
+            resume_acknowledgement: None,
+        },
+    });
+    assert!(starts(&unrelated).is_empty());
+
+    let acknowledged = scheduler.handle(SchedulerEvent::InventoryChanged {
+        at: at_millis(2),
+        update: InventoryUpdate {
+            generation: InventoryGeneration(3),
+            jobs: vec![JobSpec::fast(reconciled.clone(), Duration::from_secs(1))],
+            demand: plan([reconciled.clone()], [], []),
+            resume_acknowledgement: Some(resume_reconciliation),
+        },
+    });
+    assert_eq!(first_start(&acknowledged).job, reconciled);
 }
 
 #[test]
@@ -138,6 +184,7 @@ fn resume_waits_for_reconciled_source_and_reanchors_fast_deadline() {
     let _ = scheduler.handle(SchedulerEvent::Suspend { at: at_millis(123) });
     let resumed = scheduler.handle(SchedulerEvent::Resume { at: at_millis(500) });
     assert!(starts(&resumed).is_empty());
+    let resume_reconciliation = resume_reconciliation(&resumed);
 
     let mut new_spec = JobSpec::fast(new.clone(), Duration::from_secs(1));
     new_spec.counter = true;
@@ -147,6 +194,7 @@ fn resume_waits_for_reconciled_source_and_reanchors_fast_deadline() {
             generation: InventoryGeneration(2),
             jobs: vec![new_spec],
             demand: plan([new.clone()], [], []),
+            resume_acknowledgement: Some(resume_reconciliation),
         },
     });
     let ticket = first_start(&inventory);

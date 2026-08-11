@@ -4,8 +4,8 @@ use std::time::Duration;
 use super::model::{
     CancelReason, CompletionKind, ConfigGeneration, DemandPlan, EventDisposition, HistoryDeadline,
     InventoryGeneration, JobId, JobSpec, JobTicket, OwnerId, PublicationId, PublishReason,
-    RescanKind, RunId, SchedulerAction, SchedulerConfig, SchedulerEvent, SchedulerTime,
-    TimingClass, Transition,
+    RescanKind, ResumeReconciliationId, RunId, SchedulerAction, SchedulerConfig, SchedulerEvent,
+    SchedulerTime, TimingClass, Transition,
 };
 
 #[path = "machine/policy.rs"]
@@ -100,9 +100,10 @@ pub(crate) struct Scheduler {
     panel_publications: BTreeSet<PublicationId>,
     in_flight_owners: BTreeMap<OwnerId, RunId>,
     cancelling: BTreeMap<RunId, JobTicket>,
-    awaiting_resume_inventory: bool,
+    awaiting_resume_inventory: Option<ResumeReconciliationId>,
     next_run_id: u64,
     next_publication_id: u64,
+    next_resume_reconciliation_id: u64,
 }
 
 impl Default for Scheduler {
@@ -129,9 +130,10 @@ impl Default for Scheduler {
             panel_publications: BTreeSet::new(),
             in_flight_owners: BTreeMap::new(),
             cancelling: BTreeMap::new(),
-            awaiting_resume_inventory: false,
+            awaiting_resume_inventory: None,
             next_run_id: 1,
             next_publication_id: 1,
+            next_resume_reconciliation_id: 1,
         }
     }
 }
@@ -199,15 +201,7 @@ impl Scheduler {
                 EventDisposition::Accepted
             }
             SchedulerEvent::InventoryChanged { update, .. } => {
-                let resumed = self.awaiting_resume_inventory;
-                self.inventory_generation = update.generation;
-                self.demand = update.demand;
-                self.replace_jobs(update.jobs, CancelReason::SourceReplaced, &mut actions);
-                self.awaiting_resume_inventory = false;
-                self.refresh_demand(false, &mut actions);
-                if resumed {
-                    self.refresh_all_demanded();
-                }
+                self.change_inventory(update, &mut actions);
                 EventDisposition::Accepted
             }
             SchedulerEvent::DemandChanged { demand, .. } => {
@@ -229,6 +223,10 @@ impl Scheduler {
                     self.effective_presented,
                     &mut actions,
                 );
+                EventDisposition::Accepted
+            }
+            SchedulerEvent::TooltipRefreshRequested { .. } => {
+                self.issue_publish(PublishReason::TooltipRefresh, false, true, &mut actions);
                 EventDisposition::Accepted
             }
             SchedulerEvent::JobFinished {
@@ -311,7 +309,7 @@ impl Scheduler {
     }
 
     pub(crate) fn next_wake(&self) -> Option<SchedulerTime> {
-        if self.lifecycle != Lifecycle::Running || self.awaiting_resume_inventory {
+        if self.lifecycle != Lifecycle::Running || self.awaiting_resume_inventory.is_some() {
             return None;
         }
         let demanded = self.current_demand();
@@ -693,16 +691,6 @@ impl Scheduler {
         }
     }
 
-    fn refresh_all_demanded(&mut self) {
-        let demanded = self.current_demand();
-        for (id, runtime) in &mut self.jobs {
-            if demanded.contains(id) && runtime.spec.timing != TimingClass::History {
-                runtime.mark_pending(self.now);
-                runtime.retry_due = None;
-            }
-        }
-    }
-
     fn suspend(&mut self, actions: &mut Vec<SchedulerAction>) {
         if self.lifecycle != Lifecycle::Running {
             return;
@@ -731,9 +719,12 @@ impl Scheduler {
                     Some(advance_past(deadline, runtime.spec.freshness, self.now));
             }
         }
-        self.awaiting_resume_inventory = true;
+        let reconciliation = ResumeReconciliationId(self.next_resume_reconciliation_id);
+        self.next_resume_reconciliation_id = self.next_resume_reconciliation_id.saturating_add(1);
+        self.awaiting_resume_inventory = Some(reconciliation);
         actions.push(SchedulerAction::RescanHardware {
             kind: RescanKind::VolatileInventoryAndRoute,
+            resume_reconciliation: Some(reconciliation),
         });
         let demanded = self.current_demand();
         for (id, runtime) in &mut self.jobs {
@@ -770,7 +761,7 @@ impl Scheduler {
     }
 
     fn dispatch(&mut self, actions: &mut Vec<SchedulerAction>) {
-        if self.lifecycle != Lifecycle::Running || self.awaiting_resume_inventory {
+        if self.lifecycle != Lifecycle::Running || self.awaiting_resume_inventory.is_some() {
             return;
         }
         let demanded = self.current_demand();

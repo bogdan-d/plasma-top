@@ -64,6 +64,7 @@ fn replacement_waits_for_cancellation_ack_and_invalidates_queued_start() {
             generation: InventoryGeneration(2),
             jobs: vec![JobSpec::fast(new.clone(), Duration::from_secs(1))],
             demand: plan([new.clone()], [], []),
+            resume_acknowledgement: None,
         },
     });
     assert!(starts(&changed).is_empty());
@@ -249,6 +250,7 @@ fn unrelated_inventory_update_preserves_backoff_and_failure_count() {
             generation: InventoryGeneration(2),
             jobs: vec![spec],
             demand: plan([updates.clone()], [], []),
+            resume_acknowledgement: None,
         },
     });
     assert!(starts(&replaced).is_empty());
@@ -303,6 +305,7 @@ fn unrelated_inventory_update_preserves_pending_age() {
             generation: InventoryGeneration(2),
             jobs: specs,
             demand: plan([obsolete.job.clone(), cores.clone()], [], []),
+            resume_acknowledgement: None,
         },
     });
     assert!(starts(&changed).is_empty());
@@ -364,6 +367,7 @@ fn replaced_source_completion_terminally_releases_cancelling_reservation() {
         generation: InventoryGeneration(2),
         jobs: vec![JobSpec::periodic(new.clone(), Duration::from_secs(1))],
         demand: plan([new.clone()], [], []),
+        resume_acknowledgement: None,
     };
     let changed = scheduler.handle(SchedulerEvent::InventoryChanged {
         at: at_millis(1),
@@ -500,6 +504,7 @@ fn duplicate_and_rollback_generations_are_rejected() {
                 generation,
                 jobs: vec![spec.clone()],
                 demand: plan([memory.clone()], [], []),
+                resume_acknowledgement: None,
             },
         });
         assert_eq!(rejected.disposition, EventDisposition::RejectedStale);
@@ -579,6 +584,7 @@ fn replacement_invalidates_before_cancelling_old_work() {
             generation: InventoryGeneration(2),
             jobs: vec![JobSpec::periodic(new.clone(), Duration::from_secs(1))],
             demand: plan([new], [], []),
+            resume_acknowledgement: None,
         },
     });
     let invalidation = changed

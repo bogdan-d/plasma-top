@@ -121,31 +121,36 @@ pub struct ProductionIo {
     events: Option<ProductionIoEvents>,
     initial_system_bus_readiness: Option<dbus::InitialSystemBusReadiness>,
     stopped: Arc<AtomicBool>,
-    shutdown: watch::Sender<bool>,
+    external_shutdown: watch::Sender<bool>,
+    orchestration_done: watch::Sender<bool>,
+    orchestration_registered: Arc<AtomicBool>,
     critical_failure: Arc<Mutex<Option<CriticalService>>>,
     shutdown_timed_out: Arc<AtomicBool>,
+    runtime: tokio::runtime::Handle,
     thread: Option<JoinHandle<()>>,
+    #[cfg(test)]
+    shell_stop_selected: std::sync::mpsc::Receiver<()>,
 }
 
 impl ProductionIo {
-    /// Starts command, system-bus, session-bus, signal-stream, and Unix termination services.
+    /// Starts command, system-bus, session-bus, signal-stream, and Unix termination services with daemon orchestration expected.
     ///
     /// # Errors
     ///
     /// Returns a runtime error when the shell thread or Tokio runtime cannot be created.
     pub fn start() -> Result<Self> {
-        Self::start_inner(true)
+        Self::start_inner(true, true)
     }
 
     /// Starts I/O services without taking ownership of SIGINT/SIGTERM.
     ///
-    /// Diagnostics use this mode so they cannot consume a daemon termination signal.
+    /// Diagnostics use this mode so they cannot consume a daemon termination signal or reserve the runtime for orchestration completion.
     ///
     /// # Errors
     ///
     /// Returns a runtime error when the shell thread or Tokio runtime cannot be created.
     pub fn start_without_signals() -> Result<Self> {
-        Self::start_inner(false)
+        Self::start_inner(false, false)
     }
 
     /// Starts diagnostics I/O services after the first system-bus attempt completes.
@@ -161,7 +166,7 @@ impl ProductionIo {
         Ok(io)
     }
 
-    fn start_inner(capture_termination_signals: bool) -> Result<Self> {
+    fn start_inner(capture_termination_signals: bool, expects_orchestration: bool) -> Result<Self> {
         let stopped = Arc::new(AtomicBool::new(false));
         let (command_sender, command_receiver) = mpsc::channel(command::COMMAND_QUEUE_CAPACITY);
         let (dbus_sender, dbus_receiver) = mpsc::channel(dbus::DBUS_QUEUE_CAPACITY);
@@ -169,13 +174,21 @@ impl ProductionIo {
         let (event_sender, event_receiver) = event_stream();
         let (initial_system_bus_sender, initial_system_bus_readiness) =
             dbus::initial_system_bus_readiness();
-        let (shutdown, shutdown_receiver) = watch::channel(false);
+        let (external_shutdown, external_shutdown_receiver) = watch::channel(false);
+        let (service_shutdown, service_shutdown_receiver) = watch::channel(false);
+        let (orchestration_done, mut orchestration_done_receiver) = watch::channel(false);
+        let orchestration_registered = Arc::new(AtomicBool::new(expects_orchestration));
+        let thread_orchestration_registered = Arc::clone(&orchestration_registered);
         let (ready_sender, ready_receiver) = std::sync::mpsc::sync_channel(1);
+        #[cfg(test)]
+        let (shell_stop_selected_sender, shell_stop_selected) = std::sync::mpsc::sync_channel(1);
         let thread_stopped = Arc::clone(&stopped);
         let critical_failure = Arc::new(Mutex::new(None));
         let thread_critical_failure = Arc::clone(&critical_failure);
-        let signal_shutdown = shutdown.clone();
-        let shell_shutdown = shutdown.clone();
+        let shutdown_timed_out = Arc::new(AtomicBool::new(false));
+        let thread_shutdown_timed_out = Arc::clone(&shutdown_timed_out);
+        let signal_shutdown = external_shutdown.clone();
+        let shell_shutdown = external_shutdown.clone();
         let thread = thread::Builder::new()
             .name("plasma-top-io".to_owned())
             .spawn(move || {
@@ -188,18 +201,21 @@ impl ProductionIo {
                     thread_stopped.store(true, Ordering::Release);
                     return;
                 };
-                runtime.block_on(async move {
-                    let mut command_task =
-                        tokio::spawn(command::serve(command_receiver, shutdown_receiver.clone()));
+                let runtime_handle = runtime.handle().clone();
+                let shutdown_started = runtime.block_on(async move {
+                    let mut command_task = tokio::spawn(command::serve(
+                        command_receiver,
+                        service_shutdown_receiver.clone(),
+                    ));
                     let mut system_task = tokio::spawn(dbus::serve_system(
                         dbus_receiver,
-                        shutdown_receiver.clone(),
+                        service_shutdown_receiver.clone(),
                         event_sender,
                         initial_system_bus_sender,
                     ));
                     let mut session_task = tokio::spawn(dbus::serve_session(
                         notification_receiver,
-                        shutdown_receiver.clone(),
+                        service_shutdown_receiver,
                     ));
                     let signal_task = if capture_termination_signals {
                         match spawn_termination_signals(
@@ -212,14 +228,14 @@ impl ProductionIo {
                                 command_task.abort();
                                 system_task.abort();
                                 session_task.abort();
-                                return;
+                                return Instant::now();
                             }
                         }
                     } else {
                         None
                     };
-                    let _ = ready_sender.send(Ok(()));
-                    let mut wait_for_shutdown = shutdown_receiver.clone();
+                    let _ = ready_sender.send(Ok(runtime_handle));
+                    let mut wait_for_shutdown = external_shutdown_receiver;
                     let critical_service = wait_for_shell_stop(
                         &mut wait_for_shutdown,
                         &mut command_task,
@@ -227,6 +243,9 @@ impl ProductionIo {
                         &mut session_task,
                     )
                     .await;
+                    #[cfg(test)]
+                    let _ = shell_stop_selected_sender.send(());
+                    let shutdown_started = Instant::now();
                     if let Some(task) = signal_task {
                         task.abort();
                     }
@@ -236,6 +255,7 @@ impl ProductionIo {
                             *failure = Some(critical_service);
                         }
                         let _ = shell_shutdown.send(true);
+                        let _ = service_shutdown.send(true);
                         tokio::time::sleep(
                             SHELL_SHUTDOWN_BUDGET.saturating_sub(Duration::from_millis(50)),
                         )
@@ -243,22 +263,42 @@ impl ProductionIo {
                         command_task.abort();
                         system_task.abort();
                         session_task.abort();
-                        return;
+                    } else {
+                        let _ = service_shutdown.send(true);
+                        let joined = async {
+                            let _ = command_task.await;
+                            let _ = system_task.await;
+                            let _ = session_task.await;
+                        };
+                        if tokio::time::timeout(
+                            SHELL_SHUTDOWN_BUDGET.saturating_sub(Duration::from_millis(50)),
+                            joined,
+                        )
+                        .await
+                        .is_err()
+                        {
+                            thread_shutdown_timed_out.store(true, Ordering::Release);
+                        }
                     }
-                    let joined = async {
-                        let _ = command_task.await;
-                        let _ = system_task.await;
-                        let _ = session_task.await;
-                    };
-                    let _ = tokio::time::timeout(
-                        SHELL_SHUTDOWN_BUDGET.saturating_sub(Duration::from_millis(10)),
-                        joined,
-                    )
-                    .await;
+                    let remaining =
+                        SHELL_SHUTDOWN_BUDGET.saturating_sub(shutdown_started.elapsed());
+                    let orchestration_timed_out = thread_orchestration_registered
+                        .load(Ordering::Acquire)
+                        && !*orchestration_done_receiver.borrow()
+                        && tokio::time::timeout(remaining, orchestration_done_receiver.changed())
+                            .await
+                            .is_err();
+                    if orchestration_timed_out {
+                        thread_shutdown_timed_out.store(true, Ordering::Release);
+                    }
+                    shutdown_started
                 });
+                runtime.shutdown_timeout(
+                    SHELL_SHUTDOWN_BUDGET.saturating_sub(shutdown_started.elapsed()),
+                );
             })
             .map_err(|error| Error::Runtime(format!("cannot start async I/O shell: {error}")))?;
-        ready_receiver
+        let runtime = ready_receiver
             .recv()
             .map_err(|_| Error::Runtime("async I/O shell stopped during startup".to_owned()))?
             .map_err(Error::Runtime)?;
@@ -272,10 +312,15 @@ impl ProductionIo {
             events: Some(event_receiver),
             initial_system_bus_readiness: Some(initial_system_bus_readiness),
             stopped,
-            shutdown,
+            external_shutdown,
+            orchestration_done,
+            orchestration_registered,
             critical_failure,
-            shutdown_timed_out: Arc::new(AtomicBool::new(false)),
+            shutdown_timed_out,
+            runtime,
             thread: Some(thread),
+            #[cfg(test)]
+            shell_stop_selected,
         })
     }
 
@@ -301,6 +346,22 @@ impl ProductionIo {
     #[must_use]
     pub fn stopped(&self) -> Arc<AtomicBool> {
         Arc::clone(&self.stopped)
+    }
+
+    /// Returns the handle for spawning daemon orchestration onto the owned current-thread shell.
+    pub(crate) fn runtime_handle(&self) -> tokio::runtime::Handle {
+        self.runtime.clone()
+    }
+
+    /// Subscribes daemon orchestration to shell shutdown without polling.
+    pub(crate) fn shutdown_receiver(&self) -> watch::Receiver<bool> {
+        self.external_shutdown.subscribe()
+    }
+
+    /// Marks the daemon orchestration task finished so the shell can close its runtime safely.
+    pub(crate) fn orchestration_done(&self) -> watch::Sender<bool> {
+        self.orchestration_registered.store(true, Ordering::Release);
+        self.orchestration_done.clone()
     }
 
     /// Transfers the event receiver to the daemon loop.
@@ -333,12 +394,17 @@ impl ProductionIo {
     ///
     /// If the shell has not finished by the deadline, its join handle is dropped without joining so shutdown never blocks past the budget.
     pub fn shutdown(&mut self) {
+        self.shutdown_with_budget(SHELL_SHUTDOWN_BUDGET);
+    }
+
+    /// Requests service shutdown with a caller-owned remaining process budget.
+    pub(crate) fn shutdown_with_budget(&mut self, budget: Duration) {
         self.stopped.store(true, Ordering::Release);
-        let _ = self.shutdown.send(true);
+        let _ = self.external_shutdown.send(true);
         let Some(thread) = self.thread.take() else {
             return;
         };
-        let deadline = Instant::now() + SHELL_SHUTDOWN_BUDGET;
+        let deadline = Instant::now() + budget;
         if !join_finished_before(thread, deadline) {
             self.shutdown_timed_out.store(true, Ordering::Release);
         }
@@ -358,19 +424,14 @@ fn join_finished_before(thread: JoinHandle<()>, deadline: Instant) -> bool {
 }
 
 async fn wait_for_shell_stop(
-    shutdown: &mut watch::Receiver<bool>,
+    external_stop: &mut watch::Receiver<bool>,
     command: &mut tokio::task::JoinHandle<()>,
     system: &mut tokio::task::JoinHandle<()>,
     session: &mut tokio::task::JoinHandle<()>,
 ) -> Option<CriticalService> {
-    if *shutdown.borrow() {
-        return None;
-    }
-    let mut changed = Box::pin(shutdown.changed());
+    let external_stop_requested = *external_stop.borrow();
+    let mut external_stop_changed = Box::pin(external_stop.changed());
     poll_fn(|cx| {
-        if changed.as_mut().poll(cx).is_ready() {
-            return Poll::Ready(None);
-        }
         if Pin::new(&mut *command).poll(cx).is_ready() {
             return Poll::Ready(Some(CriticalService::Command));
         }
@@ -379,6 +440,9 @@ async fn wait_for_shell_stop(
         }
         if Pin::new(&mut *session).poll(cx).is_ready() {
             return Poll::Ready(Some(CriticalService::SessionDbus));
+        }
+        if external_stop_requested || external_stop_changed.as_mut().poll(cx).is_ready() {
+            return Poll::Ready(None);
         }
         Poll::Pending
     })

@@ -1,6 +1,6 @@
 ## Working model
 
-PlasmaTop is a synchronous Rust daemon plus bundled Plasma applet. `src/` is the sole runtime implementation. `./plasma-top` runs the Rust checkout with repository assets.
+PlasmaTop is a Rust daemon with current-thread Tokio orchestration plus a bundled Plasma applet. `src/` is the sole runtime implementation. `./plasma-top` runs the Rust checkout with repository assets.
 
 Run commands from repository root. Development setup and full gates live in `docs/DEVELOPMENT.md`.
 

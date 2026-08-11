@@ -9,7 +9,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use crate::domain::boundary::{ClockSnapshot, CommandRunner, CommandStatus};
-use crate::domain::readings::RetainedMetricSample;
+use crate::domain::readings::{MetricSample, RetainedMetricSample};
 
 #[cfg(feature = "nvml")]
 use nvml_wrapper::{
@@ -139,6 +139,15 @@ impl NvidiaState {
         if !active {
             self.cache = GpuCache::default();
         }
+    }
+
+    pub(crate) fn latest_history_point(&self) -> Option<MetricSample<(Option<i32>, Option<i32>)>> {
+        self.cache.history_samples.latest.as_ref().map(|sample| {
+            MetricSample::new(
+                (sample.value.usage_percent, sample.value.decoder_percent),
+                sample.captured_at,
+            )
+        })
     }
 }
 

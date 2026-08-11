@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use crate::domain::boundary::ClockSnapshot;
-use crate::domain::readings::RetainedMetricSample;
+use crate::domain::readings::{MetricSample, RetainedMetricSample};
 
 /// Intel DRM engine names tracked for the panel/graphs page.
 pub const INTEL_GPU_ENGINES: &[&str] = &["render", "copy", "video", "video-enhance"];
@@ -98,6 +98,18 @@ impl IntelGpuState {
             self.frequency.invalidate();
             self.frequency_source = frequency_path.cloned();
         }
+    }
+
+    pub(crate) fn latest_history_point(&self) -> Option<MetricSample<(Option<i32>, Option<i32>)>> {
+        self.usage.latest.as_ref().map(|sample| {
+            MetricSample::new(
+                (
+                    sample.value.get("render").copied(),
+                    sample.value.get("video").copied(),
+                ),
+                sample.captured_at,
+            )
+        })
     }
 }
 

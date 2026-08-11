@@ -61,6 +61,7 @@ pub(crate) fn scheduler_config(
     let tooltip_inventory = catalog.surface_inventory_families(&cfg.tooltip);
     let notification_inventory = catalog.notification_inventory_families();
     let panel_jobs = catalog.surface_jobs(&cfg.panel);
+    let mut panel_startup_jobs = panel_jobs.clone();
     demand.hidden.extend(panel_jobs.iter().cloned());
     demand
         .main_tooltip
@@ -71,8 +72,12 @@ pub(crate) fn scheduler_config(
     if graphs_enabled {
         demand.hidden.extend(catalog.graph_jobs());
     }
-    let mut hidden_inventory = panel_inventory;
-    hidden_inventory.extend(notification_inventory);
+    for family in panel_inventory {
+        let inventory = catalog.inventory_job(family);
+        panel_startup_jobs.insert(inventory.clone());
+        demand.hidden.insert(inventory);
+    }
+    let mut hidden_inventory = notification_inventory;
     if graphs_enabled {
         hidden_inventory.extend([
             InventoryFamily::Nvidia,
@@ -112,6 +117,9 @@ pub(crate) fn scheduler_config(
         {
             demand.hidden.insert(inventory.clone());
         }
+        if panel_jobs.iter().any(|job| job.kind == JobKind::DiskUsage) {
+            panel_startup_jobs.insert(inventory.clone());
+        }
         if demand
             .main_tooltip
             .iter()
@@ -125,7 +133,7 @@ pub(crate) fn scheduler_config(
             }
         }
     }
-    for job in panel_jobs {
+    for job in panel_startup_jobs {
         if let Some(spec) = catalog.specs.get_mut(&job) {
             spec.startup_panel = spec.timing != TimingClass::History;
         }
@@ -469,14 +477,13 @@ impl<'a> Catalog<'a> {
                 ));
                 BTreeSet::from([cores, history])
             }
-            PageId::Connections => BTreeSet::from([self.page_command(
-                PageId::Connections,
-                self.cfg.display.poll_interval.duration(),
-            )]),
+            PageId::Connections => BTreeSet::from([self.fast_page_command(PageId::Connections)]),
             PageId::Fastfetch => {
                 BTreeSet::from([self.page_command(PageId::Fastfetch, Duration::from_secs(30))])
             }
-            PageId::Graphs => BTreeSet::new(),
+            PageId::Graphs => {
+                BTreeSet::from([self.fast_singleton(OwnerId::Page, JobKind::PageRender)])
+            }
             PageId::Main | PageId::Other(_) => BTreeSet::new(),
         }
     }
@@ -742,6 +749,15 @@ impl<'a> Catalog<'a> {
             SourceIdentity::Page(page),
         );
         self.insert(JobSpec::periodic(id, cadence))
+    }
+
+    fn fast_page_command(&mut self, page: PageId) -> JobId {
+        let id = JobId::with_source(
+            OwnerId::Page,
+            JobKind::PageCommand,
+            SourceIdentity::Page(page),
+        );
+        self.insert(JobSpec::fast(id, self.cfg.display.poll_interval.duration()))
     }
 
     fn mark_counter(&mut self, id: JobId) -> JobId {

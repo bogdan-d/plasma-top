@@ -22,6 +22,10 @@ fn rgb_and_luma_match_python_boundaries() {
 fn critical_service_exit_is_a_daemon_error_after_cleanup() {
     let error = complete_daemon_run(Ok(()), Some(CriticalService::SystemDbus), false)
         .expect_err("critical system service exit must fail the daemon");
+    assert_eq!(
+        error.to_string(),
+        "critical system D-Bus service exited unexpectedly"
+    );
     assert!(matches!(
         error,
         Error::CriticalService(CriticalService::SystemDbus)

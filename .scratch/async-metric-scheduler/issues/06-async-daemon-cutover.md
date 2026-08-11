@@ -1,7 +1,7 @@
 # Cut daemon orchestration over to async owners
 
 Type: task
-Status: ready-for-agent
+Status: resolved
 Blocked by: 03, 04, 05
 
 ## Objective
@@ -26,3 +26,9 @@ Enable independent owner dispatch and deadline publication in the Tokio shell af
 ## Validation
 
 Run focused paused-time shell tests and the full gates from `docs/DEVELOPMENT.md`.
+
+## Answer
+
+Production daemon orchestration now runs on the owned current-thread Tokio shell with bounded per-owner channels, a bounded completion queue, coalesced pending work, one semaphore-bounded blocking lane, transactional completion commits, progressive discovery, deadline-first publication, independent panel and tooltip surfaces, completion-driven notifications, correlated suspend/resume reconciliation, and bounded critical-task shutdown. The synchronous coordinator remains test-only.
+
+Focused async-loop, scheduler, catalog, shell, CLI daemon, and legacy production-executor validation passed. Every gate in `docs/DEVELOPMENT.md` passed with Homebrew Rust 1.97.1; because the required dependency update intentionally leaves `Cargo.lock` uncommitted, lock validation compared its SHA-256 before and after `cargo fetch --locked` and confirmed no mutation.

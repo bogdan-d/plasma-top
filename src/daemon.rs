@@ -5,17 +5,14 @@ use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command as ProcessCommand, Stdio};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use crate::adapters::{ProductionClock, ProductionIo, ProductionIoEvents};
+use crate::adapters::{ProductionClock, ProductionIo};
 use crate::cli::{PageDirection as CliPageDirection, RenderPage};
 use crate::config::Config;
-use crate::domain::boundary::{
-    ClockSnapshot, CommandRunner, DbusFacade, FilesystemRoots, IoEvent, NotificationFacade,
-};
+use crate::domain::boundary::{ClockSnapshot, CommandRunner, FilesystemRoots};
+#[cfg(test)]
+use crate::domain::boundary::{DbusFacade, IoEvent, NotificationFacade};
 use crate::domain::readings::{DisplaySnapshot, HardwareInventory};
 use crate::error::{Error, Result};
 use crate::page_commands::{
@@ -25,15 +22,21 @@ use crate::page_commands::{
 };
 use crate::render::{PageFormatter, PanelFormatter};
 use crate::runtime::{self, atomic::write_atomic as write_atomic_bytes};
+#[cfg(test)]
 use crate::sensors::gpu_nvidia::NvmlFacade;
-use crate::sensors::hid::BoltHidFacade;
+#[cfg(test)]
 use crate::sensors::power::BoltBatteryFacade;
+#[cfg(test)]
 use crate::sensors::process::ProcessState;
 #[cfg(test)]
 use crate::sensors::process::read_top_process_page;
+mod async_loop;
+#[cfg(test)]
 mod scheduled_loop;
-#[cfg(any(test, feature = "nvml"))]
+#[cfg(test)]
 use crate::sensors::gpu_nvidia;
+#[cfg(test)]
+use std::thread;
 
 #[cfg(test)]
 use crate::domain::state::NotificationState;
@@ -95,6 +98,7 @@ impl DaemonPaths {
 }
 
 /// Clock/sleep/shutdown seam used by deterministic daemon tests.
+#[cfg(test)]
 pub trait LoopControl {
     /// Samples current clocks.
     fn snapshot(&mut self) -> ClockSnapshot;
@@ -108,31 +112,8 @@ pub trait LoopControl {
     }
 }
 
-struct ProductionLoopControl {
-    clock: ProductionClock,
-    stopped: Arc<AtomicBool>,
-    events: ProductionIoEvents,
-}
-
-impl LoopControl for ProductionLoopControl {
-    fn snapshot(&mut self) -> ClockSnapshot {
-        self.clock.snapshot()
-    }
-
-    fn sleep(&mut self, duration: Duration) {
-        thread::sleep(duration);
-    }
-
-    fn should_stop(&self) -> bool {
-        self.stopped.load(Ordering::Relaxed)
-    }
-
-    fn drain_io_events(&mut self) -> Vec<IoEvent> {
-        self.events.drain()
-    }
-}
-
 /// Production/test boundary bundle retained across daemon polls.
+#[cfg(test)]
 pub struct DaemonBoundaries<'a> {
     /// Subprocess adapter.
     pub commands: &'a mut dyn CommandRunner,
@@ -255,6 +236,7 @@ fn publish_pages(paths: &DaemonPaths, cfg: &Config) -> Result<Vec<Page>> {
     Ok(pages)
 }
 
+#[cfg(test)]
 fn replace_page_registry(
     paths: &DaemonPaths,
     cfg: &Config,
@@ -496,6 +478,7 @@ pub(crate) fn merge_process_page_sample(
 }
 
 /// Runs daemon against explicit roots and adapters. `poll_limit` bounds post-first-paint scheduled display publications in tests; production passes `None`.
+#[cfg(test)]
 #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 pub fn run_daemon_with(
     config_path: Option<&Path>,
@@ -508,8 +491,10 @@ pub fn run_daemon_with(
     scheduled_loop::run(config_path, roots, paths, boundaries, control, poll_limit)
 }
 
+#[cfg(test)]
 struct DynNotification<'a>(&'a mut dyn NotificationFacade);
 
+#[cfg(test)]
 impl NotificationFacade for DynNotification<'_> {
     fn send(
         &mut self,
@@ -521,43 +506,49 @@ impl NotificationFacade for DynNotification<'_> {
 
 /// Runs production daemon until SIGINT/SIGTERM.
 pub fn run_daemon(config_path: Option<&Path>) -> Result<()> {
+    let clock = ProductionClock::default();
     let mut io = ProductionIo::start()?;
+    let runtime = io.runtime_handle();
+    let commands = io.commands();
+    let dbus = io.dbus();
+    let notifications = io.notifications();
     let stopped = io.stopped();
+    let shutdown = io.shutdown_receiver();
+    let orchestration_done = io.orchestration_done();
     let events = io.take_event_receiver().ok_or_else(|| {
         Error::Runtime("async I/O event receiver was already transferred".to_owned())
     })?;
     let roots = FilesystemRoots::default();
     let paths = DaemonPaths::production();
-    let mut commands = io.commands();
-    let mut dbus = io.dbus();
-    let mut notifications = io.notifications();
-    let mut bolt = BoltHidFacade::default();
-    #[cfg(feature = "nvml")]
-    let mut nvml = gpu_nvidia::ProductionNvml::new();
-    let mut control = ProductionLoopControl {
-        clock: ProductionClock::default(),
-        stopped,
-        events,
-    };
-    let result = {
-        let mut boundaries = DaemonBoundaries {
-            commands: &mut commands,
-            dbus: &mut dbus,
-            notifications: &mut notifications,
-            #[cfg(feature = "nvml")]
-            nvml: Some(&mut nvml),
-            #[cfg(not(feature = "nvml"))]
-            nvml: None,
-            bolt: Some(&mut bolt),
-        };
-        run_daemon_with(
-            config_path,
+    let config_path = config_path.map(Path::to_path_buf);
+    let (result_sender, result_receiver) = std::sync::mpsc::sync_channel(1);
+    runtime.spawn(async move {
+        let result = async_loop::run(
+            config_path.as_deref(),
             &roots,
             &paths,
-            &mut boundaries,
-            &mut control,
-            None,
+            async_loop::DaemonServices {
+                commands,
+                dbus,
+                notifications,
+                stopped,
+                events,
+                clock,
+                shutdown,
+                #[cfg(test)]
+                blocked_owner: None,
+            },
         )
+        .await;
+        let _ = orchestration_done.send(true);
+        let _ = result_sender.send(result);
+    });
+    let result = match result_receiver.recv() {
+        Ok(result) => result,
+        Err(_) if io.critical_failure().is_some() => Ok(()),
+        Err(_) => Err(Error::Runtime(
+            "critical async daemon orchestration task exited unexpectedly".to_owned(),
+        )),
     };
     io.shutdown();
     complete_daemon_run(result, io.critical_failure(), io.shutdown_timed_out())
