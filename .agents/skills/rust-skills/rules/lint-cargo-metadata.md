@@ -72,8 +72,8 @@ feature-a = []  # Feature name matches crate name
 [package]
 name = "my-crate"
 version = "0.1.0"
-edition = "2021"
-rust-version = "1.70"
+edition = "2024"
+rust-version = "1.97.1"
 
 # Required for cargo lint satisfaction
 description = "A short description of what this crate does"

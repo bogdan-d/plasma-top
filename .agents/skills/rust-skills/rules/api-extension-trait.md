@@ -75,7 +75,7 @@ pub trait ResultExt<T, E> {
 
 impl<T, E: std::fmt::Display> ResultExt<T, E> for Result<T, E> {
     fn log_err(self) -> Self {
-        if let Err(ref e) = self {
+        if let Err(e) = &self {
             log::error!("{}", e);
         }
         self

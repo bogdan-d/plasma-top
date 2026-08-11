@@ -136,7 +136,8 @@ resolver = "3"  # default for the 2024 edition; use "2" for 2021
 
 [workspace.package]
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
+rust-version = "1.97.1"
 license = "MIT"
 repository = "https://github.com/user/repo"
 
@@ -169,6 +170,7 @@ criterion = { version = "0.5", features = ["html_reports"] }
 name = "my-core"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 
 [dependencies]

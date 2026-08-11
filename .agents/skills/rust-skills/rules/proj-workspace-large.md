@@ -55,6 +55,10 @@ members = [
     "crates/common",
 ]
 
+[workspace.package]
+edition = "2024"
+rust-version = "1.97.1"
+
 # Shared dependencies - all crates use same versions
 [workspace.dependencies]
 tokio = { version = "1.0", features = ["full"] }
@@ -77,7 +81,8 @@ all = "warn"
 [package]
 name = "my-app-core"
 version = "0.1.0"
-edition = "2021"
+edition.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 # Inherit from workspace

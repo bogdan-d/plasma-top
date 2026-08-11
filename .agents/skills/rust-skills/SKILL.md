@@ -21,7 +21,7 @@ metadata:
 
 # Rust Best Practices
 
-Comprehensive guide for writing high-quality, idiomatic, and highly optimized Rust code. Contains 265 rules across 26 categories, prioritized by impact to guide LLMs in code generation and refactoring. Current for Rust 1.96 (2024 edition).
+Comprehensive guide for writing high-quality, idiomatic, and highly optimized Rust code. Contains 265 rules across 26 categories, prioritized by impact to guide LLMs in code generation and refactoring. Current for Rust 1.97.1 (2024 edition).
 
 ## When to Apply
 
@@ -355,7 +355,7 @@ Reference these guidelines when:
 - [`perf-drain-reuse`](rules/perf-drain-reuse.md) - Use drain to reuse allocations
 - [`perf-extend-batch`](rules/perf-extend-batch.md) - Use extend for batch insertions
 - [`perf-chain-avoid`](rules/perf-chain-avoid.md) - Avoid chain in hot loops
-- [`perf-collect-into`](rules/perf-collect-into.md) - Use collect_into for reusing containers
+- [`perf-collect-into`](rules/perf-collect-into.md) - Use `extend()` for reusing collections on stable Rust
 - [`perf-black-box-bench`](rules/perf-black-box-bench.md) - Use black_box in benchmarks
 - [`perf-release-profile`](rules/perf-release-profile.md) - Optimize release profile settings
 - [`perf-profile-first`](rules/perf-profile-first.md) - Profile before optimizing

@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.97.1
         with:
           components: rustfmt
       - run: cargo fmt --all --check
@@ -30,7 +30,7 @@ jobs:
 
 ```yaml
 fmt:
-  image: rust:latest
+  image: rust:1.97.1
   script:
     - rustup component add rustfmt
     - cargo fmt --all --check
@@ -50,7 +50,7 @@ Create `rustfmt.toml` for custom settings:
 
 ```toml
 # rustfmt.toml
-edition = "2021"
+edition = "2024"
 max_width = 100
 use_small_heuristics = "Max"
 imports_granularity = "Module"

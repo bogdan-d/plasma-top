@@ -58,23 +58,35 @@ impl Repo for PgRepo {
 
 ## Caveats
 
-**Caveat 1 — not dyn-compatible.** Native async fn in traits is not yet object-safe. You cannot write `Box<dyn Repo>` with the definition above. For dynamic dispatch you have two options:
-
-- Keep `#[async_trait]` (it boxes the future, which makes the trait object-safe).
-- Use the `trait-variant` crate's `#[trait_variant::make]` macro, which generates a boxed-future variant alongside your native async trait.
+**Caveat 1 — not dyn-compatible.** Native async fn in traits is not yet dyn-compatible. You cannot write `Box<dyn Repo>` with the definition above. For dynamic dispatch, either keep `#[async_trait]` (it boxes the future), or write a dyn-compatible method that returns a boxed future explicitly:
 
 ```rust
-// using trait-variant to get both a static and a dyn-compatible variant
+use std::{future::Future, pin::Pin};
+
+trait DynRepo: Send + Sync {
+    fn get(&self, id: u64) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + Send + '_>>;
+}
+
+impl DynRepo for PgRepo {
+    fn get(&self, id: u64) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + Send + '_>> {
+        Box::pin(async move { Ok(format!("row-{id}")) })
+    }
+}
+
+fn make_repo() -> Box<dyn DynRepo> {
+    Box::new(PgRepo)
+}
+```
+
+`trait-variant` remains useful for generating a `Send`-bounded trait for static dispatch; it still returns an opaque `impl Future` and cannot be used as `Box<dyn Trait>`:
+
+```rust
 #[trait_variant::make(RepoSend: Send)]
 trait Repo {
     async fn get(&self, id: u64) -> anyhow::Result<String>;
 }
 
-// `RepoSend` is the Send-bounded version; it IS dyn-compatible via boxing
-fn make_repo() -> Box<dyn RepoSend> {
-    // ...
-    # unimplemented!()
-}
+// Use `RepoSend` through generics or `impl RepoSend`, not `dyn RepoSend`.
 ```
 
 **Caveat 2 — futures are not `Send` by default.** On a multi-threaded Tokio runtime, spawned tasks require `Send` futures. The auto-generated future from a native `async fn` in a trait captures `&self` but does not promise `Send`. If you need `Send`, either:
@@ -94,7 +106,7 @@ trait Repo {
 | Scenario | Recommended approach |
 |---|---|
 | Static dispatch only (generics, `impl Trait`) | Native `async fn` in trait |
-| Need `dyn Trait` | `#[async_trait]` or `trait-variant` |
+| Need `dyn Trait` | `#[async_trait]` or a trait method returning `Pin<Box<dyn Future<...>>>` |
 | Multi-threaded Tokio, spawned tasks | `trait-variant` `Send` variant or explicit `+ Send` |
 | Single-threaded runtime / `LocalSet` | Native `async fn` in trait (no `Send` needed) |
 
