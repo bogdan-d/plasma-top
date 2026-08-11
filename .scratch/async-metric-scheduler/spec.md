@@ -110,8 +110,9 @@ Final low-power acceptance compares release builds from a fixed synchronous comm
 2. [Introduce the new domain model and extract owner state](issues/02-domain-model-and-owner-state.md).
 3. [Build the pure scheduler](issues/03-pure-scheduler.md).
 4. [Add Tokio, typed command/D-Bus services, and the Rust 1.87 transition](issues/04-async-io-services.md).
-5. [Cut daemon orchestration over to async owners](issues/05-async-daemon-cutover.md).
-6. [Add inotify and the tooltip presentation protocol](issues/06-event-and-presentation-protocol.md).
-7. [Add scheduler profiling and validate on the development host](issues/07-profiling-and-development-validation.md).
-8. [Run laptop low-power A/B validation](issues/08-laptop-power-validation.md).
-9. [Retune fixed freshness budgets from laptop evidence](issues/09-retune-freshness-budgets.md).
+5. [Adopt Rust 1.97.1 and restore current syntax](issues/05-adopt-rust-1.97.1.md).
+6. [Cut daemon orchestration over to async owners](issues/06-async-daemon-cutover.md).
+7. [Add inotify and the tooltip presentation protocol](issues/07-event-and-presentation-protocol.md).
+8. [Add scheduler profiling and validate on the development host](issues/08-profiling-and-development-validation.md).
+9. [Run laptop low-power A/B validation](issues/09-laptop-power-validation.md).
+10. [Retune fixed freshness budgets from laptop evidence](issues/10-retune-freshness-budgets.md).
