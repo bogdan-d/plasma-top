@@ -114,5 +114,9 @@ Final low-power acceptance compares release builds from a fixed synchronous comm
 6. [Cut daemon orchestration over to async owners](issues/06-async-daemon-cutover.md).
 7. [Add inotify and the tooltip presentation protocol](issues/07-event-and-presentation-protocol.md).
 8. [Add scheduler profiling and validate on the development host](issues/08-profiling-and-development-validation.md).
-9. [Run laptop low-power A/B validation](issues/09-laptop-power-validation.md).
-10. [Retune fixed freshness budgets from laptop evidence](issues/10-retune-freshness-budgets.md).
+9. [Coalesce graph page rendering](issues/11-coalesce-graph-page-rendering.md).
+10. [Gate absent brightness sampling](issues/12-gate-absent-brightness-sampling.md).
+11. [Diagnose disk-I/O discovery failures](issues/13-diagnose-disk-io-discovery-failures.md).
+12. [Compare synchronous and async daemon runtime](issues/14-compare-sync-async-daemon-runtime.md).
+13. [Run laptop low-power A/B validation](issues/09-laptop-power-validation.md).
+14. [Retune fixed freshness budgets from laptop evidence](issues/10-retune-freshness-budgets.md).
