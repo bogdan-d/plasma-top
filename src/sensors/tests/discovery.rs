@@ -328,6 +328,51 @@ fn route_reconciliation_retains_failure_and_captures_confirmed_absence() {
 }
 
 #[test]
+fn disk_io_reconciliation_captures_unsupported_source_and_adopts_later_device() {
+    let tree = TempTree::new();
+    tree.write("proc/mounts", "composefs / overlay rw 0 0\n");
+    let mut hw = HardwareInventory {
+        disk_io_device: Some(String::from("old-disk")),
+        ..HardwareInventory::default()
+    };
+    let mut dbus = FakeDbus::new();
+    let mut commands = FakeCommandRunner::new();
+    let reconcile =
+        |hw: &mut HardwareInventory, dbus: &mut FakeDbus, commands: &mut FakeCommandRunner| {
+            crate::sensors::reconcile_inventory_family(
+                crate::domain::readings::InventoryFamily::DiskIo,
+                hw,
+                &tree.sys(),
+                &tree.proc(),
+                &Config::default(),
+                dbus,
+                commands,
+            )
+        };
+
+    assert_eq!(
+        reconcile(&mut hw, &mut dbus, &mut commands),
+        ReconciliationOutcome::Captured
+    );
+    assert!(hw.disk_io_device.is_none());
+
+    tree.mkdir("sys/class/block/sda");
+    tree.write("proc/mounts", "/dev/sda / ext4 rw 0 0\n");
+    assert_eq!(
+        reconcile(&mut hw, &mut dbus, &mut commands),
+        ReconciliationOutcome::Captured
+    );
+    assert_eq!(hw.disk_io_device.as_deref(), Some("sda"));
+
+    tree.write("proc/mounts", "malformed\n");
+    assert_eq!(
+        reconcile(&mut hw, &mut dbus, &mut commands),
+        ReconciliationOutcome::Failed
+    );
+    assert_eq!(hw.disk_io_device.as_deref(), Some("sda"));
+}
+
+#[test]
 fn battery_reconciliation_retains_dbus_failure_and_captures_absence() {
     let tree = TempTree::new();
     let mut hw = HardwareInventory {
@@ -824,7 +869,7 @@ fn incomplete_local_enumerations_retain_inventory_until_completed_absence() {
     assert!(!hw.has_nvidia);
     assert!(hw.intel_gpu_freq_path.is_none());
     assert!(hw.intel_gpu_pci.is_none());
-    assert!(hw.disk_io_device.is_none());
+    assert_eq!(hw.disk_io_device.as_deref(), Some("old-disk"));
     assert!(!hw.has_backlight);
     assert!(!hw.has_wifi);
 }

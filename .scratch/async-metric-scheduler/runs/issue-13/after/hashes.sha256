@@ -1,0 +1,3 @@
+fbfaf56f97b6688f2813cdde1b39916f2b4580cb494d6d0eadb76c6ebe1aa6bc  target/release/plasma-top
+50260ac6747364493d1588250134bfda2fce9420ec6cc8a8994ba610efca6718  config/config.toml
+ecb8de2d8f8babd7c946cca387cad473114cf768329e8ec7619c80eb786e7796  Cargo.lock

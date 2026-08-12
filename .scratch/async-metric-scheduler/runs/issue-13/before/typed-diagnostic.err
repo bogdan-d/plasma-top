@@ -1,0 +1,3 @@
+   Compiling plasma-top v0.2.0 (/var/mnt/xdata/code/_self/plasma-top)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.00s
+     Running unittests src/lib.rs (target/debug/deps/plasma_top-046a9f9166b21938)

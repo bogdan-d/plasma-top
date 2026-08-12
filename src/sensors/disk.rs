@@ -319,13 +319,26 @@ pub(crate) fn detect_disk_io_device_outcome(
     let source = parse_mounts_outcome(&text)?
         .into_iter()
         .find(|entry| entry.mountpoint == mount)
-        .map(|entry| entry.source);
-    source
-        .map(|source| {
-            let allow_missing = source.starts_with("/dev/mapper/");
-            whole_disk_of_outcome(sys_root, &device_basename(&source), allow_missing)
+        .map(|entry| entry.source)
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "requested mount entry is unavailable",
+            )
+        })?;
+    if !Path::new(&source).is_absolute() {
+        return Ok(None);
+    }
+    let allow_missing = source.starts_with("/dev/mapper/");
+    let device = fs::canonicalize(&source)
+        .ok()
+        .and_then(|target| {
+            target
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
         })
-        .transpose()
+        .unwrap_or_else(|| device_basename(&source));
+    whole_disk_of_outcome(sys_root, &device, allow_missing).map(Some)
 }
 
 /// Discovers supported whole-disk identities from sysfs.

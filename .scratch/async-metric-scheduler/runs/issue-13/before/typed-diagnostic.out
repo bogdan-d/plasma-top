@@ -1,0 +1,6 @@
+
+running 1 test
+result=Err kind=NotFound message=block device is unavailable in sysfs
+test sensors::disk::tests::print_live_root_disk_io_discovery_result ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 561 filtered out; finished in 0.00s

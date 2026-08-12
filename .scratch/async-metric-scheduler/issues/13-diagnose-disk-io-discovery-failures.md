@@ -1,7 +1,7 @@
 # Diagnose disk-I/O discovery failures
 
 Type: task
-Status: ready-for-agent
+Status: resolved
 Blocked by: 08
 
 ## Objective
@@ -34,3 +34,11 @@ Raw reports are `.scratch/async-metric-scheduler/runs/development/candidate-fina
 ## Validation
 
 Run focused disk discovery, catalog, scheduler backoff, inventory reconciliation, and async-loop tests; repeat normal and CPU-0 `main` profiling; then run the full repository gates from `docs/DEVELOPMENT.md`.
+
+## Answer
+
+The exact live failure was `NotFound: block device is unavailable in sysfs`. The root mount source is the stable pseudo source `composefs` with overlay filesystem type, so no `/sys/class/block/composefs` should exist. The resolver now classifies such successfully parsed non-path sources as confirmed unsupported absence instead of a transient boundary failure.
+
+Absolute device sources continue through canonical target/basename and sysfs resolution, preserving ordinary disks, partitions, mapper identities, and alternate symlinks. Missing, unreadable, malformed, or incomplete procfs/sysfs boundaries remain errors and bounded retries. Fixtures cover those distinctions plus identity appearance, change, removal, and stale completion safety.
+
+All three normal and three CPU-0 release `main` runs changed from six failed DiskIo inventory attempts to one captured absence at normal inventory cadence. Worst first paint was 105.326 ms, publication p99 2.382 ms, shutdown 6.242 ms, and no SLO threshold or display deadline was missed. Focused tests and all repository gates passed. Typed diagnostic output, topology, commands, hashes, raw profiles, and limitations are in `.scratch/async-metric-scheduler/runs/issue-13/`.

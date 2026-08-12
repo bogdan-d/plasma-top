@@ -1,0 +1,74 @@
+$ awk '$2=="/" {print}' /proc/mounts
+composefs / overlay ro,seclabel,relatime,lowerdir+=/run/ostree/.private/cfsroot-lower,datadir+=/sysroot/ostree/repo/objects,redirect_dir=on,metacopy=on 0 0
+$ findmnt -R / -o TARGET,SOURCE,FSTYPE,MAJ:MIN
+TARGET                                                                                                SOURCE                                                                                                                     FSTYPE          MAJ:MIN
+/                                                                                                     composefs                                                                                                                  overlay           0:39
+├─/dev                                                                                                devtmpfs                                                                                                                   devtmpfs          0:7
+│ ├─/dev/mqueue                                                                                       mqueue                                                                                                                     mqueue            0:22
+│ ├─/dev/hugepages                                                                                    hugetlbfs                                                                                                                  hugetlbfs         0:43
+│ ├─/dev/shm                                                                                          tmpfs                                                                                                                      tmpfs             0:27
+│ └─/dev/pts                                                                                          devpts                                                                                                                     devpts            0:28
+├─/etc                                                                                                /dev/nvme1n1p3[/@root/ostree/deploy/default/deploy/0068bf17e499933b69b280f6e12b53805d0df7114194c77e94077b2b3ae695bc.0/etc] btrfs             0:35
+├─/sysroot                                                                                            /dev/nvme1n1p3[/@root]                                                                                                     btrfs             0:35
+│ └─/sysroot/ostree/deploy/default/var                                                                /dev/nvme1n1p3[/@root/ostree/deploy/default/var]                                                                           btrfs             0:35
+├─/sys                                                                                                sysfs                                                                                                                      sysfs             0:26
+│ ├─/sys/fs/selinux                                                                                   selinuxfs                                                                                                                  selinuxfs         0:23
+│ ├─/sys/kernel/tracing                                                                               tracefs                                                                                                                    tracefs           0:14
+│ ├─/sys/kernel/debug                                                                                 debugfs                                                                                                                    debugfs           0:9
+│ ├─/sys/fs/fuse/connections                                                                          fusectl                                                                                                                    fusectl           0:42
+│ ├─/sys/kernel/security                                                                              securityfs                                                                                                                 securityfs        0:8
+│ ├─/sys/fs/cgroup                                                                                    cgroup2                                                                                                                    cgroup2           0:30
+│ ├─/sys/fs/pstore                                                                                    none                                                                                                                       pstore            0:31
+│ ├─/sys/firmware/efi/efivars                                                                         efivarfs                                                                                                                   efivarfs          0:32
+│ ├─/sys/fs/bpf                                                                                       bpf                                                                                                                        bpf               0:33
+│ └─/sys/kernel/config                                                                                configfs                                                                                                                   configfs          0:20
+├─/proc                                                                                               proc                                                                                                                       proc              0:25
+│ └─/proc/sys/fs/binfmt_misc                                                                          systemd-1                                                                                                                  autofs            0:34
+│   └─/proc/sys/fs/binfmt_misc                                                                        binfmt_misc                                                                                                                binfmt_misc       0:61
+├─/run                                                                                                tmpfs                                                                                                                      tmpfs             0:29
+│ ├─/run/credentials/systemd-journald.service                                                         none                                                                                                                       tmpfs             0:44
+│ ├─/run/user/1000                                                                                    tmpfs                                                                                                                      tmpfs             0:90
+│ │ ├─/run/user/1000/gvfs                                                                             gvfsd-fuse                                                                                                                 fuse.gvfsd-fuse   0:91
+│ │ └─/run/user/1000/doc                                                                              portal                                                                                                                     fuse.portal       0:94
+│ ├─/run/credentials/systemd-resolved.service                                                         none                                                                                                                       tmpfs             0:49
+│ ├─/run/media/bogdan/T_01                                                                            /dev/sda1                                                                                                                  xfs               8:1
+│ ├─/run/media/bogdan/S_04                                                                            /dev/sdd1                                                                                                                  xfs               8:49
+│ ├─/run/docker/netns/fbef01262d1e                                                                    nsfs[net:[4026533590]]                                                                                                     nsfs              0:5
+│ ├─/run/docker/netns/f1b6951e96c0                                                                    nsfs[net:[4026533748]]                                                                                                     nsfs              0:5
+│ ├─/run/docker/netns/07d30a5c358b                                                                    nsfs[net:[4026533669]]                                                                                                     nsfs              0:5
+│ ├─/run/docker/netns/b0a9f58ffd61                                                                    nsfs[net:[4026533833]]                                                                                                     nsfs              0:5
+│ ├─/run/docker/netns/18b5928d58ec                                                                    nsfs[net:[4026533914]]                                                                                                     nsfs              0:5
+│ ├─/run/docker/netns/64a9c9d71eaa                                                                    nsfs[net:[4026533993]]                                                                                                     nsfs              0:5
+│ └─/run/docker/netns/2113aa23ea48                                                                    nsfs[net:[4026534078]]                                                                                                     nsfs              0:5
+├─/tmp                                                                                                tmpfs                                                                                                                      tmpfs             0:58
+├─/var                                                                                                /dev/nvme1n1p3[/@var]                                                                                                      btrfs             0:35
+│ ├─/var/home                                                                                         /dev/nvme1n1p3[/@home]                                                                                                     btrfs             0:35
+│ ├─/var/mnt/xdata                                                                                    /dev/nvme0n1                                                                                                               btrfs             0:60
+│ ├─/var/lib/nfs/rpc_pipefs                                                                           sunrpc                                                                                                                     rpc_pipefs        0:63
+│ ├─/var/lib/docker/rootfs/overlayfs/fb204abda91d1b5e411fbedd469cb27e36615147b7c4d854ae0dd9f3f069e42b overlay                                                                                                                    overlay           0:117
+│ ├─/var/lib/docker/rootfs/overlayfs/a910ae98c60cace473ad91406f6eca60b747c9d8ecc3515e2b1af1c9b20a243f overlay                                                                                                                    overlay           0:119
+│ ├─/var/lib/docker/rootfs/overlayfs/6168040b3af630ef080f565bb00dda134fa6590c0fe57a55c104ca1ae5213fd3 overlay                                                                                                                    overlay           0:118
+│ ├─/var/lib/docker/rootfs/overlayfs/71ec62399e1b8d4e47422e5a26b0f19e6c585dfaa0eda9131e66a19c321e6d3a overlay                                                                                                                    overlay           0:139
+│ ├─/var/lib/docker/rootfs/overlayfs/a74da39f3678bdd4618aca550eb42f52c83cfa0bdd33c7a2ae800ed7969cab0a overlay                                                                                                                    overlay           0:142
+│ ├─/var/lib/docker/rootfs/overlayfs/53ea4364c83fb49e8345b014be503c3ff224e4a53258ea184c23247d95fcc45f overlay                                                                                                                    overlay           0:141
+│ └─/var/lib/docker/rootfs/overlayfs/d856fa843bcf3e743246a6fca3ee96e53d65bfb2eda3630e1e7d121bede5d1d6 overlay                                                                                                                    overlay           0:145
+└─/boot                                                                                               /dev/nvme1n1p2                                                                                                             ext4            259:2
+  └─/boot/efi                                                                                         /dev/nvme1n1p1                                                                                                             vfat            259:1
+$ lsblk -o NAME,KNAME,TYPE,PKNAME,MAJ:MIN,MOUNTPOINTS
+NAME        KNAME     TYPE PKNAME  MAJ:MIN MOUNTPOINTS
+sda         sda       disk           8:0
+└─sda1      sda1      part sda       8:1   /run/media/bogdan/T_01
+sdd         sdd       disk           8:48
+└─sdd1      sdd1      part sdd       8:49  /run/media/bogdan/S_04
+zram0       zram0     disk         251:0   [SWAP]
+nvme1n1     nvme1n1   disk         259:0
+├─nvme1n1p1 nvme1n1p1 part nvme1n1 259:1   /boot/efi
+├─nvme1n1p2 nvme1n1p2 part nvme1n1 259:2   /boot
+└─nvme1n1p3 nvme1n1p3 part nvme1n1 259:3   /var/home
+                                           /var
+                                           /sysroot/ostree/deploy/default/var
+                                           /sysroot
+                                           /etc
+nvme0n1     nvme0n1   disk         259:4   /var/mnt/xdata
+$ stat /sys/class/block/composefs
+stat: cannot statx '/sys/class/block/composefs': No such file or directory

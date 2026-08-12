@@ -1,0 +1,1 @@
+/usr/bin/time -v -o .scratch/async-metric-scheduler/runs/issue-13/after/normal-main-3.time /var/mnt/xdata/code/_self/plasma-top/target/release/plasma-top profiling --config /var/mnt/xdata/code/_self/plasma-top/config/config.toml --duration 4.2 --scenario main

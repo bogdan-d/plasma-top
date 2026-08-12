@@ -2,7 +2,10 @@ use super::*;
 
 use std::fs;
 use std::os::unix::fs::symlink;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+static NEXT_TEMP: AtomicU64 = AtomicU64::new(1);
 
 fn clock_at(seconds: u64) -> ClockSnapshot {
     ClockSnapshot {
@@ -21,8 +24,11 @@ impl TempTree {
             .duration_since(UNIX_EPOCH)
             .unwrap_or(Duration::ZERO)
             .as_nanos();
-        let root =
-            std::env::temp_dir().join(format!("plasma-top-disk-{}-{unique}", std::process::id()));
+        let sequence = NEXT_TEMP.fetch_add(1, Ordering::Relaxed);
+        let root = std::env::temp_dir().join(format!(
+            "plasma-top-disk-{}-{unique}-{sequence}",
+            std::process::id()
+        ));
         if let Err(error) = fs::create_dir_all(&root) {
             panic!("failed to create temp root {}: {error}", root.display());
         }
@@ -302,17 +308,102 @@ fn detect_disk_io_device_keeps_mapper_name_when_no_single_parent_exists() {
 }
 
 #[test]
-fn detect_disk_io_device_reports_malformed_mounts_and_incomplete_sysfs() {
-    let malformed = TempTree::new();
-    malformed.write("proc/mounts", "malformed\n");
+fn detect_disk_io_device_resolves_alternate_absolute_device_symlink() {
+    let tmp = TempTree::new();
+    tmp.write("dev/sda", "");
+    tmp.symlink_dir("dev/sda", "dev/disk/by-id/root");
+    tmp.write(
+        "proc/mounts",
+        &format!(
+            "{} / ext4 rw 0 0\n",
+            tmp.path().join("dev/disk/by-id/root").display()
+        ),
+    );
+    tmp.mkdir("sys/class/block/sda");
+
+    assert_eq!(
+        detect_disk_io_device(&tmp.path().join("proc"), &tmp.path().join("sys"), "/"),
+        Some(String::from("sda"))
+    );
+}
+
+#[test]
+fn detect_disk_io_device_confirms_composefs_overlay_as_unsupported() {
+    let tmp = TempTree::new();
+    tmp.write("proc/mounts", "composefs / overlay rw 0 0\n");
+
+    assert!(matches!(
+        detect_disk_io_device_outcome(&tmp.path().join("proc"), &tmp.path().join("sys"), "/"),
+        Ok(None)
+    ));
+}
+
+#[test]
+fn detect_disk_io_device_reports_missing_and_malformed_mounts() {
+    let missing = TempTree::new();
+    let Err(error) = detect_disk_io_device_outcome(
+        &missing.path().join("proc"),
+        &missing.path().join("sys"),
+        "/",
+    ) else {
+        panic!("missing mounts must fail")
+    };
+    assert_eq!(error.kind(), io::ErrorKind::NotFound);
+    assert_eq!(error.to_string(), "mount enumeration is unavailable");
+
+    let unreadable = TempTree::new();
+    unreadable.mkdir("proc/mounts");
     assert!(
         detect_disk_io_device_outcome(
-            &malformed.path().join("proc"),
-            &malformed.path().join("sys"),
-            "/"
+            &unreadable.path().join("proc"),
+            &unreadable.path().join("sys"),
+            "/",
         )
-        .is_err()
+        .is_err(),
+        "an unreadable mounts boundary must fail"
     );
+
+    let malformed = TempTree::new();
+    malformed.write("proc/mounts", "malformed\n");
+    let Err(error) = detect_disk_io_device_outcome(
+        &malformed.path().join("proc"),
+        &malformed.path().join("sys"),
+        "/",
+    ) else {
+        panic!("malformed mounts must fail")
+    };
+    assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    assert_eq!(error.to_string(), "malformed mount entry");
+}
+
+#[test]
+fn detect_disk_io_device_rejects_mount_tables_without_requested_root() {
+    for mounts in ["", "/dev/sda1 /home ext4 rw 0 0\n"] {
+        let tmp = TempTree::new();
+        tmp.write("proc/mounts", mounts);
+        let Err(error) =
+            detect_disk_io_device_outcome(&tmp.path().join("proc"), &tmp.path().join("sys"), "/")
+        else {
+            panic!("a mount table without root must fail")
+        };
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert_eq!(error.to_string(), "requested mount entry is unavailable");
+    }
+}
+
+#[test]
+fn detect_disk_io_device_requires_complete_sysfs_for_device_sources() {
+    let missing = TempTree::new();
+    missing.write("proc/mounts", "/dev/nvme0n1p2 / ext4 rw 0 0\n");
+    let Err(error) = detect_disk_io_device_outcome(
+        &missing.path().join("proc"),
+        &missing.path().join("sys"),
+        "/",
+    ) else {
+        panic!("missing block device must fail")
+    };
+    assert_eq!(error.kind(), io::ErrorKind::NotFound);
+    assert_eq!(error.to_string(), "block device is unavailable in sysfs");
 
     let incomplete = TempTree::new();
     incomplete.write("proc/mounts", "/dev/nvme0n1p2 / ext4 rw 0 0\n");
@@ -323,7 +414,8 @@ fn detect_disk_io_device_reports_malformed_mounts_and_incomplete_sysfs() {
             &incomplete.path().join("sys"),
             "/"
         )
-        .is_err()
+        .is_err(),
+        "unreadable sysfs shape must remain a boundary failure"
     );
 }
 
