@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::time::Duration;
 
 use crate::domain::readings::{BatterySystemReading, DiskUsageReading, DisplaySnapshot};
 use crate::scheduler::{JobId, JobKind, OwnerId, SourceIdentity};
@@ -143,4 +144,48 @@ fn aggregate_cpu_source_replacement_invalidates_the_composite_sample() {
     assert_eq!(readings.cpu_turbo, None);
     assert_eq!(readings.uptime_seconds, None);
     assert_eq!(readings.load_average, None);
+}
+
+#[test]
+fn brightness_removal_invalidates_only_brightness_external_data() {
+    let mut owners = Owners::new();
+    owners
+        .external
+        .brightness
+        .record_value(40, Duration::from_secs(1));
+    owners
+        .external
+        .updates
+        .record_value(7, Duration::from_secs(1));
+    owners.external.updates_source = Some(PathBuf::from("/run/updates"));
+    owners
+        .external
+        .server
+        .record_value(true, Duration::from_secs(1));
+    owners.external.server_source = Some(PathBuf::from("/run/server"));
+    let mut readings = DisplaySnapshot {
+        screen_brightness: Some(40),
+        system_updates: Some(7),
+        server_ok: Some(true),
+        ..DisplaySnapshot::default()
+    };
+
+    invalidate_scheduled_job(
+        &JobId::singleton(OwnerId::External, JobKind::Brightness),
+        owners.refs(),
+        &mut readings,
+    );
+
+    assert!(owners.external.brightness.latest.is_none());
+    assert_eq!(readings.screen_brightness, None);
+    assert_eq!(readings.system_updates, Some(7));
+    assert_eq!(readings.server_ok, Some(true));
+    assert_eq!(
+        owners.external.updates_source,
+        Some(PathBuf::from("/run/updates"))
+    );
+    assert_eq!(
+        owners.external.server_source,
+        Some(PathBuf::from("/run/server"))
+    );
 }

@@ -1,7 +1,7 @@
 # Gate absent brightness sampling
 
 Type: task
-Status: ready-for-agent
+Status: resolved
 Blocked by: 08
 
 ## Objective
@@ -33,3 +33,9 @@ Raw reports are `.scratch/async-metric-scheduler/runs/development/candidate-fina
 ## Validation
 
 Run focused catalog, inventory-reconciliation, invalidation, external-sensor, render, and async-loop tests; repeat steady `main` profiling without a backlight; then run the full repository gates from `docs/DEVELOPMENT.md`.
+
+## Answer
+
+Brightness sampling jobs now require confirmed backlight inventory, while configured brightness surfaces retain the independent 60-second Backlight inventory demand. Inventory appearance adds and immediately schedules Brightness through normal reconciliation; removal cancels the job and invalidates only brightness data. A discovered device's transient read failure retains its last-good value and follows scheduler backoff, and unrelated external-file jobs are unchanged.
+
+On the no-backlight development host, all three 4.2-second release `main` runs changed from six failed brightness attempts to zero while retaining one successful Backlight inventory attempt. Worst first paint was 105.254 ms, publication p99 1.822 ms, shutdown 6.703 ms, and no display deadline or SLO threshold was missed. Focused tests and all repository gates passed. Commands, hashes, raw reports, and limitations are in `.scratch/async-metric-scheduler/runs/issue-12/`.

@@ -312,9 +312,7 @@ impl<'a> Catalog<'a> {
             | Metric::GpuNvidiaFanSpeed => self.nvidia_jobs(),
             Metric::GpuIntelFreq => self.intel_frequency_jobs(),
             Metric::GpuIntelUsage | Metric::GpuIntelDecoderUsage => self.intel_usage_jobs(),
-            Metric::ScreenBrightness => {
-                vec![self.fast_singleton(OwnerId::External, JobKind::Brightness)]
-            }
+            Metric::ScreenBrightness => self.brightness_jobs(),
             Metric::FanSpeed => self.fan_jobs(),
             Metric::BatterySystem => self.system_battery_jobs(),
             Metric::BatteryMouse => self.peripheral_jobs(PeripheralRole::Mouse),
@@ -388,9 +386,7 @@ impl<'a> Catalog<'a> {
             Capability::GpuNvidia => self.nvidia_jobs(),
             Capability::GpuIntelFrequency => self.intel_frequency_jobs(),
             Capability::GpuIntelUsage | Capability::GpuIntelDecoder => self.intel_usage_jobs(),
-            Capability::ScreenBrightness => {
-                vec![self.fast_singleton(OwnerId::External, JobKind::Brightness)]
-            }
+            Capability::ScreenBrightness => self.brightness_jobs(),
             Capability::FanSpeed => self.fan_jobs(),
             Capability::BatterySystem => self.system_battery_jobs(),
             Capability::BatteryMouse => self.peripheral_jobs(PeripheralRole::Mouse),
@@ -459,6 +455,13 @@ impl<'a> Catalog<'a> {
             )));
         }
         jobs
+    }
+
+    fn brightness_jobs(&mut self) -> Vec<JobId> {
+        if !self.hw.has_backlight {
+            return Vec::new();
+        }
+        vec![self.fast_singleton(OwnerId::External, JobKind::Brightness)]
     }
 
     fn page_jobs(&mut self, page: &PageId) -> BTreeSet<JobId> {

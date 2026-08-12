@@ -181,18 +181,18 @@ fn missed_periodic_ticks_skip_catch_up_and_keep_phase() {
 }
 
 #[test]
-fn failure_backoff_doubles_and_caps_at_freshness_budget() {
-    let updates = job(OwnerId::External, JobKind::UpdatesFile);
+fn brightness_failure_backoff_doubles_and_caps_at_display_freshness() {
+    let brightness = job(OwnerId::External, JobKind::Brightness);
     let mut scheduler = Scheduler::new();
     let initial = startup(
         &mut scheduler,
         config(
             Duration::from_secs(10),
-            vec![JobSpec::triggered(
-                updates.clone(),
+            vec![JobSpec::fast(
+                brightness.clone(),
                 Duration::from_millis(500),
             )],
-            [updates],
+            [brightness],
         ),
     );
     let mut ticket = first_start(&initial);

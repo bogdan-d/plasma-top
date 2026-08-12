@@ -516,6 +516,45 @@ fn grouped_command_battery_intel_and_external_reads_get_distinct_capture_times()
 }
 
 #[test]
+fn discovered_backlight_failure_retains_last_good_brightness() {
+    let tree = TempTree::new();
+    tree.write("sys/class/backlight/panel/brightness", "40\n");
+    tree.write("sys/class/backlight/panel/max_brightness", "100\n");
+    let cfg = cfg_panel(&["screen_brightness"]);
+    let caps = BTreeSet::from([Capability::ScreenBrightness]);
+    let mut state = ExternalState::default();
+    let mut timings = None;
+
+    let captured = attempt_external(
+        &mut state,
+        &tree.sys(),
+        &cfg,
+        &caps,
+        &mut fixed_clock(1),
+        &mut timings,
+    );
+    assert_eq!(captured.brightness.status, AttemptStatus::Captured);
+    assert_eq!(captured.brightness.sample.expect("brightness").value, 40);
+
+    fs::remove_file(tree.root.join("sys/class/backlight/panel/brightness"))
+        .expect("remove brightness boundary");
+    let failed = attempt_external(
+        &mut state,
+        &tree.sys(),
+        &cfg,
+        &caps,
+        &mut fixed_clock(2),
+        &mut timings,
+    );
+    assert_eq!(failed.brightness.status, AttemptStatus::Failed);
+    assert_eq!(
+        failed.brightness.sample.expect("retained brightness").value,
+        40
+    );
+    assert_eq!(state.brightness.attempted_at, Some(Duration::from_secs(2)));
+}
+
+#[test]
 fn cpu_owner_invalid_delta_retains_sample_without_fabricating_history() {
     let tree = TempTree::new();
     baseline_proc(&tree);

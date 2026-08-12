@@ -1,0 +1,11 @@
+# Issue 12 absent-brightness evidence
+
+Captured on the development host from base `1d163fed01b54b92b9f1e63455e106617ba6ce9e`. `/sys/class/backlight` contained no devices. `before/` and `after/` retain release build commands, source and binary hashes, three 4.2-second normal `main` commands, raw scheduler reports, and `/usr/bin/time -v` output.
+
+Before the fix, every run kept one successful `Inventory(Backlight)` reconciliation but dispatched six `External:Brightness` attempts, all failed. After the fix, every run kept the one successful inventory reconciliation and reported no `External:Brightness` job, which means zero brightness sampling attempts. The absence is confirmed inventory data rather than a suppressed read failure.
+
+Brightness job construction now requires `HardwareInventory.has_backlight`; configured surfaces continue to add the 60-second Backlight inventory job independently. Deterministic scheduler tests show confirmed appearance introduces and immediately starts Brightness, while confirmed removal cancels and invalidates it. Sensor tests show transient unreadability on discovered hardware records a failed attempt while retaining the last-good sample, and scheduler tests retain bounded exponential backoff. UpdatesFile and ServerFile remain triggered jobs and selective invalidation leaves them unchanged.
+
+The final runs had worst first paint 105.254 ms, scheduled publication p99 1.822 ms, and shutdown 6.703 ms. Every run reported zero skipped display deadlines, zero first paints over 250 ms, zero publications over 50 ms, and `final_status: ok`.
+
+Independent verification passed focused catalog, inventory reconciliation, invalidation, external sampling, render, scheduler-backoff, and async-loop tests plus all gates in `docs/DEVELOPMENT.md`: locked dependency stability, formatting, all-target/all-feature check, Clippy with warnings denied, all-target/all-feature tests, docs, repository gate, shell syntax, user-install test, package-layout test, `git diff --check`, and touched handwritten line limits. Qt verification was not applicable because production rendering, QML, CSS, and localization did not change. Physical backlight hotplug/removal was unavailable on this host; deterministic inventory tests cover those transitions.

@@ -41,8 +41,8 @@ use crate::test_support::{FakeClock, FakeCommandRunner, FakeDbus};
 
 use super::{
     AttemptStatus, NETWORK_COMMAND_TIMEOUT, OwnerRefs, Timings, attempt_cpu, attempt_cpu_cores,
-    attempt_disk_io, attempt_disk_temperature, attempt_intel_usage, attempt_memory,
-    attempt_network_info, attempt_network_speed, attempt_process, collect,
+    attempt_disk_io, attempt_disk_temperature, attempt_external, attempt_intel_usage,
+    attempt_memory, attempt_network_info, attempt_network_speed, attempt_process, collect,
     collect_with_notifications, cpu, detect_net_device, discover_hardware, disk, gpu_intel, memory,
     needs_periph_rescan, process, rescan_peripherals, sample_due, timed,
 };

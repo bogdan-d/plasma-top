@@ -18,6 +18,8 @@ use super::scheduler_config as build_scheduler_config;
 
 static NEXT_TEMP: AtomicU64 = AtomicU64::new(1);
 
+mod brightness;
+
 struct TempTree(PathBuf);
 
 impl TempTree {
