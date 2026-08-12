@@ -6,7 +6,7 @@ Choose checks by changed behavior, starting with the smallest sufficient rung. R
 2. Render/CSS/RichText: run `tools/qt_render_matrix.sh --no-build` on a host or approved environment with PyQt6 and Qt SVG support; inspect contact sheet.
 3. Applet/runtime integration: run `tools/qml_verify.sh --smoke` in Plasma.
 4. Interactive application-form behavior: run `tools/qml_verify.sh`.
-5. Panel orientation, hover, pinning, and wheel behavior: run `tools/plasma_live_matrix.sh`; `plasmawindowed` cannot emulate panel form factors.
+5. Panel orientation, hover, pinning, and wheel behavior: use an explicitly approved real Plasma session; `plasmawindowed` cannot emulate panel form factors. The live-matrix script is disabled until `.scratch/plasmoidviewer-validation/` is resolved.
 
 Optional static tools:
 

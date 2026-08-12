@@ -7,9 +7,8 @@ Rust is the sole runtime implementation.
 - Rust 1.97.1 with Cargo, rustfmt, and Clippy
 - Python 3 for optional Qt/QML verification; PyQt6 and Qt SVG support for screenshot tools
 - `kpackagetool6` and `plasmawindowed` for isolated applet verification
-- `plasmoidviewer` from Plasma SDK plus `ydotool`, `ydotoold`, and `awk` for live horizontal and vertical panel verification
 
-`tools/plasma_live_matrix.sh` uses a host `plasmoidviewer` when available and otherwise supports an existing Distrobox named `plasma-top-plasma-sdk`. Run each verification script with `--help` for its exact prerequisites and modes.
+`tools/plasma_live_matrix.sh` is temporarily disabled while its Plasma SDK integration is repaired under `.scratch/plasmoidviewer-validation/`. Use the automated application-form checks below and perform panel or desktop representation checks only in an explicitly approved real Plasma session.
 
 ## Verification
 
@@ -37,10 +36,10 @@ Use the smallest check that exercises the changed behavior:
 | Render, CSS, or Qt RichText | `tools/qt_render_matrix.sh --no-build` |
 | Applet/runtime integration | `tools/qml_verify.sh --smoke` |
 | Interactive application-form behavior | `tools/qml_verify.sh` |
-| Panel orientation, geometry, hover, pinning, or wheel behavior | `tools/plasma_live_matrix.sh` and, when needed, `tools/plasma_live_matrix.sh --interactive` |
-| Desktop representation or appearance settings | `tools/plasma_live_matrix.sh --planar` |
+| Panel orientation, geometry, hover, pinning, or wheel behavior | Manual real-session verification with explicit approval |
+| Desktop representation or appearance settings | Manual real-session verification with explicit approval |
 
-`plasmawindowed` cannot emulate panel form factors. Use the live matrix for horizontal and vertical compact representations rather than treating an application-form pass as panel evidence. All three scripts use disposable XDG roots and do not modify the installed widget, production runtime, or real Plasma configuration.
+`plasmawindowed` cannot emulate panel form factors, so do not treat an application-form pass as panel evidence. The automated scripts use disposable XDG roots and do not modify the installed widget, production runtime, or real Plasma configuration.
 
 Run `tools/qt_render_matrix.sh --no-build` on a host with PyQt6 and Qt SVG support for render/QML changes or release verification. Set `PYTHON` when PyQt6 is not available through `python3`. On immutable hosts, run it without layering packages:
 
@@ -49,7 +48,7 @@ uv run --with PyQt6 -- bash -c \
   'PYTHON="$(command -v python)" exec tools/qt_render_matrix.sh --no-build'
 ```
 
-The Qt matrix writes rendered HTML, PNGs, logs, an environment manifest, and a contact sheet under `.test-artifacts/plasma/qt/`. Inspect `.test-artifacts/plasma/qt/contact-sheet.png`; a passing rasterization is not a visual review. The live matrix writes geometry, command traces, and QML/daemon logs under `.test-artifacts/plasma/live/`.
+The Qt matrix writes rendered HTML, PNGs, logs, an environment manifest, and a contact sheet under `.test-artifacts/plasma/qt/`. Inspect `.test-artifacts/plasma/qt/contact-sheet.png`; a passing rasterization is not a visual review.
 
 Optional `qmllint` checks can find syntax, import, type, binding, and deprecated-API problems, but Plasma metadata and dynamic context properties can produce false positives. Lint is not a substitute for runtime verification.
 

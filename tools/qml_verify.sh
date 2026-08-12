@@ -13,7 +13,7 @@ Launch an isolated Plasma applet backed by the Rust daemon.
   --no-build  Reuse target/release/plasma-top.
 
 Without --smoke, close the plasmawindowed window to finish an Application-form inspection.
-`plasmawindowed` cannot emulate panel form factors; use tools/plasma_live_matrix.sh for horizontal/vertical interaction checks.
+`plasmawindowed` cannot emulate panel form factors; those checks currently require an explicitly approved real-session pass.
 All temporary files and the user-local test applet copy are removed on exit.
 EOF
 }
@@ -226,7 +226,7 @@ Isolated QML verification running.
   applet:    $qml_pid
 
 Application-form inspection only; this host does not exercise compact panel behavior.
-Close plasmawindowed to clean up. Run tools/plasma_live_matrix.sh for horizontal/vertical geometry, hover, pinning, and wheel evidence.
+Close plasmawindowed to clean up. Verify horizontal/vertical geometry, hover, pinning, and wheel behavior only in an explicitly approved real Plasma session.
 No system paths or production runtime files are touched.
 EOF
 
