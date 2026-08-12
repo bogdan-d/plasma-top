@@ -59,9 +59,7 @@ use control::{
     LoopWake, preempt_for_shutdown, process_io_events, sleep_duration, wait_for_wake_with_files,
 };
 use state::RuntimeState;
-use worker::{
-    DispatchValidity, JobInput, OwnerMessage, OwnerSenders, RescanInput, invalidate_readings,
-};
+use worker::{DispatchValidity, JobInput, OwnerMessage, OwnerSenders, RescanInput};
 
 const NOTIFICATION_CHANNEL_CAPACITY: usize = 8;
 const BLOCKING_LANE_CAPACITY: usize = 1;
@@ -575,6 +573,7 @@ fn drain_actions(
             SchedulerAction::StartJob { ticket } => {
                 if scheduler.is_current_ticket(&ticket) {
                     validity.insert(ticket.run_id);
+                    state.mark_graph_render_requested(&ticket);
                     let (selected_index, _) = state.selected_page();
                     if let Some(profile) = &state.profile {
                         profile.record_job_queued(
@@ -608,6 +607,7 @@ fn drain_actions(
                 }
             }
             SchedulerAction::CancelJob { ticket, .. } => {
+                state.clear_graph_render_requested(&ticket);
                 state.notification_samples.remove(&ticket.run_id);
                 let was_dispatched = validity.remove(ticket.run_id);
                 let before = owner_messages.len();
@@ -638,7 +638,7 @@ fn drain_actions(
                 if let Some(profile) = &state.profile {
                     profile.invalidate_capture(&job);
                 }
-                invalidate_readings(&job, &mut state.readings);
+                state.invalidate_job_readings(&job);
                 state.invalidate_decoder(&job);
                 state.completed_jobs.remove(&job);
                 state.deferred_first_paint_jobs.remove(&job);
@@ -673,7 +673,6 @@ fn drain_actions(
                     continue;
                 }
                 let snapshot = clock.snapshot();
-                let render_generation = state.render_generation;
                 if let Some(acknowledgement) = state.publish(
                     publication,
                     reason,
@@ -689,7 +688,10 @@ fn drain_actions(
                 )? {
                     prepend(actions, acknowledgement);
                 }
-                if state.render_generation != render_generation {
+                let graph_start_queued = actions.iter().any(|action| {
+                    matches!(action, SchedulerAction::StartJob { ticket } if ticket.job.kind == JobKind::PageRender)
+                });
+                if tooltip && !graph_start_queued && state.selected_graph_needs_render() {
                     request_selected_graph(scheduler, state, clock, actions);
                 }
             }

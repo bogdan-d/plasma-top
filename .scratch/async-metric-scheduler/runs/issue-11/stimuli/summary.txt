@@ -1,0 +1,36 @@
+.scratch/async-metric-scheduler/runs/issue-11/stimuli/normal-main-stimuli-3.out:  first_paint_latency: p50=104.026ms p95=104.026ms p99=104.026ms
+.scratch/async-metric-scheduler/runs/issue-11/stimuli/normal-main-stimuli-3.out:  publication_lateness: p50=0.878ms p95=1.098ms p99=1.098ms
+.scratch/async-metric-scheduler/runs/issue-11/stimuli/normal-main-stimuli-3.out:  skipped_display_deadlines: 0
+.scratch/async-metric-scheduler/runs/issue-11/stimuli/normal-main-stimuli-3.out:  stimulus_actions: planned=6 started=6 completed=6 timed_out=0 not_started=0
+.scratch/async-metric-scheduler/runs/issue-11/stimuli/normal-main-stimuli-3.out:  shutdown_duration: 6.171ms
+.scratch/async-metric-scheduler/runs/issue-11/stimuli/normal-main-stimuli-3.out:  final_status: ok
+.scratch/async-metric-scheduler/runs/issue-11/stimuli/normal-main-stimuli-1.out:  first_paint_latency: p50=103.092ms p95=103.092ms p99=103.092ms
+.scratch/async-metric-scheduler/runs/issue-11/stimuli/normal-main-stimuli-1.out:  publication_lateness: p50=1.079ms p95=1.721ms p99=1.721ms
+.scratch/async-metric-scheduler/runs/issue-11/stimuli/normal-main-stimuli-1.out:  skipped_display_deadlines: 0
+.scratch/async-metric-scheduler/runs/issue-11/stimuli/normal-main-stimuli-1.out:  stimulus_actions: planned=6 started=6 completed=6 timed_out=0 not_started=0
+.scratch/async-metric-scheduler/runs/issue-11/stimuli/normal-main-stimuli-1.out:  shutdown_duration: 2.257ms
+.scratch/async-metric-scheduler/runs/issue-11/stimuli/normal-main-stimuli-1.out:  final_status: ok
+.scratch/async-metric-scheduler/runs/issue-11/stimuli/normal-main-stimuli-2.out:  first_paint_latency: p50=104.362ms p95=104.362ms p99=104.362ms
+.scratch/async-metric-scheduler/runs/issue-11/stimuli/normal-main-stimuli-2.out:  publication_lateness: p50=1.708ms p95=2.114ms p99=2.114ms
+.scratch/async-metric-scheduler/runs/issue-11/stimuli/normal-main-stimuli-2.out:  skipped_display_deadlines: 0
+.scratch/async-metric-scheduler/runs/issue-11/stimuli/normal-main-stimuli-2.out:  stimulus_actions: planned=6 started=6 completed=6 timed_out=0 not_started=0
+.scratch/async-metric-scheduler/runs/issue-11/stimuli/normal-main-stimuli-2.out:  shutdown_duration: 2.237ms
+.scratch/async-metric-scheduler/runs/issue-11/stimuli/normal-main-stimuli-2.out:  final_status: ok
+.scratch/async-metric-scheduler/runs/issue-11/stimuli/cpu0-main-stimuli-3.out:  first_paint_latency: p50=103.341ms p95=103.341ms p99=103.341ms
+.scratch/async-metric-scheduler/runs/issue-11/stimuli/cpu0-main-stimuli-3.out:  publication_lateness: p50=0.954ms p95=1.297ms p99=1.297ms
+.scratch/async-metric-scheduler/runs/issue-11/stimuli/cpu0-main-stimuli-3.out:  skipped_display_deadlines: 0
+.scratch/async-metric-scheduler/runs/issue-11/stimuli/cpu0-main-stimuli-3.out:  stimulus_actions: planned=6 started=6 completed=6 timed_out=0 not_started=0
+.scratch/async-metric-scheduler/runs/issue-11/stimuli/cpu0-main-stimuli-3.out:  shutdown_duration: 4.603ms
+.scratch/async-metric-scheduler/runs/issue-11/stimuli/cpu0-main-stimuli-3.out:  final_status: ok
+.scratch/async-metric-scheduler/runs/issue-11/stimuli/cpu0-main-stimuli-2.out:  first_paint_latency: p50=103.810ms p95=103.810ms p99=103.810ms
+.scratch/async-metric-scheduler/runs/issue-11/stimuli/cpu0-main-stimuli-2.out:  publication_lateness: p50=1.579ms p95=2.127ms p99=2.127ms
+.scratch/async-metric-scheduler/runs/issue-11/stimuli/cpu0-main-stimuli-2.out:  skipped_display_deadlines: 0
+.scratch/async-metric-scheduler/runs/issue-11/stimuli/cpu0-main-stimuli-2.out:  stimulus_actions: planned=6 started=6 completed=6 timed_out=0 not_started=0
+.scratch/async-metric-scheduler/runs/issue-11/stimuli/cpu0-main-stimuli-2.out:  shutdown_duration: 2.392ms
+.scratch/async-metric-scheduler/runs/issue-11/stimuli/cpu0-main-stimuli-2.out:  final_status: ok
+.scratch/async-metric-scheduler/runs/issue-11/stimuli/cpu0-main-stimuli-1.out:  first_paint_latency: p50=104.177ms p95=104.177ms p99=104.177ms
+.scratch/async-metric-scheduler/runs/issue-11/stimuli/cpu0-main-stimuli-1.out:  publication_lateness: p50=0.950ms p95=1.341ms p99=1.341ms
+.scratch/async-metric-scheduler/runs/issue-11/stimuli/cpu0-main-stimuli-1.out:  skipped_display_deadlines: 0
+.scratch/async-metric-scheduler/runs/issue-11/stimuli/cpu0-main-stimuli-1.out:  stimulus_actions: planned=6 started=6 completed=6 timed_out=0 not_started=0
+.scratch/async-metric-scheduler/runs/issue-11/stimuli/cpu0-main-stimuli-1.out:  shutdown_duration: 2.428ms
+.scratch/async-metric-scheduler/runs/issue-11/stimuli/cpu0-main-stimuli-1.out:  final_status: ok

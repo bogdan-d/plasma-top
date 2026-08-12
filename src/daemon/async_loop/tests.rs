@@ -33,8 +33,12 @@ fn runtime() -> tokio::runtime::Runtime {
 mod completion_tests;
 #[path = "tests/control.rs"]
 mod control_tests;
+#[path = "tests/graph_render.rs"]
+mod graph_render_tests;
 #[path = "tests/integration.rs"]
 mod integration;
+#[path = "tests/reload.rs"]
+mod reload_tests;
 #[path = "tests/state.rs"]
 mod state_tests;
 

@@ -1,0 +1,1 @@
+/usr/bin/time -v -o .scratch/async-metric-scheduler/runs/issue-11/stimuli/cpu0-main-stimuli-1.time taskset -c 0 /tmp/plasma-top-issue11-final profiling --config /var/mnt/xdata/code/_self/plasma-top/config/config.toml --duration 8.2 --scenario main --stimuli

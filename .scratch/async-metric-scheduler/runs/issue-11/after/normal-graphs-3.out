@@ -1,0 +1,51 @@
+profile:
+  duration_seconds: 4.200
+  scenario: graphs
+  stimuli: disabled
+  process_calls: 2
+  dbus_calls: 10
+jobs:
+  Cpu:Cpu:CpuSources { temperature: Some("/sys/class/hwmon/hwmon10/temp1_input"), frequency: Some("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq"), turbo: Some("/sys/devices/system/cpu/cpufreq/boost") }: attempts=4 captured=3 baseline=1 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.127ms p95=0.233ms p99=0.233ms run=p50=0.183ms p95=0.194ms p99=0.194ms
+  Cpu:CpuHistory:Singleton: attempts=2 captured=2 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.074ms p95=0.110ms p99=0.110ms run=p50=0.023ms p95=0.029ms p99=0.029ms
+  Discovery:HardwareDiscovery:Inventory(Backlight): attempts=1 captured=1 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.084ms p95=0.084ms p99=0.084ms run=p50=0.023ms p95=0.023ms p99=0.023ms
+  Discovery:HardwareDiscovery:Inventory(Cpu): attempts=2 captured=1 baseline=0 absent=0 failed=0 rejected=0 cancelled=1 in_flight=0 queue=p50=0.070ms p95=0.070ms p99=0.070ms run=p50=0.329ms p95=0.329ms p99=0.329ms
+  Discovery:HardwareDiscovery:Inventory(DiskIo): attempts=6 captured=0 baseline=0 absent=0 failed=6 rejected=0 cancelled=0 in_flight=0 queue=p50=0.097ms p95=0.129ms p99=0.129ms run=p50=0.198ms p95=0.344ms p99=0.344ms
+  Discovery:HardwareDiscovery:Inventory(Intel): attempts=1 captured=1 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.063ms p95=0.063ms p99=0.063ms run=p50=0.072ms p95=0.072ms p99=0.072ms
+  Discovery:HardwareDiscovery:Inventory(Network): attempts=1 captured=1 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=20.801ms p95=20.801ms p99=20.801ms run=p50=1.770ms p95=1.770ms p99=1.770ms
+  Discovery:HardwareDiscovery:Inventory(Nvidia): attempts=1 captured=1 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.083ms p95=0.083ms p99=0.083ms run=p50=0.253ms p95=0.253ms p99=0.253ms
+  Discovery:HardwareDiscovery:Inventory(Peripheral): attempts=1 captured=1 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=5.961ms p95=5.961ms p99=5.961ms run=p50=0.331ms p95=0.331ms p99=0.331ms
+  Discovery:HardwareDiscovery:Inventory(Smart): attempts=1 captured=1 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.029ms p95=0.029ms p99=0.029ms run=p50=2.577ms p95=2.577ms p99=2.577ms
+  Discovery:HardwareDiscovery:Inventory(SystemBattery): attempts=1 captured=1 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=6.521ms p95=6.521ms p99=6.521ms run=p50=0.411ms p95=0.411ms p99=0.411ms
+  Discovery:HardwareDiscovery:Inventory(Thermal): attempts=1 captured=1 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.047ms p95=0.047ms p99=0.047ms run=p50=0.686ms p95=0.686ms p99=0.686ms
+  Discovery:MountInventory:Singleton: attempts=3 captured=3 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.093ms p95=0.112ms p99=0.112ms run=p50=0.152ms p95=0.156ms p99=0.156ms
+  Disk:DiskTemperature:NamedPath { name: "nvme0n1", path: "/sys/class/hwmon/hwmon6/temp1_input" }: attempts=1 captured=1 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.022ms p95=0.022ms p99=0.022ms run=p50=5.062ms p95=5.062ms p99=5.062ms
+  Disk:DiskTemperature:NamedPath { name: "nvme1n1", path: "/sys/class/hwmon/hwmon5/temp1_input" }: attempts=1 captured=1 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.034ms p95=0.034ms p99=0.034ms run=p50=1.211ms p95=1.211ms p99=1.211ms
+  Disk:DiskUsage:Mount("/"): attempts=4 captured=3 baseline=0 absent=0 failed=0 rejected=0 cancelled=1 in_flight=0 queue=p50=0.332ms p95=1.726ms p99=1.726ms run=p50=0.028ms p95=0.078ms p99=0.078ms
+  Disk:DiskUsage:Mount("/run/media/bogdan/S_04"): attempts=3 captured=3 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=1.590ms p95=1.776ms p99=1.776ms run=p50=0.075ms p95=0.140ms p99=0.140ms
+  Disk:DiskUsage:Mount("/run/media/bogdan/T_01"): attempts=3 captured=3 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.751ms p95=10.330ms p99=10.330ms run=p50=0.105ms p95=0.174ms p99=0.174ms
+  Disk:Smart:SmartDrive { label: "nvme0n1", object_path: "/org/freedesktop/UDisks2/drives/KINGSTON_SKC2500M82000G_50026B7684E30425" }: attempts=1 captured=1 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.139ms p95=0.139ms p99=0.139ms run=p50=20.815ms p95=20.815ms p99=20.815ms
+  Disk:Smart:SmartDrive { label: "nvme1n1", object_path: "/org/freedesktop/UDisks2/drives/Samsung_SSD_990_PRO_4TB_S7DPNF0Y500836E" }: attempts=1 captured=1 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=1.699ms p95=1.699ms p99=1.699ms run=p50=6.008ms p95=6.008ms p99=6.008ms
+  External:Brightness:Singleton: attempts=6 captured=0 baseline=0 absent=0 failed=6 rejected=0 cancelled=0 in_flight=0 queue=p50=0.076ms p95=0.324ms p99=0.324ms run=p50=0.025ms p95=0.116ms p99=0.116ms
+  Memory:Memory:Singleton: attempts=3 captured=3 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.280ms p95=0.354ms p99=0.354ms run=p50=0.029ms p95=0.034ms p99=0.034ms
+  Memory:MemoryHistory:Singleton: attempts=2 captured=2 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.077ms p95=0.104ms p99=0.104ms run=p50=0.008ms p95=0.019ms p99=0.019ms
+  Network:NetworkHistory:Singleton: attempts=2 captured=2 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.027ms p95=0.045ms p99=0.045ms run=p50=0.009ms p95=0.026ms p99=0.026ms
+  Network:NetworkIdentity:Singleton: attempts=1 captured=1 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.409ms p95=0.409ms p99=0.409ms run=p50=1.248ms p95=1.248ms p99=1.248ms
+  Network:NetworkRate:Device("tun0"): attempts=4 captured=3 baseline=1 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.285ms p95=0.339ms p99=0.339ms run=p50=0.029ms p95=0.048ms p99=0.048ms
+  Page:PageRender:Singleton: attempts=8 captured=4 baseline=0 absent=0 failed=0 rejected=3 cancelled=1 in_flight=0 queue=p50=0.145ms p95=9.742ms p99=9.742ms run=p50=1.437ms p95=1.747ms p99=1.747ms
+timing:
+  wake_lateness: p50=0.722ms p95=1.734ms p99=1.734ms
+  maximum_sample_age: 2996.837ms
+  first_paint_latency: p50=104.429ms p95=104.429ms p99=104.429ms
+  publication_lateness: p50=0.545ms p95=0.621ms p99=0.621ms
+  skipped_display_deadlines: 0
+  first_paint_over_250ms: 0
+  publication_over_50ms: 0
+  render_display_deadline: p50=0.285ms p95=0.294ms p99=0.294ms
+  render_first_paint_ready: p50=0.141ms p95=0.141ms p99=0.141ms
+  render_page_changed: p50=0.009ms p95=0.009ms p99=0.009ms
+  render_tooltip_activated: p50=0.011ms p95=0.011ms p99=0.011ms
+  render_tooltip_refresh: p50=0.001ms p95=0.002ms p99=0.002ms
+  write_time: not_applicable (HTML runtime writes disabled)
+  shutdown_duration: 2.277ms
+  shutdown_over_500ms: 0
+  final_status: ok

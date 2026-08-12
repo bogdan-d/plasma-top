@@ -1,0 +1,1 @@
+/usr/bin/time -v -o .scratch/async-metric-scheduler/runs/issue-11/after/cpu0-graphs-2.time taskset -c 0 /var/mnt/xdata/code/_self/plasma-top/target/release/plasma-top profiling --config /var/mnt/xdata/code/_self/plasma-top/config/config.toml --duration 4.2 --scenario graphs

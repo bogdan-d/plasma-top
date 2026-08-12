@@ -1,0 +1,65 @@
+profile:
+  duration_seconds: 8.200
+  scenario: main
+  stimuli: enabled
+  aggregate_scope: scenario plus profiling stimuli
+  process_calls: 6
+  dbus_calls: 17
+jobs:
+  Cpu:Cpu:CpuSources { temperature: Some("/sys/class/hwmon/hwmon10/temp1_input"), frequency: Some("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq"), turbo: Some("/sys/devices/system/cpu/cpufreq/boost") }: attempts=6 captured=5 baseline=1 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.123ms p95=0.209ms p99=0.209ms run=p50=0.188ms p95=0.315ms p99=0.315ms
+  Cpu:CpuHistory:Singleton: attempts=5 captured=5 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.117ms p95=0.197ms p99=0.197ms run=p50=0.041ms p95=0.066ms p99=0.066ms
+  Discovery:HardwareDiscovery:Inventory(Backlight): attempts=3 captured=3 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.028ms p95=0.034ms p99=0.034ms run=p50=0.009ms p95=0.017ms p99=0.017ms
+  Discovery:HardwareDiscovery:Inventory(Cpu): attempts=4 captured=3 baseline=0 absent=0 failed=0 rejected=0 cancelled=1 in_flight=0 queue=p50=5.393ms p95=5.555ms p99=5.555ms run=p50=0.256ms p95=0.324ms p99=0.324ms
+  Discovery:HardwareDiscovery:Inventory(DiskIo): attempts=7 captured=0 baseline=0 absent=0 failed=7 rejected=0 cancelled=0 in_flight=0 queue=p50=0.091ms p95=0.106ms p99=0.106ms run=p50=0.253ms p95=0.266ms p99=0.266ms
+  Discovery:HardwareDiscovery:Inventory(Intel): attempts=3 captured=3 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.039ms p95=0.044ms p99=0.044ms run=p50=0.030ms p95=0.035ms p99=0.035ms
+  Discovery:HardwareDiscovery:Inventory(Network): attempts=3 captured=3 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.024ms p95=22.645ms p99=22.645ms run=p50=1.149ms p95=1.659ms p99=1.659ms
+  Discovery:HardwareDiscovery:Inventory(Nvidia): attempts=3 captured=3 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.046ms p95=0.117ms p99=0.117ms run=p50=0.269ms p95=0.271ms p99=0.271ms
+  Discovery:HardwareDiscovery:Inventory(Peripheral): attempts=3 captured=3 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.035ms p95=6.260ms p99=6.260ms run=p50=0.218ms p95=0.308ms p99=0.308ms
+  Discovery:HardwareDiscovery:Inventory(Smart): attempts=3 captured=3 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.027ms p95=0.034ms p99=0.034ms run=p50=1.784ms p95=1.832ms p99=1.832ms
+  Discovery:HardwareDiscovery:Inventory(SystemBattery): attempts=4 captured=4 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.026ms p95=0.029ms p99=0.029ms run=p50=0.282ms p95=0.427ms p99=0.427ms
+  Discovery:HardwareDiscovery:Inventory(Thermal): attempts=3 captured=3 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.048ms p95=0.070ms p99=0.070ms run=p50=0.221ms p95=0.264ms p99=0.264ms
+  Discovery:MountInventory:Singleton: attempts=8 captured=8 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.115ms p95=0.246ms p99=0.246ms run=p50=0.240ms p95=0.458ms p99=0.458ms
+  Disk:DiskTemperature:NamedPath { name: "nvme0n1", path: "/sys/class/hwmon/hwmon6/temp1_input" }: attempts=2 captured=1 baseline=0 absent=0 failed=0 rejected=0 cancelled=1 in_flight=0 queue=p50=0.020ms p95=0.020ms p99=0.020ms run=p50=5.034ms p95=5.034ms p99=5.034ms
+  Disk:DiskTemperature:NamedPath { name: "nvme1n1", path: "/sys/class/hwmon/hwmon5/temp1_input" }: attempts=1 captured=1 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.061ms p95=0.061ms p99=0.061ms run=p50=1.203ms p95=1.203ms p99=1.203ms
+  Disk:DiskUsage:Mount("/"): attempts=5 captured=5 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.542ms p95=2.041ms p99=2.041ms run=p50=0.018ms p95=0.026ms p99=0.026ms
+  Disk:DiskUsage:Mount("/run/media/bogdan/S_04"): attempts=5 captured=5 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.054ms p95=0.188ms p99=0.188ms run=p50=0.026ms p95=0.027ms p99=0.027ms
+  Disk:DiskUsage:Mount("/run/media/bogdan/T_01"): attempts=5 captured=5 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.049ms p95=9.559ms p99=9.559ms run=p50=0.016ms p95=0.033ms p99=0.033ms
+  Disk:Smart:SmartDrive { label: "nvme0n1", object_path: "/org/freedesktop/UDisks2/drives/KINGSTON_SKC2500M82000G_50026B7684E30425" }: attempts=1 captured=1 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.074ms p95=0.074ms p99=0.074ms run=p50=22.660ms p95=22.660ms p99=22.660ms
+  Disk:Smart:SmartDrive { label: "nvme1n1", object_path: "/org/freedesktop/UDisks2/drives/Samsung_SSD_990_PRO_4TB_S7DPNF0Y500836E" }: attempts=1 captured=1 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=1.535ms p95=1.535ms p99=1.535ms run=p50=6.351ms p95=6.351ms p99=6.351ms
+  External:Brightness:Singleton: attempts=9 captured=0 baseline=0 absent=0 failed=9 rejected=0 cancelled=0 in_flight=0 queue=p50=0.040ms p95=0.287ms p99=0.287ms run=p50=0.038ms p95=0.072ms p99=0.072ms
+  Memory:Memory:Singleton: attempts=5 captured=5 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.274ms p95=0.460ms p99=0.460ms run=p50=0.030ms p95=0.062ms p99=0.062ms
+  Memory:MemoryHistory:Singleton: attempts=5 captured=5 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.118ms p95=0.203ms p99=0.203ms run=p50=0.012ms p95=0.030ms p99=0.030ms
+  Network:NetworkHistory:Singleton: attempts=5 captured=5 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.032ms p95=0.075ms p99=0.075ms run=p50=0.015ms p95=0.040ms p99=0.040ms
+  Network:NetworkIdentity:Singleton: attempts=1 captured=1 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.258ms p95=0.258ms p99=0.258ms run=p50=1.668ms p95=1.668ms p99=1.668ms
+  Network:NetworkRate:Device("tun0"): attempts=6 captured=5 baseline=1 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.283ms p95=0.494ms p99=0.494ms run=p50=0.031ms p95=0.054ms p99=0.054ms
+  Page:PageRender:Singleton: attempts=1 captured=1 baseline=0 absent=0 failed=0 rejected=0 cancelled=0 in_flight=0 queue=p50=0.124ms p95=0.124ms p99=0.124ms run=p50=0.771ms p95=0.771ms p99=0.771ms
+timing:
+  wake_lateness: p50=0.855ms p95=1.485ms p99=1.561ms
+  maximum_sample_age: 6921.045ms
+  first_paint_latency: p50=104.177ms p95=104.177ms p99=104.177ms
+  publication_lateness: p50=0.950ms p95=1.341ms p99=1.341ms
+  skipped_display_deadlines: 0
+  first_paint_over_250ms: 0
+  publication_over_50ms: 0
+  event_page_latency: p50=50.544ms p95=51.409ms p99=51.409ms samples=2 over_100ms=0
+  event_control_latency: p50=51.719ms p95=51.719ms p99=51.719ms samples=1 over_100ms=0
+  event_config_latency: p50=54.283ms p95=54.328ms p99=54.328ms samples=2 over_100ms=0
+  render_config_changed: p50=0.094ms p95=0.153ms p99=0.153ms
+  render_display_deadline: p50=0.251ms p95=0.446ms p99=0.446ms
+  render_first_paint_ready: p50=0.266ms p95=0.266ms p99=0.266ms
+  render_page_changed: p50=0.009ms p95=0.125ms p99=0.125ms
+  render_tooltip_activated: p50=0.061ms p95=0.100ms p99=0.100ms
+  render_tooltip_refresh: p50=0.000ms p95=0.092ms p99=0.092ms
+  write_time: not_applicable (HTML runtime writes disabled)
+  stimulus_actions: planned=6 started=6 completed=6 timed_out=0 not_started=0
+  stimulus_1: kind=control expected=Presentation { presented: false, html_publication: false } observed=true publication=None completed=true timed_out=false
+  stimulus_2: kind=control expected=Presentation { presented: true, html_publication: true } observed=true publication=Some(PublicationId(4)) completed=true timed_out=false
+  stimulus_3: kind=page expected=Page { index: 1, page: Graphs } observed=true publication=Some(PublicationId(5)) completed=true timed_out=false
+  stimulus_4: kind=page expected=Page { index: 0, page: Main } observed=true publication=Some(PublicationId(7)) completed=true timed_out=false
+  stimulus_5: kind=config expected=Config { generation: ConfigGeneration(2), overlay: true } observed=true publication=Some(PublicationId(8)) completed=true timed_out=false
+  stimulus_6: kind=config expected=Config { generation: ConfigGeneration(3), overlay: false } observed=true publication=Some(PublicationId(10)) completed=true timed_out=false
+  stimulus_requested_state: presented=true page_index=0 page=main config_generation=3 overlay=false
+  stimulus_observed_state: presented=true page_index=0 page=main config_generation=3 overlay=false
+  shutdown_duration: 2.428ms
+  shutdown_over_500ms: 0
+  final_status: ok

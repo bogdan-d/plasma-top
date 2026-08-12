@@ -1,7 +1,7 @@
 # Coalesce graph page rendering
 
 Type: task
-Status: ready-for-agent
+Status: resolved
 Blocked by: 08
 
 ## Objective
@@ -35,3 +35,11 @@ Raw reports are `.scratch/async-metric-scheduler/runs/development/candidate-fina
 ## Validation
 
 Run focused scheduler/async-loop/page-render tests, timed `graphs` profiling in normal and CPU-0-affinity modes, and the full repository gates from `docs/DEVELOPMENT.md`.
+
+## Answer
+
+`PageRender` attempts were real dispatches rather than duplicated accounting: accepted and rejected completions had executed graph PNG rasterization, while cancellation could still remove queued work before execution. The churn came from advancing one broad render generation and requesting a render after every accepted non-page completion. Rendering now invalidates only for graph-consumed input, relevant inventory/config/style/width changes, and explicit graph-input removal; publication coalesces that dirty state into one in-flight render and at most one newest-input follow-up.
+
+Activation preserves a truthful retained graph until its fresh replacement, page changes retain placeholder semantics, config page reordering reconciles selected demand, and cancellation clears only the matching run reservation. Focused tests cover source bursts, obsolete style/input rejection, graph-input invalidation, source replacement, deactivation grace, shutdown, reload page reordering, rollover, and unrelated completions.
+
+Three normal and three CPU-0 release profiles reduced attempts from 36–37 to 8 normal and 32–37 to 7 CPU-0. Rejections fell from 19–20 to 3 normal and 11–14 to 2 CPU-0; each final run had one shutdown cancellation. User CPU and context switches improved in every mode, render time remained neutral or improved, worst first paint was 104.429 ms, publication p99 2.159 ms, shutdown 5.049 ms, and no deadline was skipped. Six explicit-stimulus runs also kept page/control/config event p99 below 100 ms. Full repository gates passed. Reproducible commands, hashes, raw reports, summaries, diagnosis, and host limitation are in `.scratch/async-metric-scheduler/runs/issue-11/`.

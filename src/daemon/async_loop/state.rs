@@ -52,6 +52,7 @@ pub(super) struct RuntimeState {
     pub(super) panel_html: Option<String>,
     pub(super) tooltip_html: Option<String>,
     pub(super) rendered_graph: Option<(PageId, u64, String)>,
+    pub(super) graph_render_requested: Option<(RunId, u64)>,
     pub(super) first_paint_published: bool,
     pub(super) resolved_mounts: Vec<String>,
     pub(super) boot_pending: BTreeSet<&'static str>,
@@ -116,6 +117,7 @@ impl RuntimeState {
             panel_html: None,
             tooltip_html: None,
             rendered_graph: None,
+            graph_render_requested: None,
             first_paint_published: false,
             resolved_mounts: vec![String::from("/")],
             boot_pending: BTreeSet::from([
@@ -160,6 +162,35 @@ impl RuntimeState {
     pub(super) fn selected_page(&self) -> (usize, PageId) {
         let index = self.observed_page_index % self.active.len().max(1);
         (index, PageId::from_id(self.active[index].id))
+    }
+
+    pub(super) fn selected_graph_needs_render(&self) -> bool {
+        let (_, selected) = self.selected_page();
+        selected == PageId::Graphs
+            && self
+                .graph_render_requested
+                .is_none_or(|(_, generation)| generation != self.render_generation)
+            && self
+                .rendered_graph
+                .as_ref()
+                .is_none_or(|(page, generation, _)| {
+                    *page != selected || *generation != self.render_generation
+                })
+    }
+
+    pub(super) fn mark_graph_render_requested(&mut self, ticket: &crate::scheduler::JobTicket) {
+        if ticket.job.kind == crate::scheduler::JobKind::PageRender {
+            self.graph_render_requested = Some((ticket.run_id, self.render_generation));
+        }
+    }
+
+    pub(super) fn clear_graph_render_requested(&mut self, ticket: &crate::scheduler::JobTicket) {
+        if self
+            .graph_render_requested
+            .is_some_and(|(run_id, _)| run_id == ticket.run_id)
+        {
+            self.graph_render_requested = None;
+        }
     }
 
     pub(super) fn observe_selected_page(&mut self, paths: &DaemonPaths) -> (usize, PageId) {
@@ -282,6 +313,7 @@ impl RuntimeState {
 
     pub(super) fn commit(&mut self, completion: &JobCompletion) -> bool {
         let owner = completion.ticket.job.owner;
+        let graph_input_changed = self.graph_input_changed(completion);
         apply_owner_readings(owner, &completion.readings, &mut self.readings);
         if let Some(outcome) = completion.decoder_outcome {
             let source = match owner {
@@ -326,10 +358,95 @@ impl RuntimeState {
         apply_inventory_completion(completion, &mut self.hw, &mut self.resolved_mounts);
         let inventory_changed = self.hw != before_hw || self.resolved_mounts != before_mounts;
         self.last_committed.insert(owner, completion.ticket.run_id);
-        if owner != OwnerId::Page {
-            self.render_generation = self.render_generation.saturating_add(1);
+        if graph_input_changed {
+            self.render_generation = self.render_generation.wrapping_add(1);
         }
         inventory_changed
+    }
+
+    pub(super) fn invalidate_job_readings(&mut self, job: &crate::scheduler::JobId) {
+        use crate::scheduler::JobKind as Kind;
+
+        let graph_input_changed = match job.kind {
+            Kind::Cpu => self.readings.cpu_usage.is_some(),
+            Kind::CpuHistory => !self.readings.cpu_history.is_empty(),
+            Kind::Memory => self.readings.mem_usage.is_some(),
+            Kind::MemoryHistory => !self.readings.mem_history.is_empty(),
+            Kind::NetworkRate => {
+                self.readings.net_up_bps.is_some() || self.readings.net_down_bps.is_some()
+            }
+            Kind::NetworkHistory => {
+                !self.readings.net_up_history.is_empty()
+                    || !self.readings.net_down_history.is_empty()
+            }
+            Kind::NvidiaNvml | Kind::NvidiaFallback => {
+                self.readings.gpu_usage.is_some() || self.readings.gpu_dec.is_some()
+            }
+            Kind::IntelUsage => {
+                self.readings.gpu_intel_usage.is_some()
+                    || self.readings.gpu_intel_dec_usage.is_some()
+            }
+            Kind::GpuHistory => {
+                !self.readings.gpu_usage_history.is_empty()
+                    || !self.readings.gpu_dec_history.is_empty()
+            }
+            _ => false,
+        };
+        super::worker::invalidate_readings(job, &mut self.readings);
+        if graph_input_changed {
+            self.render_generation = self.render_generation.wrapping_add(1);
+        }
+    }
+
+    fn graph_input_changed(&self, completion: &JobCompletion) -> bool {
+        let readings = &completion.readings;
+        match completion.ticket.job.owner {
+            OwnerId::Cpu => {
+                self.readings.cpu_usage != readings.cpu_usage
+                    || self.readings.cpu_history != readings.cpu_history
+            }
+            OwnerId::Memory => {
+                self.readings.mem_usage != readings.mem_usage
+                    || self.readings.mem_history != readings.mem_history
+            }
+            OwnerId::Network => {
+                self.readings.net_up_bps != readings.net_up_bps
+                    || self.readings.net_down_bps != readings.net_down_bps
+                    || self.readings.net_up_history != readings.net_up_history
+                    || self.readings.net_down_history != readings.net_down_history
+                    || (completion.ticket.job.kind == crate::scheduler::JobKind::NetworkIdentity
+                        && self.hw.net_device != completion.hw.net_device)
+            }
+            OwnerId::Nvidia => {
+                self.readings.gpu_usage != readings.gpu_usage
+                    || self.readings.gpu_dec != readings.gpu_dec
+            }
+            OwnerId::IntelGpu => {
+                self.readings.gpu_intel_usage != readings.gpu_intel_usage
+                    || self.readings.gpu_intel_dec_usage != readings.gpu_intel_dec_usage
+            }
+            OwnerId::GpuHistory => {
+                self.readings.gpu_usage_history != readings.gpu_usage_history
+                    || self.readings.gpu_dec_history != readings.gpu_dec_history
+            }
+            OwnerId::Discovery => match completion.ticket.job.source {
+                crate::scheduler::SourceIdentity::Inventory(InventoryFamily::Nvidia) => {
+                    self.hw.has_nvidia != completion.hw.has_nvidia
+                }
+                crate::scheduler::SourceIdentity::Inventory(InventoryFamily::Intel) => {
+                    self.hw.intel_gpu_pci != completion.hw.intel_gpu_pci
+                }
+                crate::scheduler::SourceIdentity::Inventory(InventoryFamily::Network) => {
+                    self.hw.net_device != completion.hw.net_device
+                }
+                _ => false,
+            },
+            OwnerId::Process
+            | OwnerId::Disk
+            | OwnerId::Power
+            | OwnerId::External
+            | OwnerId::Page => false,
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -362,7 +479,7 @@ impl RuntimeState {
             apply_canonical_width(&mut self.cfg, i32::try_from(width).unwrap_or(i32::MAX));
             if self.cfg.display.tooltip_width != previous_width {
                 self.rendered_graph = None;
-                self.render_generation = self.render_generation.saturating_add(1);
+                self.render_generation = self.render_generation.wrapping_add(1);
             }
             let html = PanelFormatter::with_now_unix(&self.cfg, &self.hw, clock_unix(snapshot))
                 .format_panel(&self.readings, &self.css);
@@ -386,7 +503,7 @@ impl RuntimeState {
             }));
         }
         if tooltip {
-            self.publish_tooltip(roots, paths)?;
+            self.publish_tooltip(reason, roots, paths)?;
         }
         if let (Some(profile), Some(started)) = (&self.profile, render_started) {
             let render = started.elapsed();
@@ -405,7 +522,12 @@ impl RuntimeState {
         Ok(acknowledgement)
     }
 
-    fn publish_tooltip(&mut self, roots: &FilesystemRoots, paths: &DaemonPaths) -> Result<()> {
+    fn publish_tooltip(
+        &mut self,
+        reason: PublishReason,
+        roots: &FilesystemRoots,
+        paths: &DaemonPaths,
+    ) -> Result<()> {
         let (index, selected) = self.selected_page();
         let html = if selected == PageId::Graphs {
             self.rendered_graph
@@ -414,6 +536,16 @@ impl RuntimeState {
                     *page == selected && *generation == self.render_generation
                 })
                 .map(|(_, _, html)| html.clone())
+                .or_else(|| {
+                    if reason == PublishReason::TooltipActivated {
+                        self.rendered_graph
+                            .as_ref()
+                            .filter(|(page, _, _)| *page == selected)
+                            .map(|(_, _, html)| html.clone())
+                    } else {
+                        None
+                    }
+                })
                 .or_else(|| Some(self.pending_page(index)))
         } else {
             Some(render_page_cached(
@@ -498,8 +630,8 @@ impl RuntimeState {
             self.overlay_stamp = overlay_stamp;
             self.css = read_css(&self.css_path, self.overlay_path.as_deref());
             self.rendered_graph = None;
-            self.style_generation = self.style_generation.saturating_add(1);
-            self.render_generation = self.render_generation.saturating_add(1);
+            self.style_generation = self.style_generation.wrapping_add(1);
+            self.render_generation = self.render_generation.wrapping_add(1);
         }
         changed
     }
@@ -517,8 +649,8 @@ impl RuntimeState {
         self.css_stamp = mtime(&self.css_path);
         self.css = read_css(&self.css_path, self.overlay_path.as_deref());
         self.rendered_graph = None;
-        self.style_generation = self.style_generation.saturating_add(1);
-        self.render_generation = self.render_generation.saturating_add(1);
+        self.style_generation = self.style_generation.wrapping_add(1);
+        self.render_generation = self.render_generation.wrapping_add(1);
         true
     }
 }

@@ -66,7 +66,6 @@ pub(super) fn handle_completion(
             } else {
                 BTreeSet::new()
             };
-            let render_generation = state.render_generation;
             let inventory_changed = current && state.commit(&completion);
             if current {
                 state.completed_jobs.insert(completion.ticket.job.clone());
@@ -74,7 +73,6 @@ pub(super) fn handle_completion(
                     .deferred_first_paint_jobs
                     .remove(&completion.ticket.job);
             }
-            let render_invalidated = current && state.render_generation != render_generation;
             let rendered_page = current && completion.rendered_page.is_some();
             if current && completion.notification_ready {
                 state
@@ -175,7 +173,13 @@ pub(super) fn handle_completion(
                 completion_at,
                 actions,
             );
-            if rerender && !replacement_current {
+            let graph_publication_queued = actions.iter().any(|action| {
+                matches!(
+                    action,
+                    SchedulerAction::PublishDisplay { tooltip: true, .. }
+                )
+            });
+            if rerender && !replacement_current && !graph_publication_queued {
                 enqueue(
                     actions,
                     scheduler.handle(SchedulerEvent::RefreshTriggered {
@@ -184,9 +188,6 @@ pub(super) fn handle_completion(
                         trigger: RefreshTrigger::Signal,
                     }),
                 );
-            }
-            if render_invalidated && !replacement_current {
-                request_selected_graph(scheduler, state, clock, actions);
             }
             if rendered_page
                 && !actions.iter().any(|action| {
@@ -206,6 +207,7 @@ pub(super) fn handle_completion(
             }
         }
         OwnerCompletion::Cancelled(ticket) => {
+            state.clear_graph_render_requested(&ticket);
             validity.remove(ticket.run_id);
             if let Some(profile) = &state.profile {
                 profile.resolve_attempt(ticket.run_id, AttemptDisposition::Cancelled);
@@ -233,7 +235,7 @@ pub(super) fn handle_completion(
                 state.hw = *hw;
                 if hardware_changed {
                     state.rendered_graph = None;
-                    state.render_generation = state.render_generation.saturating_add(1);
+                    state.render_generation = state.render_generation.wrapping_add(1);
                 }
                 state.inventory_generation = state.inventory_generation.next();
                 let config = state.scheduler_config();

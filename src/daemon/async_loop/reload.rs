@@ -48,7 +48,7 @@ pub(super) fn check(
     state.hw = hw;
     state.config_generation = state.config_generation.next();
     state.rendered_graph = None;
-    state.render_generation = state.render_generation.saturating_add(1);
+    state.render_generation = state.render_generation.wrapping_add(1);
     let transition = scheduler.handle(SchedulerEvent::ConfigChanged {
         at: now(clock),
         config: state.scheduler_config(),
@@ -61,6 +61,14 @@ pub(super) fn check(
         );
     }
     enqueue(actions, transition);
+    let (_, selected_page) = state.selected_page();
+    enqueue(
+        actions,
+        scheduler.handle(SchedulerEvent::SelectedPageChanged {
+            at: now(clock),
+            page: selected_page,
+        }),
+    );
     if hardware_changed {
         state.inventory_generation = state.inventory_generation.next();
         let config = state.scheduler_config();

@@ -1,0 +1,6 @@
+base_head=364bba087f73447d31ffa76fdba8d253f7c386be
+tracked_diff_sha256=a282cba1b4549e5bff1b7c745c5af2e6d1aa6c4f3c8ced2d0aacb6007ab2198e
+untracked_source_sha256=bf23b692e03c3d1e0e0d1081ae8c33485b224a1aae62325f293ba2d7b8a8f0e7
+rustc=rustc 1.97.1 (8bab26f4f 2026-07-14) (Homebrew)
+cargo=cargo 1.97.1 (c980f4866 2026-06-30) (Homebrew)
+kernel=Linux 7.1.5-ogc5.1.fc44.x86_64 x86_64 GNU/Linux
