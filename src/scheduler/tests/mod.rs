@@ -109,6 +109,7 @@ fn publications(transition: &Transition) -> Vec<(PublicationId, PublishReason, b
                 reason,
                 panel,
                 tooltip,
+                ..
             } => Some((*publication, *reason, *panel, *tooltip)),
             SchedulerAction::CancelJob { .. }
             | SchedulerAction::InvalidateJob { .. }

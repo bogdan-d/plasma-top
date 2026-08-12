@@ -10,6 +10,34 @@ Read this before changing daemon polling, metric-sample retention, freshness bud
 ./plasma-top profiling --config config/config.toml
 ```
 
+Timed profiling runs the production scheduler-aware async owner loop and I/O services while suppressing panel and tooltip file publication. Its disposable root carries only isolated event-protocol state and config copies. `main` is the default timed scenario; `hidden` models panel/notification/history demand, and a configured page id models a presented tooltip with that page selected. Unknown or unconfigured page ids are rejected.
+
+```bash
+./plasma-top profiling --config config/config.toml --duration 30
+./plasma-top profiling --config config/config.toml --duration 30 --scenario hidden
+./plasma-top profiling --config config/config.toml --duration 30 --scenario graphs
+```
+
+These ordinary timed commands hold the requested presentation and page state steady for the full measurement. They do not inject page, presentation, or config changes.
+
+The timed report includes per-job captured/baseline/absent/failed/rejected/cancelled/in-flight dispositions, process and D-Bus call counts, queue/run percentiles, maximum age from accepted retained source-capture timestamps, timer wake lateness, first-paint latency, render percentiles separated by publication reason, and scheduled-publication lateness measured after rendering against the scheduler's typed display deadline. Queue latency ends only when work actually begins, so blocking-lane and task-pool admission are included there rather than in run time. Deadline counts are limited to phase-locked display ticks actually skipped, first paints over 250 ms, and scheduled publications over 50 ms; nanosecond timer delay is reported only in wake-lateness percentiles. Runtime-file write timing is reported as not applicable because panel and tooltip writes are deliberately disabled. A duration must be finite and positive; `--scenario` is valid only with `--duration`.
+
+Add `--stimuli` only when measuring page, presentation-control, and config event latency:
+
+```bash
+./plasma-top profiling --config config/config.toml --duration 5 --scenario main --stimuli
+```
+
+This opt-in run executes one serial bounded sequence through the isolated page, presentation-lease, and copied-config files. Every action waits for the watcher to observe its exact expected page/presentation/config state and, when applicable, for the exact scheduler publication identity to finish tooltip HTML rendering in memory. Protocol-file writes update only requested stimulus state; acceptance, scheduler work, rendering, and stimulus completion use cached watcher/scheduler-observed state. The next action is scheduled relative to that completion, not scheduler boot. A short or slow run reports the pending stimulus identity, expected state, timeout, unstarted actions, and separate protocol-requested and watcher/scheduler-observed states instead of consuming restore actions, claiming an unobserved page, or implying restoration. The report labels aggregate job/call/render counts as covering both the scenario and stimulus work. The user's config and runtime remain untouched.
+
+Page, control, and config latency starts immediately after the external-protocol atomic rename succeeds. It includes inotify observation and debounce, production event/reload and scheduler handling, and ends only at the correlated in-memory tooltip HTML publication. A publication caused by an external style/config source cannot satisfy a stimulus merely because it has the same broad publication reason. Publication bytes remain in memory instead of being written, so this boundary measures the daemon's complete publication work but not plasmashell parsing or QML layout. Each kind reports sample count, p50/p95/p99, and the number over 100 ms.
+
+Shutdown timing starts when the profile deadline is observed, immediately before both the scheduler shutdown event and shell/service shutdown request. It ends only after daemon owner/notification orchestration has terminated, command and D-Bus services have completed their shutdown, and the owned runtime thread has joined or exhausted the same shared 500 ms budget. The report gives the isolated duration and count over 500 ms; total process wall time is not used.
+
+These reports are instrumentation, not benchmark evidence. The retained development-host report predates explicit stimulus opt-in, so its timed scenarios contain mixed stimulus work and are not steady-scenario evidence. Corrected A/B runs have not been captured, and no SLO or power conclusion should be inferred from the command examples.
+
+Production command, system-D-Bus, and notification handles contain no profiling field or per-call profiling branch; timed mode wraps them in profiling-only counting facades. Owner timing and in-memory publication suppression still use one optional session check at orchestration boundaries. Those checks do not take clocks or allocate when profiling is absent. Splitting the complete owner/publication loop into duplicate production and profiling implementations would remove those branches at disproportionate maintenance and correctness cost, so the truthful claim is no production profiling collection or hot boundary-adapter branch, not literal zero instructions everywhere.
+
 For process-level work, compare release binaries and record host, kernel, hardware, enabled config, poll interval, page, and command/service availability. For plasmashell layout cost, use the live applet plus `pidstat`; a headless `QTextDocument` does not reproduce the expensive `QQuickText` path.
 
 Do not copy historical measurements into a current benchmark report. Rerun them.

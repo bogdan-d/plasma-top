@@ -376,6 +376,8 @@ fn first_paint_deadline_writes_real_panel_without_owner_completion() {
         .publish(
             publication,
             PublishReason::FirstPaintTimeout,
+            None,
+            0,
             true,
             true,
             &mut scheduler,
@@ -414,6 +416,8 @@ fn graphs_page_change_publishes_selected_placeholder_not_previous_page() {
         .publish(
             crate::scheduler::PublicationId(1),
             PublishReason::PageChanged,
+            None,
+            0,
             false,
             true,
             &mut scheduler,

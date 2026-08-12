@@ -210,6 +210,23 @@ fn format_graphs_prefers_nvidia_and_omits_absent_network() {
 }
 
 #[test]
+fn format_graphs_handles_present_sources_before_histories_exist() {
+    let cfg = Config::default();
+    let hardware = HardwareInventory {
+        has_nvidia: true,
+        net_device: Some(String::from("eth0")),
+        ..HardwareInventory::default()
+    };
+    let formatter = PageFormatter::new(&cfg, &hardware);
+
+    let html = formatter.format_graphs(&DisplaySnapshot::default(), "", "", None);
+
+    assert_eq!(html.matches("data:image/png;base64,").count(), 4);
+    assert!(html.contains("GPU usage"));
+    assert!(html.contains("Download"));
+}
+
+#[test]
 fn graph_value_helpers_match_threshold_classes() {
     assert!(graph_value_band(None, Some((50, 70))).contains(EMPTY_VALUE));
     assert_eq!(

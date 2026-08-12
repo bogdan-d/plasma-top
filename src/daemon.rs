@@ -5,16 +5,17 @@ use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command as ProcessCommand, Stdio};
+use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::adapters::{ProductionClock, ProductionIo};
 use crate::cli::{PageDirection as CliPageDirection, RenderPage};
-use crate::config::Config;
+use crate::config::{Config, default_config_path, load_config, load_machines};
 use crate::domain::boundary::{ClockSnapshot, CommandRunner, FilesystemRoots};
 #[cfg(test)]
 use crate::domain::boundary::{DbusFacade, IoEvent, NotificationFacade};
 use crate::domain::readings::{DisplaySnapshot, HardwareInventory};
-use crate::error::{Error, Result};
+use crate::error::{CriticalService, Error, Result};
 use crate::page_commands::{
     CommandLookup, Page, PageCommandCache, PageCommandContext, PageEnvironment, PageRenderKind,
     PageSource, build_pages, default_click, page_inner_cached, page_inner_with_clock, pager_html,
@@ -22,6 +23,7 @@ use crate::page_commands::{
 };
 use crate::render::{PageFormatter, PanelFormatter};
 use crate::runtime::{self, atomic::write_atomic as write_atomic_bytes};
+use crate::scheduler::PageId;
 #[cfg(test)]
 use crate::sensors::gpu_nvidia::NvmlFacade;
 #[cfg(test)]
@@ -42,6 +44,9 @@ use std::thread;
 use crate::domain::state::NotificationState;
 #[cfg(test)]
 use crate::notify::check_and_notify;
+use crate::profiling::{
+    ProfileSession, ProfilingCommandRunner, ProfilingDbusFacade, ProfilingNotificationFacade,
+};
 #[cfg(test)]
 use crate::sensors::{
     CollectCtx, OwnerRefs, collect_with_notifications, cpu, disk, external, gpu_history, gpu_intel,
@@ -538,6 +543,7 @@ pub fn run_daemon(config_path: Option<&Path>) -> Result<()> {
                 #[cfg(test)]
                 blocked_owner: None,
             },
+            None,
         )
         .await;
         let _ = orchestration_done.send(true);
@@ -554,9 +560,232 @@ pub fn run_daemon(config_path: Option<&Path>) -> Result<()> {
     complete_daemon_run(result, io.critical_failure(), io.shutdown_timed_out())
 }
 
+/// Runs the production async scheduler for a bounded profiling scenario without publishing runtime files.
+pub(crate) fn run_timed_profiling(
+    config_path: Option<&Path>,
+    duration: Duration,
+    scenario: &str,
+    stimuli: bool,
+) -> Result<TimedProfileOutcome> {
+    let (presented, selected_page) = match scenario {
+        "hidden" => (false, PageId::Main),
+        "main" => (true, PageId::Main),
+        "full" => {
+            return Err(Error::Runtime(
+                "profiling scenario 'full' is unsupported; use 'main'".to_owned(),
+            ));
+        }
+        page => (true, PageId::from_id(page)),
+    };
+    let session = Arc::new(ProfileSession::default());
+    let clock = ProductionClock::default();
+    let mut io = ProductionIo::start_for_profiling()?;
+    let runtime = io.runtime_handle();
+    let roots = FilesystemRoots::default();
+    let unique = format!(
+        "plasma-top-profile-{}-{}",
+        std::process::id(),
+        clock.snapshot().monotonic.as_nanos()
+    );
+    let root = std::env::temp_dir().join(unique);
+    let cleanup = ProfilingCleanup(root.clone());
+    let paths = profiling_paths(&root);
+    let prepared_config = prepare_profiling_config(config_path, &root)?;
+    let (result_sender, result_receiver) = std::sync::mpsc::sync_channel(1);
+    let orchestration_done = io.orchestration_done();
+    let services = async_loop::DaemonServices {
+        commands: ProfilingCommandRunner::new(io.commands(), Arc::clone(&session)),
+        dbus: ProfilingDbusFacade::new(io.dbus(), Arc::clone(&session)),
+        notifications: ProfilingNotificationFacade::new(io.notifications(), Arc::clone(&session)),
+        stopped: io.stopped(),
+        events: io.take_event_receiver().ok_or_else(|| {
+            Error::Runtime("async I/O event receiver was already transferred".to_owned())
+        })?,
+        clock,
+        shutdown: io.shutdown_receiver(),
+        #[cfg(test)]
+        blocked_owner: None,
+    };
+    let profile = async_loop::ProfileRun {
+        duration,
+        presented,
+        selected_page,
+        stimuli,
+        session: Arc::clone(&session),
+        config_stimulus: async_loop::ProfileConfigStimulus {
+            path: prepared_config.stimulus_path,
+            original: prepared_config.original,
+            alternate: prepared_config.alternate,
+        },
+        shutdown: io.shutdown_request(),
+    };
+    let config_path = prepared_config.config_path;
+    runtime.spawn(async move {
+        let result = async_loop::run(
+            Some(config_path.as_path()),
+            &roots,
+            &paths,
+            services,
+            Some(profile),
+        )
+        .await;
+        let _ = orchestration_done.send(true);
+        let _ = result_sender.send(result);
+    });
+    let received = result_receiver.recv();
+    io.shutdown_with_budget(session.shutdown_budget_remaining(Duration::from_millis(500)));
+    session.record_shutdown_completed();
+    cleanup.remove();
+    let result = received.unwrap_or_else(|_| {
+        Err(Error::Runtime(
+            "critical async profiling orchestration task exited unexpectedly".to_owned(),
+        ))
+    });
+    Ok(complete_timed_profile(
+        &session,
+        duration,
+        scenario,
+        result,
+        io.critical_failure(),
+        io.shutdown_timed_out(),
+    ))
+}
+
+pub(crate) struct TimedProfileOutcome {
+    pub(crate) report: String,
+    pub(crate) error: Option<Error>,
+}
+
+fn complete_timed_profile(
+    session: &ProfileSession,
+    duration: Duration,
+    scenario: &str,
+    result: Result<()>,
+    critical: Option<CriticalService>,
+    shutdown_timed_out: bool,
+) -> TimedProfileOutcome {
+    let error = complete_daemon_run(result, critical, shutdown_timed_out).err();
+    let mut report = session.report(duration, scenario);
+    match &error {
+        Some(error) => {
+            use std::fmt::Write as _;
+            let _ = writeln!(report, "  final_status: error ({error})");
+        }
+        None => report.push_str("  final_status: ok\n"),
+    }
+    TimedProfileOutcome { report, error }
+}
+
+struct PreparedProfilingConfig {
+    config_path: PathBuf,
+    stimulus_path: PathBuf,
+    original: Vec<u8>,
+    alternate: Vec<u8>,
+}
+
+fn prepare_profiling_config(
+    requested_path: Option<&Path>,
+    root: &Path,
+) -> Result<PreparedProfilingConfig> {
+    fs::create_dir_all(root)?;
+    let source_path = requested_path.map_or_else(default_config_path, Path::to_path_buf);
+    let source = fs::read(&source_path).map_err(|error| {
+        Error::Runtime(format!(
+            "cannot copy profiling config {}: {error}",
+            source_path.display()
+        ))
+    })?;
+    let config_path = root.join("config.toml");
+    fs::write(&config_path, &source)?;
+
+    let mut machines = load_machines(requested_path);
+    let machines_path = root.join("machines.toml");
+    fs::write(&machines_path, serialize_toml(&machines)?)?;
+    let resolved = load_config(Some(&config_path), None)?;
+
+    let (stimulus_path, original, alternate) = if resolved.machine.is_empty() {
+        let mut table: toml::Table =
+            toml::from_slice(&source).map_err(crate::config::ConfigError::from)?;
+        set_overlay(&mut table, !resolved.display.overlay);
+        (config_path.clone(), source, serialize_toml(&table)?)
+    } else {
+        let original = serialize_toml(&machines)?;
+        let machine = machines
+            .get_mut(&resolved.machine)
+            .and_then(toml::Value::as_table_mut)
+            .ok_or_else(|| {
+                Error::Runtime(format!(
+                    "matched profiling machine '{}' is absent from isolated machine config",
+                    resolved.machine
+                ))
+            })?;
+        set_overlay(machine, !resolved.display.overlay);
+        (machines_path, original, serialize_toml(&machines)?)
+    };
+
+    Ok(PreparedProfilingConfig {
+        config_path,
+        stimulus_path,
+        original,
+        alternate,
+    })
+}
+
+fn set_overlay(table: &mut toml::Table, overlay: bool) {
+    let display = table
+        .entry(String::from("display"))
+        .or_insert_with(|| toml::Value::Table(toml::Table::new()));
+    if !display.is_table() {
+        *display = toml::Value::Table(toml::Table::new());
+    }
+    if let Some(display) = display.as_table_mut() {
+        display.insert(String::from("overlay"), toml::Value::Boolean(overlay));
+    }
+}
+
+fn serialize_toml(table: &toml::Table) -> Result<Vec<u8>> {
+    toml::to_string(table)
+        .map(String::into_bytes)
+        .map_err(|error| {
+            Error::Runtime(format!(
+                "cannot serialize isolated profiling config: {error}"
+            ))
+        })
+}
+
+struct ProfilingCleanup(PathBuf);
+
+impl ProfilingCleanup {
+    fn remove(&self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
+impl Drop for ProfilingCleanup {
+    fn drop(&mut self) {
+        self.remove();
+    }
+}
+
+fn profiling_paths(root: &Path) -> DaemonPaths {
+    let runtime = root.join("runtime");
+    let state = runtime.join("state");
+    DaemonPaths {
+        panel: runtime.join("panel.html"),
+        tooltip: runtime.join("tooltip.html"),
+        page: state.join("page"),
+        npages: state.join("npages"),
+        geom: state.join("geom"),
+        plasma_config: root.join("plasma-config"),
+        kdeglobals: root.join("kdeglobals"),
+        runtime,
+        state,
+    }
+}
+
 fn complete_daemon_run(
     result: Result<()>,
-    critical_failure: Option<crate::error::CriticalService>,
+    critical_failure: Option<CriticalService>,
     shutdown_timed_out: bool,
 ) -> Result<()> {
     result?;

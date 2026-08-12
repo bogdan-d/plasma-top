@@ -1,0 +1,25 @@
+mode	scenario	repeat	process_calls	dbus_calls	wake_p99_ms	first_paint_p99_ms	publication_p99_ms	skipped_display_deadlines	first_paint_over_250ms	publication_over_50ms	shutdown_duration_ms	shutdown_over_500ms	wall	user_s	sys_s	max_rss_kb	voluntary_context_switches	involuntary_context_switches
+affinity-cpu0	graphs	1	2	11	1.430	103.196	1.059	0	0	0	5.075	0	mm:ss or m:ss): 0:04.20	0.04	0.01	12252	245	108
+affinity-cpu0	graphs	2	2	12	1.867	103.648	1.235	0	0	0	2.380	0	mm:ss or m:ss): 0:04.20	0.03	0.01	12040	247	118
+affinity-cpu0	graphs	3	2	11	1.707	104.046	1.854	0	0	0	2.201	0	mm:ss or m:ss): 0:04.20	0.04	0.00	12300	249	114
+affinity-cpu0	hidden	1	1	14	1.443	9.769	1.586	0	0	0	2.394	0	mm:ss or m:ss): 0:04.20	0.00	0.01	10640	143	90
+affinity-cpu0	hidden	2	1	14	1.948	9.590	2.150	0	0	0	4.133	0	mm:ss or m:ss): 0:04.20	0.01	0.00	10692	142	85
+affinity-cpu0	hidden	3	1	16	3.076	8.617	3.317	0	0	0	4.875	0	mm:ss or m:ss): 0:04.20	0.01	0.00	10500	153	82
+affinity-cpu0	main	1	2	12	1.772	104.868	2.091	0	0	0	2.634	0	mm:ss or m:ss): 0:04.20	0.01	0.00	10448	168	99
+affinity-cpu0	main	2	2	12	1.832	104.701	1.267	0	0	0	2.673	0	mm:ss or m:ss): 0:04.20	0.01	0.01	10496	173	97
+affinity-cpu0	main	3	2	11	1.914	102.856	2.131	0	0	0	2.309	0	mm:ss or m:ss): 0:04.20	0.01	0.00	10512	174	106
+affinity-cpu0	processes	1	2	11	1.825	103.639	1.834	0	0	0	3.911	0	mm:ss or m:ss): 0:04.20	0.01	0.03	11072	191	86
+affinity-cpu0	processes	2	2	11	1.936	106.683	1.488	0	0	0	2.519	0	mm:ss or m:ss): 0:04.20	0.01	0.04	10892	190	100
+affinity-cpu0	processes	3	2	11	2.060	105.059	1.348	0	0	0	2.419	0	mm:ss or m:ss): 0:04.20	0.01	0.03	11084	179	130
+normal	graphs	1	2	11	1.809	103.378	1.574	0	0	0	5.972	0	mm:ss or m:ss): 0:04.20	0.06	0.01	11168	454	18
+normal	graphs	2	2	11	1.836	103.911	2.244	0	0	0	5.604	0	mm:ss or m:ss): 0:04.20	0.05	0.01	10764	459	20
+normal	graphs	3	2	13	1.937	103.986	1.687	0	0	0	2.265	0	mm:ss or m:ss): 0:04.20	0.06	0.01	10492	412	35
+normal	hidden	1	1	15	1.420	9.604	1.450	0	0	0	3.707	0	mm:ss or m:ss): 0:04.20	0.01	0.01	9476	219	14
+normal	hidden	2	1	17	1.320	9.498	1.107	0	0	0	2.293	0	mm:ss or m:ss): 0:04.20	0.01	0.00	9484	215	21
+normal	hidden	3	1	15	1.961	9.324	1.648	0	0	0	2.285	0	mm:ss or m:ss): 0:04.20	0.01	0.00	9544	220	22
+normal	main	1	2	11	1.454	104.893	1.673	0	0	0	2.422	0	mm:ss or m:ss): 0:04.20	0.02	0.01	9680	235	17
+normal	main	2	2	11	1.526	105.165	1.000	0	0	0	6.409	0	mm:ss or m:ss): 0:04.21	0.02	0.01	9232	243	24
+normal	main	3	2	11	1.901	103.986	1.701	0	0	0	2.275	0	mm:ss or m:ss): 0:04.20	0.02	0.00	9360	276	20
+normal	processes	1	2	11	1.742	105.218	1.267	0	0	0	5.951	0	mm:ss or m:ss): 0:04.20	0.02	0.03	9880	232	17
+normal	processes	2	2	11	1.458	104.388	1.542	0	0	0	6.644	0	mm:ss or m:ss): 0:04.21	0.02	0.03	9416	210	15
+normal	processes	3	2	11	1.737	105.047	1.720	0	0	0	2.237	0	mm:ss or m:ss): 0:04.20	0.02	0.03	9536	291	23

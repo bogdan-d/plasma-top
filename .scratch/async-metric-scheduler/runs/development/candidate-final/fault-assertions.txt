@@ -1,0 +1,10 @@
+fault_runs=2
+all_reports_stimuli_disabled=yes
+all_reports_have_no_stimulus_records=yes
+all_reports_final_status_ok=yes
+all_reports_no_skipped_display_deadlines=yes
+all_reports_publication_over_50ms_zero=yes
+timeout_wrapper_sleep_process_cleanup=yes
+runtime_unchanged=yes
+profile_temp_unchanged=yes
+config_fixture_and_wrapper_hashes_unchanged=yes

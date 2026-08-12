@@ -108,6 +108,23 @@ fn empty_series_draws_grid_and_labels_only() {
 }
 
 #[test]
+fn empty_overlay_draws_grid_and_primary_series_only() {
+    let without_overlay = area_chart_png(&[25.0, 50.0], 12, 8, AreaChartOptions::default());
+    let with_empty_overlay = area_chart_png(
+        &[25.0, 50.0],
+        12,
+        8,
+        AreaChartOptions {
+            overlay: Some(&[]),
+            overlay_line: RED_LINE,
+            ..AreaChartOptions::default()
+        },
+    );
+
+    assert_eq!(with_empty_overlay, without_overlay);
+}
+
+#[test]
 fn repeated_calls_are_byte_stable() {
     let options = AreaChartOptions {
         left_pad: 3,

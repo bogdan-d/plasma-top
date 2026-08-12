@@ -1,0 +1,213 @@
+mode	scenario	job	max_queue_p99_ms	max_run_p99_ms
+normal	hidden	Discovery:HardwareDiscovery:Inventory(SystemBattery)	57.504	0.581
+normal	hidden	Disk:DiskUsage:Mount("/run/media/bogdan/T_01")	42.259	0.122
+normal	hidden	Disk:Smart:SmartDrive { label: "nvme0n1", object_path: "/org/freedesktop/UDisks2/drives/KINGSTON_SKC2500M82000G_50026B7684E30425" }	0.120	24.329
+normal	hidden	Discovery:HardwareDiscovery:Inventory(Network)	24.314	2.217
+normal	hidden	Disk:DiskUsage:Mount("/run/media/bogdan/R_14")	12.804	0.112
+normal	hidden	Disk:Smart:SmartDrive { label: "nvme1n1", object_path: "/org/freedesktop/UDisks2/drives/Samsung_SSD_990_PRO_4TB_S7DPNF0Y500836E" }	2.116	10.311
+normal	hidden	Discovery:MountInventory:Singleton	9.965	0.276
+normal	hidden	Discovery:HardwareDiscovery:Inventory(Peripheral)	9.901	0.480
+normal	hidden	Disk:DiskTemperature:NamedPath { name: "nvme0n1", path: "/sys/class/hwmon/hwmon6/temp1_input" }	0.031	5.087
+normal	hidden	Discovery:HardwareDiscovery:Inventory(Smart)	0.094	2.566
+normal	hidden	Disk:DiskTemperature:NamedPath { name: "nvme1n1", path: "/sys/class/hwmon/hwmon5/temp1_input" }	0.041	1.529
+normal	hidden	Discovery:HardwareDiscovery:Inventory(Cpu)	0.604	0.711
+normal	hidden	Disk:DiskUsage:Mount("/run/media/bogdan/Q_16")	0.424	0.126
+normal	hidden	Disk:DiskUsage:Mount("/")	0.407	0.167
+normal	hidden	Discovery:HardwareDiscovery:Inventory(Thermal)	0.071	0.397
+normal	hidden	Network:NetworkRate:Device("tun0")	0.365	0.119
+normal	hidden	Discovery:HardwareDiscovery:Inventory(Nvidia)	0.078	0.359
+normal	hidden	Memory:Memory:Singleton	0.341	0.036
+normal	hidden	Cpu:Cpu:CpuSources { temperature: Some("/sys/class/hwmon/hwmon10/temp1_input"), frequency: Some("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq"), turbo: Some("/sys/devices/system/cpu/cpufreq/boost") }	0.198	0.268
+normal	hidden	Network:NetworkHistory:Singleton	0.111	0.058
+normal	hidden	Memory:MemoryHistory:Singleton	0.090	0.008
+normal	hidden	Cpu:CpuHistory:Singleton	0.086	0.027
+normal	hidden	Discovery:HardwareDiscovery:Inventory(Intel)	0.055	0.066
+normal	main	Disk:Smart:SmartDrive { label: "nvme0n1", object_path: "/org/freedesktop/UDisks2/drives/KINGSTON_SKC2500M82000G_50026B7684E30425" }	0.187	24.819
+normal	main	Discovery:HardwareDiscovery:Inventory(Network)	24.726	1.856
+normal	main	Disk:DiskUsage:Mount("/run/media/bogdan/T_01")	22.289	0.139
+normal	main	Disk:DiskUsage:Mount("/run/media/bogdan/R_14")	12.939	0.069
+normal	main	Disk:Smart:SmartDrive { label: "nvme1n1", object_path: "/org/freedesktop/UDisks2/drives/Samsung_SSD_990_PRO_4TB_S7DPNF0Y500836E" }	1.662	9.887
+normal	main	Discovery:HardwareDiscovery:Inventory(Peripheral)	9.716	0.647
+normal	main	Discovery:HardwareDiscovery:Inventory(SystemBattery)	0.096	7.492
+normal	main	Disk:DiskTemperature:NamedPath { name: "nvme0n1", path: "/sys/class/hwmon/hwmon6/temp1_input" }	0.042	5.107
+normal	main	Discovery:HardwareDiscovery:Inventory(Smart)	0.047	2.987
+normal	main	Discovery:MountInventory:Singleton	2.895	0.283
+normal	main	Disk:DiskUsage:Mount("/")	2.401	0.088
+normal	main	Network:NetworkIdentity:Singleton	0.364	1.939
+normal	main	Disk:DiskTemperature:NamedPath { name: "nvme1n1", path: "/sys/class/hwmon/hwmon5/temp1_input" }	0.043	1.587
+normal	main	Network:NetworkRate:Device("tun0")	0.521	0.081
+normal	main	Memory:Memory:Singleton	0.511	0.062
+normal	main	Discovery:HardwareDiscovery:Inventory(Cpu)	0.047	0.455
+normal	main	Discovery:HardwareDiscovery:Inventory(DiskIo)	0.169	0.428
+normal	main	Discovery:HardwareDiscovery:Inventory(Thermal)	0.036	0.385
+normal	main	Discovery:HardwareDiscovery:Inventory(Nvidia)	0.096	0.371
+normal	main	External:Brightness:Singleton	0.337	0.080
+normal	main	Cpu:Cpu:CpuSources { temperature: Some("/sys/class/hwmon/hwmon10/temp1_input"), frequency: Some("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq"), turbo: Some("/sys/devices/system/cpu/cpufreq/boost") }	0.290	0.329
+normal	main	Disk:DiskUsage:Mount("/run/media/bogdan/Q_16")	0.293	0.104
+normal	main	Discovery:HardwareDiscovery:Inventory(Intel)	0.136	0.064
+normal	main	Memory:MemoryHistory:Singleton	0.108	0.011
+normal	main	Discovery:HardwareDiscovery:Inventory(Backlight)	0.083	0.107
+normal	main	Cpu:CpuHistory:Singleton	0.103	0.031
+normal	main	Network:NetworkHistory:Singleton	0.080	0.041
+normal	graphs	Page:PageRender:Singleton	32.581	2.619
+normal	graphs	Discovery:MountInventory:Singleton	31.157	0.276
+normal	graphs	Disk:DiskUsage:Mount("/run/media/bogdan/T_01")	28.889	0.118
+normal	graphs	Discovery:HardwareDiscovery:Inventory(Network)	23.870	1.437
+normal	graphs	Disk:Smart:SmartDrive { label: "nvme0n1", object_path: "/org/freedesktop/UDisks2/drives/KINGSTON_SKC2500M82000G_50026B7684E30425" }	0.524	23.163
+normal	graphs	Disk:DiskUsage:Mount("/run/media/bogdan/R_14")	15.580	0.090
+normal	graphs	Discovery:HardwareDiscovery:Inventory(Peripheral)	8.841	0.422
+normal	graphs	Disk:Smart:SmartDrive { label: "nvme1n1", object_path: "/org/freedesktop/UDisks2/drives/Samsung_SSD_990_PRO_4TB_S7DPNF0Y500836E" }	2.072	8.443
+normal	graphs	Discovery:HardwareDiscovery:Inventory(SystemBattery)	7.044	0.539
+normal	graphs	Disk:DiskTemperature:NamedPath { name: "nvme0n1", path: "/sys/class/hwmon/hwmon6/temp1_input" }	0.028	5.094
+normal	graphs	Discovery:HardwareDiscovery:Inventory(Smart)	0.655	2.671
+normal	graphs	Disk:DiskUsage:Mount("/")	2.241	0.137
+normal	graphs	Network:NetworkIdentity:Singleton	0.312	1.869
+normal	graphs	Disk:DiskTemperature:NamedPath { name: "nvme1n1", path: "/sys/class/hwmon/hwmon5/temp1_input" }	0.059	1.589
+normal	graphs	Discovery:HardwareDiscovery:Inventory(Backlight)	1.238	0.097
+normal	graphs	Disk:DiskUsage:Mount("/run/media/bogdan/Q_16")	1.187	0.140
+normal	graphs	Discovery:HardwareDiscovery:Inventory(Nvidia)	1.041	0.300
+normal	graphs	Discovery:HardwareDiscovery:Inventory(Cpu)	0.995	0.446
+normal	graphs	Discovery:HardwareDiscovery:Inventory(Thermal)	0.684	0.436
+normal	graphs	Discovery:HardwareDiscovery:Inventory(DiskIo)	0.589	0.414
+normal	graphs	Network:NetworkRate:Device("tun0")	0.493	0.058
+normal	graphs	Discovery:HardwareDiscovery:Inventory(Intel)	0.450	0.105
+normal	graphs	Memory:Memory:Singleton	0.430	0.072
+normal	graphs	External:Brightness:Singleton	0.297	0.092
+normal	graphs	Cpu:Cpu:CpuSources { temperature: Some("/sys/class/hwmon/hwmon10/temp1_input"), frequency: Some("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq"), turbo: Some("/sys/devices/system/cpu/cpufreq/boost") }	0.210	0.275
+normal	graphs	Memory:MemoryHistory:Singleton	0.089	0.011
+normal	graphs	Cpu:CpuHistory:Singleton	0.081	0.029
+normal	graphs	Network:NetworkHistory:Singleton	0.038	0.016
+normal	processes	Disk:DiskUsage:Mount("/run/media/bogdan/T_01")	43.606	0.092
+normal	processes	Disk:Smart:SmartDrive { label: "nvme0n1", object_path: "/org/freedesktop/UDisks2/drives/KINGSTON_SKC2500M82000G_50026B7684E30425" }	0.140	22.091
+normal	processes	Discovery:HardwareDiscovery:Inventory(Network)	22.068	2.050
+normal	processes	Discovery:MountInventory:Singleton	18.990	0.239
+normal	processes	Disk:DiskUsage:Mount("/run/media/bogdan/R_14")	16.662	0.108
+normal	processes	Disk:DiskUsage:Mount("/")	8.604	0.169
+normal	processes	Process:PageProcesses:Singleton	0.406	8.262
+normal	processes	Disk:Smart:SmartDrive { label: "nvme1n1", object_path: "/org/freedesktop/UDisks2/drives/Samsung_SSD_990_PRO_4TB_S7DPNF0Y500836E" }	1.913	7.228
+normal	processes	Discovery:HardwareDiscovery:Inventory(Peripheral)	7.099	0.554
+normal	processes	Network:NetworkIdentity:Singleton	7.054	1.691
+normal	processes	Discovery:HardwareDiscovery:Inventory(SystemBattery)	0.052	6.765
+normal	processes	Disk:DiskTemperature:NamedPath { name: "nvme0n1", path: "/sys/class/hwmon/hwmon6/temp1_input" }	0.033	5.109
+normal	processes	Discovery:HardwareDiscovery:Inventory(Smart)	0.046	2.644
+normal	processes	Discovery:HardwareDiscovery:Inventory(Cpu)	0.133	0.697
+normal	processes	Disk:DiskTemperature:NamedPath { name: "nvme1n1", path: "/sys/class/hwmon/hwmon5/temp1_input" }	0.065	0.676
+normal	processes	Discovery:HardwareDiscovery:Inventory(Thermal)	0.064	0.503
+normal	processes	Network:NetworkRate:Device("tun0")	0.408	0.089
+normal	processes	Memory:Memory:Singleton	0.376	0.041
+normal	processes	Discovery:HardwareDiscovery:Inventory(DiskIo)	0.163	0.343
+normal	processes	Discovery:HardwareDiscovery:Inventory(Nvidia)	0.074	0.323
+normal	processes	External:Brightness:Singleton	0.304	0.111
+normal	processes	Cpu:Cpu:CpuSources { temperature: Some("/sys/class/hwmon/hwmon10/temp1_input"), frequency: Some("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq"), turbo: Some("/sys/devices/system/cpu/cpufreq/boost") }	0.181	0.268
+normal	processes	Disk:DiskUsage:Mount("/run/media/bogdan/Q_16")	0.248	0.131
+normal	processes	Memory:MemoryHistory:Singleton	0.161	0.023
+normal	processes	Cpu:CpuHistory:Singleton	0.150	0.046
+normal	processes	Network:NetworkHistory:Singleton	0.110	0.036
+normal	processes	Discovery:HardwareDiscovery:Inventory(Backlight)	0.057	0.100
+normal	processes	Discovery:HardwareDiscovery:Inventory(Intel)	0.066	0.067
+affinity-cpu0	hidden	Disk:Smart:SmartDrive { label: "nvme0n1", object_path: "/org/freedesktop/UDisks2/drives/KINGSTON_SKC2500M82000G_50026B7684E30425" }	0.178	22.532
+affinity-cpu0	hidden	Disk:DiskUsage:Mount("/run/media/bogdan/R_14")	16.814	0.096
+affinity-cpu0	hidden	Disk:DiskUsage:Mount("/run/media/bogdan/T_01")	13.986	0.085
+affinity-cpu0	hidden	Discovery:HardwareDiscovery:Inventory(Peripheral)	13.120	0.711
+affinity-cpu0	hidden	Disk:Smart:SmartDrive { label: "nvme1n1", object_path: "/org/freedesktop/UDisks2/drives/Samsung_SSD_990_PRO_4TB_S7DPNF0Y500836E" }	0.083	8.701
+affinity-cpu0	hidden	Discovery:HardwareDiscovery:Inventory(SystemBattery)	5.114	2.159
+affinity-cpu0	hidden	Disk:DiskTemperature:NamedPath { name: "nvme0n1", path: "/sys/class/hwmon/hwmon6/temp1_input" }	0.068	5.065
+affinity-cpu0	hidden	Discovery:HardwareDiscovery:Inventory(Smart)	0.059	2.835
+affinity-cpu0	hidden	Discovery:HardwareDiscovery:Inventory(Network)	0.022	2.181
+affinity-cpu0	hidden	Disk:DiskTemperature:NamedPath { name: "nvme1n1", path: "/sys/class/hwmon/hwmon5/temp1_input" }	0.025	1.917
+affinity-cpu0	hidden	Disk:DiskUsage:Mount("/run/media/bogdan/Q_16")	0.787	0.026
+affinity-cpu0	hidden	Discovery:HardwareDiscovery:Inventory(Cpu)	0.567	0.300
+affinity-cpu0	hidden	Disk:DiskUsage:Mount("/")	0.544	0.046
+affinity-cpu0	hidden	Memory:Memory:Singleton	0.407	0.040
+affinity-cpu0	hidden	Discovery:HardwareDiscovery:Inventory(Thermal)	0.037	0.338
+affinity-cpu0	hidden	Discovery:MountInventory:Singleton	0.331	0.181
+affinity-cpu0	hidden	Network:NetworkRate:Device("tun0")	0.319	0.057
+affinity-cpu0	hidden	Cpu:Cpu:CpuSources { temperature: Some("/sys/class/hwmon/hwmon10/temp1_input"), frequency: Some("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq"), turbo: Some("/sys/devices/system/cpu/cpufreq/boost") }	0.129	0.318
+affinity-cpu0	hidden	Discovery:HardwareDiscovery:Inventory(Nvidia)	0.019	0.227
+affinity-cpu0	hidden	Cpu:CpuHistory:Singleton	0.133	0.036
+affinity-cpu0	hidden	Memory:MemoryHistory:Singleton	0.130	0.011
+affinity-cpu0	hidden	Network:NetworkHistory:Singleton	0.064	0.031
+affinity-cpu0	hidden	Discovery:HardwareDiscovery:Inventory(Intel)	0.019	0.026
+affinity-cpu0	main	Disk:DiskUsage:Mount("/run/media/bogdan/T_01")	32.460	0.053
+affinity-cpu0	main	Disk:Smart:SmartDrive { label: "nvme0n1", object_path: "/org/freedesktop/UDisks2/drives/KINGSTON_SKC2500M82000G_50026B7684E30425" }	0.149	23.522
+affinity-cpu0	main	Discovery:HardwareDiscovery:Inventory(Network)	23.508	1.871
+affinity-cpu0	main	Disk:DiskUsage:Mount("/run/media/bogdan/R_14")	19.650	0.088
+affinity-cpu0	main	Disk:Smart:SmartDrive { label: "nvme1n1", object_path: "/org/freedesktop/UDisks2/drives/Samsung_SSD_990_PRO_4TB_S7DPNF0Y500836E" }	1.705	6.928
+affinity-cpu0	main	Discovery:HardwareDiscovery:Inventory(Peripheral)	6.859	0.397
+affinity-cpu0	main	Disk:DiskTemperature:NamedPath { name: "nvme0n1", path: "/sys/class/hwmon/hwmon6/temp1_input" }	0.040	5.184
+affinity-cpu0	main	Discovery:MountInventory:Singleton	4.408	0.221
+affinity-cpu0	main	Disk:DiskUsage:Mount("/")	2.452	0.027
+affinity-cpu0	main	Discovery:HardwareDiscovery:Inventory(Smart)	0.033	2.451
+affinity-cpu0	main	Network:NetworkIdentity:Singleton	0.297	1.826
+affinity-cpu0	main	Disk:DiskTemperature:NamedPath { name: "nvme1n1", path: "/sys/class/hwmon/hwmon5/temp1_input" }	0.087	1.168
+affinity-cpu0	main	Discovery:HardwareDiscovery:Inventory(SystemBattery)	0.053	0.527
+affinity-cpu0	main	Memory:Memory:Singleton	0.524	0.057
+affinity-cpu0	main	Discovery:HardwareDiscovery:Inventory(Cpu)	0.077	0.430
+affinity-cpu0	main	Cpu:Cpu:CpuSources { temperature: Some("/sys/class/hwmon/hwmon10/temp1_input"), frequency: Some("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq"), turbo: Some("/sys/devices/system/cpu/cpufreq/boost") }	0.403	0.255
+affinity-cpu0	main	Network:NetworkRate:Device("tun0")	0.378	0.091
+affinity-cpu0	main	Discovery:HardwareDiscovery:Inventory(Thermal)	0.040	0.345
+affinity-cpu0	main	External:Brightness:Singleton	0.323	0.178
+affinity-cpu0	main	Discovery:HardwareDiscovery:Inventory(Nvidia)	0.091	0.287
+affinity-cpu0	main	Discovery:HardwareDiscovery:Inventory(DiskIo)	0.223	0.262
+affinity-cpu0	main	Disk:DiskUsage:Mount("/run/media/bogdan/Q_16")	0.178	0.105
+affinity-cpu0	main	Memory:MemoryHistory:Singleton	0.094	0.010
+affinity-cpu0	main	Cpu:CpuHistory:Singleton	0.086	0.028
+affinity-cpu0	main	Discovery:HardwareDiscovery:Inventory(Backlight)	0.086	0.011
+affinity-cpu0	main	Discovery:HardwareDiscovery:Inventory(Intel)	0.072	0.059
+affinity-cpu0	main	Network:NetworkHistory:Singleton	0.046	0.021
+affinity-cpu0	graphs	Page:PageRender:Singleton	31.880	1.531
+affinity-cpu0	graphs	Discovery:MountInventory:Singleton	29.126	0.209
+affinity-cpu0	graphs	Discovery:HardwareDiscovery:Inventory(Network)	28.826	1.979
+affinity-cpu0	graphs	Disk:DiskUsage:Mount("/run/media/bogdan/T_01")	28.671	0.080
+affinity-cpu0	graphs	Disk:Smart:SmartDrive { label: "nvme0n1", object_path: "/org/freedesktop/UDisks2/drives/KINGSTON_SKC2500M82000G_50026B7684E30425" }	0.779	27.694
+affinity-cpu0	graphs	Discovery:HardwareDiscovery:Inventory(Peripheral)	14.537	1.310
+affinity-cpu0	graphs	Disk:DiskUsage:Mount("/run/media/bogdan/R_14")	14.372	0.085
+affinity-cpu0	graphs	Disk:Smart:SmartDrive { label: "nvme1n1", object_path: "/org/freedesktop/UDisks2/drives/Samsung_SSD_990_PRO_4TB_S7DPNF0Y500836E" }	3.066	12.218
+affinity-cpu0	graphs	Disk:DiskTemperature:NamedPath { name: "nvme0n1", path: "/sys/class/hwmon/hwmon6/temp1_input" }	0.079	5.814
+affinity-cpu0	graphs	Disk:DiskUsage:Mount("/")	3.230	0.031
+affinity-cpu0	graphs	Network:NetworkIdentity:Singleton	0.457	2.668
+affinity-cpu0	graphs	Discovery:HardwareDiscovery:Inventory(Smart)	0.076	2.587
+affinity-cpu0	graphs	Discovery:HardwareDiscovery:Inventory(SystemBattery)	1.343	0.645
+affinity-cpu0	graphs	Disk:DiskTemperature:NamedPath { name: "nvme1n1", path: "/sys/class/hwmon/hwmon5/temp1_input" }	0.093	1.263
+affinity-cpu0	graphs	Disk:DiskUsage:Mount("/run/media/bogdan/Q_16")	1.143	0.036
+affinity-cpu0	graphs	Discovery:HardwareDiscovery:Inventory(Backlight)	0.770	0.024
+affinity-cpu0	graphs	Discovery:HardwareDiscovery:Inventory(DiskIo)	0.686	0.266
+affinity-cpu0	graphs	Discovery:HardwareDiscovery:Inventory(Intel)	0.642	0.049
+affinity-cpu0	graphs	Discovery:HardwareDiscovery:Inventory(Thermal)	0.606	0.347
+affinity-cpu0	graphs	External:Brightness:Singleton	0.491	0.092
+affinity-cpu0	graphs	Memory:Memory:Singleton	0.437	0.046
+affinity-cpu0	graphs	Discovery:HardwareDiscovery:Inventory(Cpu)	0.103	0.365
+affinity-cpu0	graphs	Discovery:HardwareDiscovery:Inventory(Nvidia)	0.271	0.327
+affinity-cpu0	graphs	Cpu:Cpu:CpuSources { temperature: Some("/sys/class/hwmon/hwmon10/temp1_input"), frequency: Some("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq"), turbo: Some("/sys/devices/system/cpu/cpufreq/boost") }	0.253	0.323
+affinity-cpu0	graphs	Network:NetworkRate:Device("tun0")	0.311	0.119
+affinity-cpu0	graphs	Network:NetworkHistory:Singleton	0.113	0.023
+affinity-cpu0	graphs	Memory:MemoryHistory:Singleton	0.096	0.009
+affinity-cpu0	graphs	Cpu:CpuHistory:Singleton	0.092	0.026
+affinity-cpu0	processes	Disk:Smart:SmartDrive { label: "nvme0n1", object_path: "/org/freedesktop/UDisks2/drives/KINGSTON_SKC2500M82000G_50026B7684E30425" }	0.148	23.525
+affinity-cpu0	processes	Discovery:HardwareDiscovery:Inventory(Network)	23.520	1.832
+affinity-cpu0	processes	Disk:DiskUsage:Mount("/run/media/bogdan/R_14")	16.199	0.092
+affinity-cpu0	processes	Disk:DiskUsage:Mount("/")	9.463	0.045
+affinity-cpu0	processes	Network:NetworkIdentity:Singleton	7.734	1.814
+affinity-cpu0	processes	Process:PageProcesses:Singleton	0.787	7.663
+affinity-cpu0	processes	Disk:Smart:SmartDrive { label: "nvme1n1", object_path: "/org/freedesktop/UDisks2/drives/Samsung_SSD_990_PRO_4TB_S7DPNF0Y500836E" }	1.630	7.149
+affinity-cpu0	processes	Discovery:HardwareDiscovery:Inventory(Peripheral)	7.079	0.438
+affinity-cpu0	processes	Discovery:MountInventory:Singleton	5.831	0.232
+affinity-cpu0	processes	Disk:DiskTemperature:NamedPath { name: "nvme0n1", path: "/sys/class/hwmon/hwmon6/temp1_input" }	0.048	5.144
+affinity-cpu0	processes	Network:NetworkRate:Device("tun0")	3.238	0.063
+affinity-cpu0	processes	Memory:Memory:Singleton	3.206	0.045
+affinity-cpu0	processes	External:Brightness:Singleton	3.122	0.072
+affinity-cpu0	processes	Discovery:HardwareDiscovery:Inventory(Smart)	0.027	2.614
+affinity-cpu0	processes	Disk:DiskTemperature:NamedPath { name: "nvme1n1", path: "/sys/class/hwmon/hwmon5/temp1_input" }	0.076	1.252
+affinity-cpu0	processes	Discovery:HardwareDiscovery:Inventory(DiskIo)	0.664	0.275
+affinity-cpu0	processes	Discovery:HardwareDiscovery:Inventory(SystemBattery)	0.055	0.525
+affinity-cpu0	processes	Discovery:HardwareDiscovery:Inventory(Cpu)	0.039	0.365
+affinity-cpu0	processes	Cpu:Cpu:CpuSources { temperature: Some("/sys/class/hwmon/hwmon10/temp1_input"), frequency: Some("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq"), turbo: Some("/sys/devices/system/cpu/cpufreq/boost") }	0.297	0.235
+affinity-cpu0	processes	Discovery:HardwareDiscovery:Inventory(Thermal)	0.029	0.290
+affinity-cpu0	processes	Discovery:HardwareDiscovery:Inventory(Nvidia)	0.120	0.282
+affinity-cpu0	processes	Disk:DiskUsage:Mount("/run/media/bogdan/Q_16")	0.176	0.030
+affinity-cpu0	processes	Memory:MemoryHistory:Singleton	0.113	0.012
+affinity-cpu0	processes	Cpu:CpuHistory:Singleton	0.112	0.032
+affinity-cpu0	processes	Disk:DiskUsage:Mount("/run/media/bogdan/T_01")	0.090	0.024
+affinity-cpu0	processes	Discovery:HardwareDiscovery:Inventory(Backlight)	0.086	0.010
+affinity-cpu0	processes	Network:NetworkHistory:Singleton	0.077	0.032
+affinity-cpu0	processes	Discovery:HardwareDiscovery:Inventory(Intel)	0.047	0.040

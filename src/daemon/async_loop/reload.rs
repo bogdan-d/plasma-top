@@ -12,7 +12,9 @@ pub(super) fn check(
     actions: &mut VecDeque<SchedulerAction>,
     owner_messages: &mut VecDeque<(OwnerId, OwnerMessage)>,
 ) -> Result<bool> {
-    cache_live_geom();
+    if state.profile.is_none() {
+        cache_live_geom();
+    }
     let new_cfg = match state::load_replacement(config_path) {
         Ok(cfg) => cfg,
         Err(error) => {
@@ -47,13 +49,18 @@ pub(super) fn check(
     state.config_generation = state.config_generation.next();
     state.rendered_graph = None;
     state.render_generation = state.render_generation.saturating_add(1);
-    enqueue(
-        actions,
-        scheduler.handle(SchedulerEvent::ConfigChanged {
-            at: now(clock),
-            config: state.scheduler_config(),
-        }),
-    );
+    let transition = scheduler.handle(SchedulerEvent::ConfigChanged {
+        at: now(clock),
+        config: state.scheduler_config(),
+    });
+    if let Some(profile) = &state.profile {
+        profile.observe_config(
+            state.config_generation,
+            state.cfg.display.overlay,
+            &transition,
+        );
+    }
+    enqueue(actions, transition);
     if hardware_changed {
         state.inventory_generation = state.inventory_generation.next();
         let config = state.scheduler_config();
@@ -88,7 +95,7 @@ pub(super) fn check(
             }),
         );
     }
-    request_selected_graph(scheduler, state, paths, clock, actions);
+    request_selected_graph(scheduler, state, clock, actions);
     Ok(true)
 }
 

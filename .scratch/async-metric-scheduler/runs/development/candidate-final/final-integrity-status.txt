@@ -1,0 +1,5 @@
+repository_gate_exit=0
+git_diff_check_exit=0
+report_no_index_diff_check_exit=1
+report_no_index_diff_check_output_empty=yes
+touched_handwritten_rust_line_limit_exit=0

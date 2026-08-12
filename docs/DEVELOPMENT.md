@@ -62,6 +62,17 @@ For a release candidate, perform a separate real-session pass only when modifyin
 ./plasma-top list-items
 ```
 
+Scheduler profiling keeps the existing cold/warm one-shot command and adds a runtime-file-free timed async mode:
+
+```bash
+./plasma-top profiling --config config/config.toml
+./plasma-top profiling --config config/config.toml --duration 30 --scenario hidden
+./plasma-top profiling --config config/config.toml --duration 30 --scenario graphs
+./plasma-top profiling --config config/config.toml --duration 5 --scenario main --stimuli
+```
+
+Timed mode without `--stimuli` is a steady scenario and performs no page, presentation, or config mutations. `--stimuli` explicitly opts into one serial bounded page/presentation/config sequence through the normal inotify, reload, scheduler, and in-memory publication paths; aggregate counters in that report include stimulus work. The user's config and runtime are not modified. Slow and short runs leave an action pending until its exact watcher/scheduler-observed state and correlated tooltip publication complete, then report timeout state separately as protocol-requested and watcher/scheduler-observed values.
+
 `install.sh` and `packaging/aur/PKGBUILD` both build with `--locked`; package launchers set `PLASMA_TOP_CODE_ROOT` and execute the installed native binary. `tools/package_layout_test.sh` verifies their shared manifest, legacy-layout upgrade, repeat upgrade, uninstall, and user-file preservation contracts.
 
 Python is not a runtime, build, lint, or baseline CI dependency. Optional Qt/QML verification uses Python 3; `tools/qt_shot.py` additionally needs PyQt6. Fixed compatibility snapshots and fixtures live under `tests/`.

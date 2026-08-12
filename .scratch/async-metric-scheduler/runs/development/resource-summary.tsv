@@ -1,0 +1,17 @@
+build	mode	scenario	n	wall_s_median	user_s_median	sys_s_median	rss_kib_median	voluntary_cs_median	involuntary_cs_median
+candidate	normal	hidden	3	4.200	0.010	0.000	8640.000	184.000	24.000
+candidate	normal	main	3	4.200	0.010	0.010	8956.000	242.000	19.000
+candidate	normal	graphs	3	4.200	0.050	0.010	10880.000	425.000	26.000
+candidate	normal	processes	3	4.200	0.020	0.030	8580.000	270.000	23.000
+candidate	affinity-cpu0	hidden	3	4.200	0.010	0.000	9896.000	136.000	94.000
+candidate	affinity-cpu0	main	3	4.200	0.010	0.000	9924.000	162.000	95.000
+candidate	affinity-cpu0	graphs	3	4.200	0.040	0.010	11580.000	246.000	119.000
+candidate	affinity-cpu0	processes	3	4.200	0.020	0.030	10228.000	171.000	100.000
+baseline	normal	hidden	3	0.050	0.010	0.000	6968.000	34.000	14.000
+baseline	normal	main	3	1.060	0.010	0.010	15444.000	38.000	10.000
+baseline	normal	graphs	3	1.060	0.010	0.010	15268.000	38.000	15.000
+baseline	normal	processes	3	1.570	0.010	0.020	15516.000	39.000	24.000
+baseline	affinity-cpu0	hidden	3	0.050	0.000	0.000	7576.000	34.000	8.000
+baseline	affinity-cpu0	main	3	1.060	0.010	0.010	15500.000	39.000	10.000
+baseline	affinity-cpu0	graphs	3	1.050	0.010	0.000	15252.000	38.000	10.000
+baseline	affinity-cpu0	processes	3	1.560	0.010	0.020	15460.000	39.000	10.000

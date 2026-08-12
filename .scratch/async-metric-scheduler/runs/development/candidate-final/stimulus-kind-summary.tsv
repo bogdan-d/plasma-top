@@ -1,0 +1,10 @@
+mode	kind	runs	reported_samples_total	over_100ms_total	worst_reported_p95_ms	worst_reported_p99_ms
+normal	page	3	6	0	51.679	51.679
+normal	control	3	3	0	52.330	52.330
+normal	config	3	6	0	56.036	56.036
+affinity-cpu0	page	3	6	0	51.885	51.885
+affinity-cpu0	control	3	3	0	51.917	51.917
+affinity-cpu0	config	3	6	0	55.290	55.290
+all	page	6	12	0	51.885	51.885
+all	control	6	6	0	52.330	52.330
+all	config	6	12	0	56.036	56.036

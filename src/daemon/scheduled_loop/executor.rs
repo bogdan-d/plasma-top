@@ -144,6 +144,7 @@ pub(super) fn execute_transition(
                 reason,
                 panel,
                 tooltip,
+                ..
             }) => {
                 if let Some(acknowledgement) = publication::publish(
                     publication,

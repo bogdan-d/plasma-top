@@ -1,0 +1,9 @@
+case=steady
+mode=normal
+scenario=processes
+repeat=3
+stimuli=disabled
+command=/usr/bin/time -v -o .scratch/async-metric-scheduler/runs/development/candidate-final/normal-processes-3.time /var/mnt/xdata/code/_self/plasma-top/.scratch/async-metric-scheduler/runs/development/binaries/plasma-top-candidate-final-d2b357d-diff-d34225bdacf7 profiling --config /var/mnt/xdata/code/_self/plasma-top/config/config.toml --duration 4.2 --scenario processes 
+started_at=2026-08-12T17:59:38+03:00
+exit_status=0
+finished_at=2026-08-12T17:59:42+03:00

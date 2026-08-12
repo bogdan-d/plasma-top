@@ -1,0 +1,2818 @@
+diff --git a/docs/DEVELOPMENT.md b/docs/DEVELOPMENT.md
+index f6efa95..5ee7f97 100644
+--- a/docs/DEVELOPMENT.md
++++ b/docs/DEVELOPMENT.md
+@@ -62,6 +62,17 @@ ## Plasma and Qt verification
+ ./plasma-top list-items
+ ```
+ 
++Scheduler profiling keeps the existing cold/warm one-shot command and adds a runtime-file-free timed async mode:
++
++```bash
++./plasma-top profiling --config config/config.toml
++./plasma-top profiling --config config/config.toml --duration 30 --scenario hidden
++./plasma-top profiling --config config/config.toml --duration 30 --scenario graphs
++./plasma-top profiling --config config/config.toml --duration 5 --scenario main --stimuli
++```
++
++Timed mode without `--stimuli` is a steady scenario and performs no page, presentation, or config mutations. `--stimuli` explicitly opts into one serial bounded page/presentation/config sequence through the normal inotify, reload, scheduler, and in-memory publication paths; aggregate counters in that report include stimulus work. The user's config and runtime are not modified. Slow and short runs leave an action pending until its exact watcher/scheduler-observed state and correlated tooltip publication complete, then report timeout state separately as protocol-requested and watcher/scheduler-observed values.
++
+ `install.sh` and `packaging/aur/PKGBUILD` both build with `--locked`; package launchers set `PLASMA_TOP_CODE_ROOT` and execute the installed native binary. `tools/package_layout_test.sh` verifies their shared manifest, legacy-layout upgrade, repeat upgrade, uninstall, and user-file preservation contracts.
+ 
+ Python is not a runtime, build, lint, or baseline CI dependency. Optional Qt/QML verification uses Python 3; `tools/qt_shot.py` additionally needs PyQt6. Fixed compatibility snapshots and fixtures live under `tests/`.
+diff --git a/docs/PERFORMANCE.md b/docs/PERFORMANCE.md
+index 181dc0f..a91712f 100644
+--- a/docs/PERFORMANCE.md
++++ b/docs/PERFORMANCE.md
+@@ -10,6 +10,34 @@ ## Measure current Rust behavior
+ ./plasma-top profiling --config config/config.toml
+ ```
+ 
++Timed profiling runs the production scheduler-aware async owner loop and I/O services while suppressing panel and tooltip file publication. Its disposable root carries only isolated event-protocol state and config copies. `main` is the default timed scenario; `hidden` models panel/notification/history demand, and a configured page id models a presented tooltip with that page selected. Unknown or unconfigured page ids are rejected.
++
++```bash
++./plasma-top profiling --config config/config.toml --duration 30
++./plasma-top profiling --config config/config.toml --duration 30 --scenario hidden
++./plasma-top profiling --config config/config.toml --duration 30 --scenario graphs
++```
++
++These ordinary timed commands hold the requested presentation and page state steady for the full measurement. They do not inject page, presentation, or config changes.
++
++The timed report includes per-job captured/baseline/absent/failed/rejected/cancelled/in-flight dispositions, process and D-Bus call counts, queue/run percentiles, maximum age from accepted retained source-capture timestamps, timer wake lateness, first-paint latency, render percentiles separated by publication reason, and scheduled-publication lateness measured after rendering against the scheduler's typed display deadline. Queue latency ends only when work actually begins, so blocking-lane and task-pool admission are included there rather than in run time. Deadline counts are limited to phase-locked display ticks actually skipped, first paints over 250 ms, and scheduled publications over 50 ms; nanosecond timer delay is reported only in wake-lateness percentiles. Runtime-file write timing is reported as not applicable because panel and tooltip writes are deliberately disabled. A duration must be finite and positive; `--scenario` is valid only with `--duration`.
++
++Add `--stimuli` only when measuring page, presentation-control, and config event latency:
++
++```bash
++./plasma-top profiling --config config/config.toml --duration 5 --scenario main --stimuli
++```
++
++This opt-in run executes one serial bounded sequence through the isolated page, presentation-lease, and copied-config files. Every action waits for the watcher to observe its exact expected page/presentation/config state and, when applicable, for the exact scheduler publication identity to finish tooltip HTML rendering in memory. Protocol-file writes update only requested stimulus state; acceptance, scheduler work, rendering, and stimulus completion use cached watcher/scheduler-observed state. The next action is scheduled relative to that completion, not scheduler boot. A short or slow run reports the pending stimulus identity, expected state, timeout, unstarted actions, and separate protocol-requested and watcher/scheduler-observed states instead of consuming restore actions, claiming an unobserved page, or implying restoration. The report labels aggregate job/call/render counts as covering both the scenario and stimulus work. The user's config and runtime remain untouched.
++
++Page, control, and config latency starts immediately after the external-protocol atomic rename succeeds. It includes inotify observation and debounce, production event/reload and scheduler handling, and ends only at the correlated in-memory tooltip HTML publication. A publication caused by an external style/config source cannot satisfy a stimulus merely because it has the same broad publication reason. Publication bytes remain in memory instead of being written, so this boundary measures the daemon's complete publication work but not plasmashell parsing or QML layout. Each kind reports sample count, p50/p95/p99, and the number over 100 ms.
++
++Shutdown timing starts when the profile deadline is observed, immediately before both the scheduler shutdown event and shell/service shutdown request. It ends only after daemon owner/notification orchestration has terminated, command and D-Bus services have completed their shutdown, and the owned runtime thread has joined or exhausted the same shared 500 ms budget. The report gives the isolated duration and count over 500 ms; total process wall time is not used.
++
++These reports are instrumentation, not benchmark evidence. The retained development-host report predates explicit stimulus opt-in, so its timed scenarios contain mixed stimulus work and are not steady-scenario evidence. Corrected A/B runs have not been captured, and no SLO or power conclusion should be inferred from the command examples.
++
++Production command, system-D-Bus, and notification handles contain no profiling field or per-call profiling branch; timed mode wraps them in profiling-only counting facades. Owner timing and in-memory publication suppression still use one optional session check at orchestration boundaries. Those checks do not take clocks or allocate when profiling is absent. Splitting the complete owner/publication loop into duplicate production and profiling implementations would remove those branches at disproportionate maintenance and correctness cost, so the truthful claim is no production profiling collection or hot boundary-adapter branch, not literal zero instructions everywhere.
++
+ For process-level work, compare release binaries and record host, kernel, hardware, enabled config, poll interval, page, and command/service availability. For plasmashell layout cost, use the live applet plus `pidstat`; a headless `QTextDocument` does not reproduce the expensive `QQuickText` path.
+ 
+ Do not copy historical measurements into a current benchmark report. Rerun them.
+diff --git a/src/adapters/dbus/tests.rs b/src/adapters/dbus/tests.rs
+index 3fc1b07..af34c18 100644
+--- a/src/adapters/dbus/tests.rs
++++ b/src/adapters/dbus/tests.rs
+@@ -167,3 +167,28 @@ fn stale_disconnect_completion_does_not_match_a_new_connection() {
+     assert!(!connection_matches(Some(current), old));
+     assert!(connection_matches(Some(current), current));
+ }
++
++#[test]
++fn notification_send_counts_as_dbus_call_when_profiled() {
++    use crate::profiling::{ProfileSession, ProfilingNotificationFacade};
++
++    let (sender, _receiver) = mpsc::channel(1);
++    let stopped = Arc::new(AtomicBool::new(true));
++    let profile = Arc::new(ProfileSession::default());
++    let production = ProductionNotificationFacade::new(sender, stopped);
++    let mut facade = ProfilingNotificationFacade::new(production, Arc::clone(&profile));
++    let payload = NotificationPayload {
++        title: String::from("title"),
++        body: String::from("body"),
++        icon: String::from("icon"),
++        urgency: crate::domain::boundary::NotificationUrgency::Critical,
++        timeout: crate::domain::boundary::NotificationTimeout::Never,
++    };
++
++    assert!(facade.send(&payload).is_err());
++    assert!(
++        profile
++            .report(Duration::from_secs(1), "hidden")
++            .contains("  dbus_calls: 1\n")
++    );
++}
+diff --git a/src/adapters/shell.rs b/src/adapters/shell.rs
+index a4788c3..4861f7f 100644
+--- a/src/adapters/shell.rs
++++ b/src/adapters/shell.rs
+@@ -153,6 +153,11 @@ impl ProductionIo {
+         Self::start_inner(false, false)
+     }
+ 
++    /// Starts signal-free services with detailed counters for a timed profiling session.
++    pub(crate) fn start_for_profiling() -> Result<Self> {
++        Self::start_inner(false, true)
++    }
++
+     /// Starts diagnostics I/O services after the first system-bus attempt completes.
+     ///
+     /// The wait is bounded by the system-bus connection attempt itself. An unavailable bus leaves the service running so diagnostics can report absent D-Bus data.
+@@ -358,6 +363,11 @@ impl ProductionIo {
+         self.external_shutdown.subscribe()
+     }
+ 
++    /// Returns a profiling-only handle that initiates the same bounded shell shutdown as a signal.
++    pub(crate) fn shutdown_request(&self) -> watch::Sender<bool> {
++        self.external_shutdown.clone()
++    }
++
+     /// Marks the daemon orchestration task finished so the shell can close its runtime safely.
+     pub(crate) fn orchestration_done(&self) -> watch::Sender<bool> {
+         self.orchestration_registered.store(true, Ordering::Release);
+diff --git a/src/cli.rs b/src/cli.rs
+index 1e9bc94..d4d8f88 100644
+--- a/src/cli.rs
++++ b/src/cli.rs
+@@ -5,6 +5,7 @@ use std::error::Error as StdError;
+ use std::ffi::OsString;
+ use std::fmt::{self, Display, Formatter};
+ use std::path::PathBuf;
++use std::time::Duration;
+ 
+ use crate::runtime::presentation::InstanceId;
+ 
+@@ -31,7 +32,7 @@ pub enum Command {
+     /// Future raw probe entry point.
+     Probe(ConfigCommand),
+     /// Future profiling entry point.
+-    Profiling(ConfigCommand),
++    Profiling(ProfilingCommand),
+     /// Future list-items diagnostic entry point.
+     ListItems,
+     /// Future page-step entry point.
+@@ -51,6 +52,19 @@ pub struct ConfigCommand {
+     pub config: Option<PathBuf>,
+ }
+ 
++/// Parsed arguments for one-shot or timed scheduler profiling.
++#[derive(Debug, Clone, PartialEq, Eq, Default)]
++pub struct ProfilingCommand {
++    /// Optional path to a specific TOML configuration file.
++    pub config: Option<PathBuf>,
++    /// Timed scheduler run length. Absence preserves one-shot profiling.
++    pub duration: Option<Duration>,
++    /// Timed presentation scenario (`hidden`, `main`, or a configured page id).
++    pub scenario: Option<String>,
++    /// Opts a timed run into bounded page, presentation, and config stimuli.
++    pub stimuli: bool,
++}
++
+ /// Parsed arguments for the future `render` command.
+ #[derive(Debug, Clone, PartialEq, Eq)]
+ pub struct RenderCommand {
+@@ -189,6 +203,20 @@ pub enum CliError {
+         /// The rejected value.
+         value: String,
+     },
++    /// A profiling duration was not finite and strictly positive.
++    InvalidDuration {
++        /// The rejected value.
++        value: String,
++    },
++    /// A profiling scenario was supplied without timed mode.
++    ScenarioRequiresDuration,
++    /// Profiling stimuli were requested without timed mode.
++    StimuliRequireDuration,
++    /// The legacy `full` alias is not a documented profiling scenario.
++    InvalidProfilingScenario {
++        /// The rejected scenario.
++        value: String,
++    },
+ }
+ 
+ impl Cli {
+@@ -234,7 +262,7 @@ impl Cli {
+             "daemon" => Command::Daemon(parse_config_command("daemon", tail)?),
+             "render" => Command::Render(parse_render_command(tail)?),
+             "probe" => Command::Probe(parse_config_command("probe", tail)?),
+-            "profiling" => Command::Profiling(parse_config_command("profiling", tail)?),
++            "profiling" => Command::Profiling(parse_profiling_command(tail)?),
+             "list-items" => parse_list_items_command(tail)?,
+             "page" => Command::Page(parse_page_command(tail)?),
+             "present" => Command::Present(parse_presentation_command("present", tail)?),
+@@ -323,6 +351,26 @@ impl Display for CliError {
+                 "{}\nplasma-top {command}: error: instance-id must be a positive decimal integer: '{value}'",
+                 usage_text(command)
+             ),
++            Self::InvalidDuration { value } => write!(
++                formatter,
++                "{}\nplasma-top profiling: error: argument --duration: must be a finite positive number of seconds: '{value}'",
++                usage_text("profiling")
++            ),
++            Self::ScenarioRequiresDuration => write!(
++                formatter,
++                "{}\nplasma-top profiling: error: argument --scenario requires --duration",
++                usage_text("profiling")
++            ),
++            Self::StimuliRequireDuration => write!(
++                formatter,
++                "{}\nplasma-top profiling: error: argument --stimuli requires --duration",
++                usage_text("profiling")
++            ),
++            Self::InvalidProfilingScenario { value } => write!(
++                formatter,
++                "{}\nplasma-top profiling: error: scenario must be 'hidden', 'main', or a configured page id; unsupported alias: '{value}'",
++                usage_text("profiling")
++            ),
+         }
+     }
+ }
+@@ -334,7 +382,9 @@ fn usage_text(command: &str) -> &'static str {
+         }
+         "daemon" => "usage: plasma-top daemon [-h] [--config PATH]",
+         "probe" => "usage: plasma-top probe [-h] [--config PATH]",
+-        "profiling" => "usage: plasma-top profiling [-h] [--config PATH]",
++        "profiling" => {
++            "usage: plasma-top profiling [-h] [--config PATH] [--duration SECONDS] [--scenario hidden|main|PAGE] [--stimuli]"
++        }
+         "list-items" => "usage: plasma-top list-items [-h]",
+         "page" => "usage: plasma-top page [-h] {next,prev}",
+         "present" => "usage: plasma-top present [-h] instance-id",
+@@ -358,7 +408,7 @@ pub(crate) fn help_text() -> &'static str {
+         "    render [--config PATH] [--component panel|tooltip|both] [--format text|html] \\\n",
+         "           [--layout auto|horizontal|vertical] [--page full|processes|cpu_cores|connections|fastfetch|graphs]\n",
+         "    probe [--config PATH]\n",
+-        "    profiling [--config PATH]\n",
++        "    profiling [--config PATH] [--duration SECONDS] [--scenario hidden|main|PAGE] [--stimuli]\n",
+         "    list-items\n",
+         "    page <next|prev>\n",
+         "    click\n",
+@@ -377,7 +427,7 @@ pub(crate) fn subcommand_help(command: &str) -> &'static str {
+             "usage: plasma-top probe [-h] [--config PATH]\n\noptions:\n  -h, --help     show this help message and exit\n  --config PATH  Path to the TOML (default: ~/.config/plasma-top/config.toml,\n                 else the shipped config)"
+         }
+         "profiling" => {
+-            "usage: plasma-top profiling [-h] [--config PATH]\n\noptions:\n  -h, --help     show this help message and exit\n  --config PATH  Path to the TOML (default: ~/.config/plasma-top/config.toml,\n                 else the shipped config)"
++            "usage: plasma-top profiling [-h] [--config PATH] [--duration SECONDS] [--scenario hidden|main|PAGE] [--stimuli]\n\noptions:\n  -h, --help          show this help message and exit\n  --config PATH       Path to the TOML (default: ~/.config/plasma-top/config.toml,\n                      else the shipped config)\n  --duration SECONDS  Run the real async scheduler for a finite positive duration\n  --scenario VALUE    hidden, main (default with --duration), or a configured page id\n  --stimuli           Opt into serial page/presentation/config stimulus measurement"
+         }
+         "list-items" => {
+             "usage: plasma-top list-items [-h]\n\noptions:\n  -h, --help  show this help message and exit"
+@@ -436,6 +486,57 @@ fn parse_config_command(
+     Ok(parsed)
+ }
+ 
++fn parse_profiling_command(mut args: TailArgs) -> Result<ProfilingCommand, CliError> {
++    let command = "profiling";
++    let mut parsed = ProfilingCommand::default();
++    while let Some(argument) = args.pop_front() {
++        let flag = into_text(argument)?;
++        match flag.as_str() {
++            "--config" => parsed.config = Some(args.take_value_path(command, "--config")?),
++            "--duration" => {
++                let value = into_text(args.take_value(command, "--duration")?)?;
++                let seconds = value
++                    .parse::<f64>()
++                    .ok()
++                    .filter(|seconds| seconds.is_finite() && *seconds > 0.0)
++                    .ok_or_else(|| CliError::InvalidDuration {
++                        value: value.clone(),
++                    })?;
++                parsed.duration = Some(
++                    Duration::try_from_secs_f64(seconds)
++                        .ok()
++                        .filter(|duration| !duration.is_zero())
++                        .ok_or(CliError::InvalidDuration { value })?,
++                );
++            }
++            "--scenario" => {
++                let value = into_text(args.take_value(command, "--scenario")?)?;
++                if value == "full" {
++                    return Err(CliError::InvalidProfilingScenario { value });
++                }
++                parsed.scenario = Some(value);
++            }
++            "--stimuli" => parsed.stimuli = true,
++            _ => {
++                return Err(CliError::UnknownArgument {
++                    command,
++                    argument: flag,
++                });
++            }
++        }
++    }
++    if parsed.duration.is_none() && parsed.scenario.is_some() {
++        return Err(CliError::ScenarioRequiresDuration);
++    }
++    if parsed.duration.is_none() && parsed.stimuli {
++        return Err(CliError::StimuliRequireDuration);
++    }
++    if parsed.duration.is_some() && parsed.scenario.is_none() {
++        parsed.scenario = Some(String::from("main"));
++    }
++    Ok(parsed)
++}
++
+ fn parse_render_command(mut args: TailArgs) -> Result<RenderCommand, CliError> {
+     let command = "render";
+     let mut parsed = RenderCommand::default();
+diff --git a/src/cli/tests.rs b/src/cli/tests.rs
+index 9cefc0b..0f7853c 100644
+--- a/src/cli/tests.rs
++++ b/src/cli/tests.rs
+@@ -170,3 +170,89 @@ fn repeated_render_flags_keep_last_value_like_argparse() {
+         })
+     );
+ }
++
++#[test]
++fn timed_profiling_defaults_to_main_and_accepts_fractional_seconds() {
++    assert_eq!(
++        parse(&["plasma-top", "profiling", "--duration", "0.25"]),
++        Ok(Cli {
++            command: Command::Profiling(ProfilingCommand {
++                config: None,
++                duration: Some(Duration::from_millis(250)),
++                scenario: Some(String::from("main")),
++                stimuli: false,
++            }),
++        })
++    );
++}
++
++#[test]
++fn profiling_rejects_invalid_duration_and_scenario_without_duration() {
++    for value in ["0", "-1", "NaN", "inf", "text", "0.0000000001"] {
++        assert!(matches!(
++            parse(&["plasma-top", "profiling", "--duration", value]),
++            Err(CliError::InvalidDuration { .. })
++        ));
++    }
++    assert_eq!(
++        parse(&["plasma-top", "profiling", "--scenario", "hidden"]),
++        Err(CliError::ScenarioRequiresDuration)
++    );
++    assert_eq!(
++        parse(&["plasma-top", "profiling", "--stimuli"]),
++        Err(CliError::StimuliRequireDuration)
++    );
++}
++
++#[test]
++fn profiling_stimuli_are_an_explicit_timed_opt_in() {
++    assert_eq!(
++        parse(&[
++            "plasma-top",
++            "profiling",
++            "--duration",
++            "1",
++            "--scenario",
++            "hidden",
++            "--stimuli",
++        ]),
++        Ok(Cli {
++            command: Command::Profiling(ProfilingCommand {
++                duration: Some(Duration::from_secs(1)),
++                scenario: Some(String::from("hidden")),
++                stimuli: true,
++                ..ProfilingCommand::default()
++            }),
++        })
++    );
++}
++
++#[test]
++fn profiling_rejects_legacy_full_scenario_alias() {
++    assert_eq!(
++        parse(&[
++            "plasma-top",
++            "profiling",
++            "--duration",
++            "1",
++            "--scenario",
++            "full",
++        ]),
++        Err(CliError::InvalidProfilingScenario {
++            value: String::from("full"),
++        })
++    );
++}
++
++#[test]
++fn one_shot_profiling_contract_is_unchanged() {
++    assert_eq!(
++        parse(&["plasma-top", "profiling", "--config", "custom.toml"]),
++        Ok(Cli {
++            command: Command::Profiling(ProfilingCommand {
++                config: Some(PathBuf::from("custom.toml")),
++                ..ProfilingCommand::default()
++            }),
++        })
++    );
++}
+diff --git a/src/daemon.rs b/src/daemon.rs
+index 22b6c0b..3699f47 100644
+--- a/src/daemon.rs
++++ b/src/daemon.rs
+@@ -5,16 +5,17 @@ use std::ffi::OsString;
+ use std::fs;
+ use std::path::{Path, PathBuf};
+ use std::process::{Command as ProcessCommand, Stdio};
++use std::sync::Arc;
+ use std::time::{Duration, SystemTime, UNIX_EPOCH};
+ 
+ use crate::adapters::{ProductionClock, ProductionIo};
+ use crate::cli::{PageDirection as CliPageDirection, RenderPage};
+-use crate::config::Config;
++use crate::config::{Config, default_config_path, load_config, load_machines};
+ use crate::domain::boundary::{ClockSnapshot, CommandRunner, FilesystemRoots};
+ #[cfg(test)]
+ use crate::domain::boundary::{DbusFacade, IoEvent, NotificationFacade};
+ use crate::domain::readings::{DisplaySnapshot, HardwareInventory};
+-use crate::error::{Error, Result};
++use crate::error::{CriticalService, Error, Result};
+ use crate::page_commands::{
+     CommandLookup, Page, PageCommandCache, PageCommandContext, PageEnvironment, PageRenderKind,
+     PageSource, build_pages, default_click, page_inner_cached, page_inner_with_clock, pager_html,
+@@ -22,6 +23,7 @@ use crate::page_commands::{
+ };
+ use crate::render::{PageFormatter, PanelFormatter};
+ use crate::runtime::{self, atomic::write_atomic as write_atomic_bytes};
++use crate::scheduler::PageId;
+ #[cfg(test)]
+ use crate::sensors::gpu_nvidia::NvmlFacade;
+ #[cfg(test)]
+@@ -42,6 +44,9 @@ use std::thread;
+ use crate::domain::state::NotificationState;
+ #[cfg(test)]
+ use crate::notify::check_and_notify;
++use crate::profiling::{
++    ProfileSession, ProfilingCommandRunner, ProfilingDbusFacade, ProfilingNotificationFacade,
++};
+ #[cfg(test)]
+ use crate::sensors::{
+     CollectCtx, OwnerRefs, collect_with_notifications, cpu, disk, external, gpu_history, gpu_intel,
+@@ -538,6 +543,7 @@ pub fn run_daemon(config_path: Option<&Path>) -> Result<()> {
+                 #[cfg(test)]
+                 blocked_owner: None,
+             },
++            None,
+         )
+         .await;
+         let _ = orchestration_done.send(true);
+@@ -554,9 +560,232 @@ pub fn run_daemon(config_path: Option<&Path>) -> Result<()> {
+     complete_daemon_run(result, io.critical_failure(), io.shutdown_timed_out())
+ }
+ 
++/// Runs the production async scheduler for a bounded profiling scenario without publishing runtime files.
++pub(crate) fn run_timed_profiling(
++    config_path: Option<&Path>,
++    duration: Duration,
++    scenario: &str,
++    stimuli: bool,
++) -> Result<TimedProfileOutcome> {
++    let (presented, selected_page) = match scenario {
++        "hidden" => (false, PageId::Main),
++        "main" => (true, PageId::Main),
++        "full" => {
++            return Err(Error::Runtime(
++                "profiling scenario 'full' is unsupported; use 'main'".to_owned(),
++            ));
++        }
++        page => (true, PageId::from_id(page)),
++    };
++    let session = Arc::new(ProfileSession::default());
++    let clock = ProductionClock::default();
++    let mut io = ProductionIo::start_for_profiling()?;
++    let runtime = io.runtime_handle();
++    let roots = FilesystemRoots::default();
++    let unique = format!(
++        "plasma-top-profile-{}-{}",
++        std::process::id(),
++        clock.snapshot().monotonic.as_nanos()
++    );
++    let root = std::env::temp_dir().join(unique);
++    let cleanup = ProfilingCleanup(root.clone());
++    let paths = profiling_paths(&root);
++    let prepared_config = prepare_profiling_config(config_path, &root)?;
++    let (result_sender, result_receiver) = std::sync::mpsc::sync_channel(1);
++    let orchestration_done = io.orchestration_done();
++    let services = async_loop::DaemonServices {
++        commands: ProfilingCommandRunner::new(io.commands(), Arc::clone(&session)),
++        dbus: ProfilingDbusFacade::new(io.dbus(), Arc::clone(&session)),
++        notifications: ProfilingNotificationFacade::new(io.notifications(), Arc::clone(&session)),
++        stopped: io.stopped(),
++        events: io.take_event_receiver().ok_or_else(|| {
++            Error::Runtime("async I/O event receiver was already transferred".to_owned())
++        })?,
++        clock,
++        shutdown: io.shutdown_receiver(),
++        #[cfg(test)]
++        blocked_owner: None,
++    };
++    let profile = async_loop::ProfileRun {
++        duration,
++        presented,
++        selected_page,
++        stimuli,
++        session: Arc::clone(&session),
++        config_stimulus: async_loop::ProfileConfigStimulus {
++            path: prepared_config.stimulus_path,
++            original: prepared_config.original,
++            alternate: prepared_config.alternate,
++        },
++        shutdown: io.shutdown_request(),
++    };
++    let config_path = prepared_config.config_path;
++    runtime.spawn(async move {
++        let result = async_loop::run(
++            Some(config_path.as_path()),
++            &roots,
++            &paths,
++            services,
++            Some(profile),
++        )
++        .await;
++        let _ = orchestration_done.send(true);
++        let _ = result_sender.send(result);
++    });
++    let received = result_receiver.recv();
++    io.shutdown_with_budget(session.shutdown_budget_remaining(Duration::from_millis(500)));
++    session.record_shutdown_completed();
++    cleanup.remove();
++    let result = received.unwrap_or_else(|_| {
++        Err(Error::Runtime(
++            "critical async profiling orchestration task exited unexpectedly".to_owned(),
++        ))
++    });
++    Ok(complete_timed_profile(
++        &session,
++        duration,
++        scenario,
++        result,
++        io.critical_failure(),
++        io.shutdown_timed_out(),
++    ))
++}
++
++pub(crate) struct TimedProfileOutcome {
++    pub(crate) report: String,
++    pub(crate) error: Option<Error>,
++}
++
++fn complete_timed_profile(
++    session: &ProfileSession,
++    duration: Duration,
++    scenario: &str,
++    result: Result<()>,
++    critical: Option<CriticalService>,
++    shutdown_timed_out: bool,
++) -> TimedProfileOutcome {
++    let error = complete_daemon_run(result, critical, shutdown_timed_out).err();
++    let mut report = session.report(duration, scenario);
++    match &error {
++        Some(error) => {
++            use std::fmt::Write as _;
++            let _ = writeln!(report, "  final_status: error ({error})");
++        }
++        None => report.push_str("  final_status: ok\n"),
++    }
++    TimedProfileOutcome { report, error }
++}
++
++struct PreparedProfilingConfig {
++    config_path: PathBuf,
++    stimulus_path: PathBuf,
++    original: Vec<u8>,
++    alternate: Vec<u8>,
++}
++
++fn prepare_profiling_config(
++    requested_path: Option<&Path>,
++    root: &Path,
++) -> Result<PreparedProfilingConfig> {
++    fs::create_dir_all(root)?;
++    let source_path = requested_path.map_or_else(default_config_path, Path::to_path_buf);
++    let source = fs::read(&source_path).map_err(|error| {
++        Error::Runtime(format!(
++            "cannot copy profiling config {}: {error}",
++            source_path.display()
++        ))
++    })?;
++    let config_path = root.join("config.toml");
++    fs::write(&config_path, &source)?;
++
++    let mut machines = load_machines(requested_path);
++    let machines_path = root.join("machines.toml");
++    fs::write(&machines_path, serialize_toml(&machines)?)?;
++    let resolved = load_config(Some(&config_path), None)?;
++
++    let (stimulus_path, original, alternate) = if resolved.machine.is_empty() {
++        let mut table: toml::Table =
++            toml::from_slice(&source).map_err(crate::config::ConfigError::from)?;
++        set_overlay(&mut table, !resolved.display.overlay);
++        (config_path.clone(), source, serialize_toml(&table)?)
++    } else {
++        let original = serialize_toml(&machines)?;
++        let machine = machines
++            .get_mut(&resolved.machine)
++            .and_then(toml::Value::as_table_mut)
++            .ok_or_else(|| {
++                Error::Runtime(format!(
++                    "matched profiling machine '{}' is absent from isolated machine config",
++                    resolved.machine
++                ))
++            })?;
++        set_overlay(machine, !resolved.display.overlay);
++        (machines_path, original, serialize_toml(&machines)?)
++    };
++
++    Ok(PreparedProfilingConfig {
++        config_path,
++        stimulus_path,
++        original,
++        alternate,
++    })
++}
++
++fn set_overlay(table: &mut toml::Table, overlay: bool) {
++    let display = table
++        .entry(String::from("display"))
++        .or_insert_with(|| toml::Value::Table(toml::Table::new()));
++    if !display.is_table() {
++        *display = toml::Value::Table(toml::Table::new());
++    }
++    if let Some(display) = display.as_table_mut() {
++        display.insert(String::from("overlay"), toml::Value::Boolean(overlay));
++    }
++}
++
++fn serialize_toml(table: &toml::Table) -> Result<Vec<u8>> {
++    toml::to_string(table)
++        .map(String::into_bytes)
++        .map_err(|error| {
++            Error::Runtime(format!(
++                "cannot serialize isolated profiling config: {error}"
++            ))
++        })
++}
++
++struct ProfilingCleanup(PathBuf);
++
++impl ProfilingCleanup {
++    fn remove(&self) {
++        let _ = fs::remove_dir_all(&self.0);
++    }
++}
++
++impl Drop for ProfilingCleanup {
++    fn drop(&mut self) {
++        self.remove();
++    }
++}
++
++fn profiling_paths(root: &Path) -> DaemonPaths {
++    let runtime = root.join("runtime");
++    let state = runtime.join("state");
++    DaemonPaths {
++        panel: runtime.join("panel.html"),
++        tooltip: runtime.join("tooltip.html"),
++        page: state.join("page"),
++        npages: state.join("npages"),
++        geom: state.join("geom"),
++        plasma_config: root.join("plasma-config"),
++        kdeglobals: root.join("kdeglobals"),
++        runtime,
++        state,
++    }
++}
++
+ fn complete_daemon_run(
+     result: Result<()>,
+-    critical_failure: Option<crate::error::CriticalService>,
++    critical_failure: Option<CriticalService>,
+     shutdown_timed_out: bool,
+ ) -> Result<()> {
+     result?;
+diff --git a/src/daemon/async_loop.rs b/src/daemon/async_loop.rs
+index 27f5b05..61a4b13 100644
+--- a/src/daemon/async_loop.rs
++++ b/src/daemon/async_loop.rs
+@@ -13,17 +13,24 @@ use crate::adapters::{
+     ProductionNotificationFacade,
+ };
+ use crate::config::{cache_live_geom, load_config};
+-use crate::domain::boundary::{ClockSnapshot, FilesystemRoots, NotificationPayload};
++use crate::domain::boundary::{
++    ClockSnapshot, CommandRunner, DbusFacade, FilesystemRoots, NotificationFacade,
++    NotificationPayload,
++};
+ use crate::error::{Error, Result};
+ use crate::file_watch::FileWatcher;
+ use crate::notify::check_and_notify;
++use crate::page_commands::build_pages;
++use crate::profiling::{
++    ProfileSession, ProfileStimuli, ProfileStimulusConfig, ProfileStimulusState,
++};
+ use crate::scheduler::{
+     InventoryUpdate, JobKind, OwnerId, PageId, RefreshTrigger, Scheduler, SchedulerAction,
+     SchedulerEvent, SchedulerTime, Transition,
+ };
+ use crate::sensors::{discover_local_hardware, discover_local_hardware_attempt};
+ 
+-use super::{DaemonPaths, cleanup, page_index, publish_pages, write_atomic};
++use super::{DaemonPaths, cleanup, publish_pages, write_atomic};
+ 
+ #[path = "async_loop/completion.rs"]
+ mod completion;
+@@ -61,10 +68,14 @@ const BLOCKING_LANE_CAPACITY: usize = 1;
+ const OWNER_PENDING_CAPACITY: usize = 1024;
+ const FIRST_PAINT_DEADLINE: Duration = Duration::from_millis(200);
+ 
+-pub(super) struct DaemonServices {
+-    pub(super) commands: ProductionCommandRunner,
+-    pub(super) dbus: ProductionDbusFacade,
+-    pub(super) notifications: ProductionNotificationFacade,
++pub(super) struct DaemonServices<
++    C = ProductionCommandRunner,
++    D = ProductionDbusFacade,
++    N = ProductionNotificationFacade,
++> {
++    pub(super) commands: C,
++    pub(super) dbus: D,
++    pub(super) notifications: N,
+     pub(super) stopped: Arc<AtomicBool>,
+     pub(super) events: ProductionIoEvents,
+     pub(super) clock: ProductionClock,
+@@ -73,12 +84,34 @@ pub(super) struct DaemonServices {
+     pub(super) blocked_owner: Option<worker::TestOwnerBlock>,
+ }
+ 
+-pub(super) async fn run(
++pub(super) struct ProfileRun {
++    pub(super) duration: Duration,
++    pub(super) presented: bool,
++    pub(super) selected_page: PageId,
++    pub(super) stimuli: bool,
++    pub(super) session: Arc<ProfileSession>,
++    pub(super) config_stimulus: ProfileConfigStimulus,
++    pub(super) shutdown: tokio::sync::watch::Sender<bool>,
++}
++
++pub(super) struct ProfileConfigStimulus {
++    pub(super) path: std::path::PathBuf,
++    pub(super) original: Vec<u8>,
++    pub(super) alternate: Vec<u8>,
++}
++
++pub(super) async fn run<C, D, N>(
+     config_path: Option<&Path>,
+     roots: &FilesystemRoots,
+     paths: &DaemonPaths,
+-    services: DaemonServices,
+-) -> Result<()> {
++    services: DaemonServices<C, D, N>,
++    profile_run: Option<ProfileRun>,
++) -> Result<()>
++where
++    C: CommandRunner + Clone + Send + 'static,
++    D: DbusFacade + Clone + Send + 'static,
++    N: NotificationFacade + Clone + Send + 'static,
++{
+     let DaemonServices {
+         commands,
+         dbus,
+@@ -92,15 +125,50 @@ pub(super) async fn run(
+     } = services;
+     fs::create_dir_all(&paths.runtime)?;
+     fs::create_dir_all(&paths.state)?;
+-    cleanup(paths);
+-    write_atomic(&paths.page, "0")?;
++    if profile_run.is_none() {
++        cleanup(paths);
++        write_atomic(&paths.page, "0")?;
++    }
+ 
+     let boot = clock.snapshot();
+     let cfg = load_config(config_path, None)?;
+     let cpu_count = std::thread::available_parallelism().map_or(1, std::num::NonZero::get);
+     let hw = discover_local_hardware(&roots.sys_root, &roots.proc_root, &cfg, cpu_count);
+-    let active = publish_pages(paths, &cfg)?;
++    let active = if profile_run.is_some() {
++        build_pages(&cfg.pages.order)
++    } else {
++        publish_pages(paths, &cfg)?
++    };
++    if let Some(profile) = &profile_run
++        && profile.selected_page != PageId::Main
++        && !active
++            .iter()
++            .any(|page| PageId::from_id(page.id) == profile.selected_page)
++    {
++        return Err(Error::Runtime(format!(
++            "profiling scenario page '{}' is not configured in pages.order",
++            profile.selected_page.as_id()
++        )));
++    }
++    let selected_index = profile_run.as_ref().map_or(0, |profile| {
++        active
++            .iter()
++            .position(|page| PageId::from_id(page.id) == profile.selected_page)
++            .unwrap_or(0)
++    });
++    if let Some(profile) = &profile_run {
++        write_atomic(&paths.page, &selected_index.to_string())?;
++        write_atomic(&paths.npages, &active.len().to_string())?;
++        let presented = paths.state.join("presented");
++        fs::create_dir_all(&presented)?;
++        if profile.presented {
++            write_atomic(&presented.join("1"), "")?;
++        }
++    }
+     let mut state = RuntimeState::new(paths, cfg, hw, active);
++    if let Some(profile) = &profile_run {
++        state.configure_profiling(Arc::clone(&profile.session));
++    }
+     let (watch_path, machine_paths) = state::config_watch_paths(config_path);
+     let mut file_watcher = FileWatcher::new(files::watch_targets(
+         &watch_path,
+@@ -110,6 +178,28 @@ pub(super) async fn run(
+     ))
+     .map_err(|error| Error::Runtime(format!("file watch installation failed: {error}")))?;
+     let mut presentation = files::presentation_status(paths, &clock)?;
++    let mut stimuli = profile_run
++        .as_ref()
++        .filter(|profile| profile.stimuli)
++        .map(|profile| {
++            ProfileStimuli::new(ProfileStimulusConfig {
++                ready_at: clock.snapshot().monotonic,
++                initially_presented: profile.presented,
++                selected_page: selected_index,
++                page_count: state.active.len(),
++                pages: state
++                    .active
++                    .iter()
++                    .map(|page| PageId::from_id(page.id))
++                    .collect(),
++                config_path: profile.config_stimulus.path.clone(),
++                config_original: profile.config_stimulus.original.clone(),
++                config_alternate: profile.config_stimulus.alternate.clone(),
++                config_generation: state.config_generation,
++                overlay: state.cfg.display.overlay,
++                session: Arc::clone(&profile.session),
++            })
++        });
+     let blocking_lane = Arc::new(Semaphore::new(BLOCKING_LANE_CAPACITY));
+     let (completion_sender, mut completions) = mpsc::channel(worker::COMPLETION_CHANNEL_CAPACITY);
+     let mut owner_tasks = JoinSet::new();
+@@ -119,6 +209,9 @@ pub(super) async fn run(
+         worker::OwnerServices {
+             commands,
+             dbus,
++            profile: profile_run
++                .as_ref()
++                .map(|profile| Arc::clone(&profile.session)),
+             #[cfg(test)]
+             blocked_owner,
+         },
+@@ -153,7 +246,7 @@ pub(super) async fn run(
+             presented: presentation.leases.presented,
+         }),
+     );
+-    let (_, selected) = state.selected_page(paths);
++    let (_, selected) = state.selected_page();
+     enqueue(
+         &mut actions,
+         scheduler.handle(SchedulerEvent::SelectedPageChanged {
+@@ -161,26 +254,68 @@ pub(super) async fn run(
+             page: selected,
+         }),
+     );
+-    cache_live_geom();
+-    let armed_sources = file_watcher.rescan_sources();
+-    files::process_and_stabilize(
+-        armed_sources,
+-        &mut file_watcher,
+-        &watch_path,
+-        &machine_paths,
+-        config_path,
+-        roots,
+-        paths,
+-        cpu_count,
+-        &mut scheduler,
+-        &mut state,
+-        &clock,
+-        &mut actions,
+-        &mut owner_messages,
+-        &mut presentation,
+-    )?;
++    if profile_run.is_none() {
++        cache_live_geom();
++    }
++    if profile_run.is_none() {
++        let armed_sources = file_watcher.rescan_sources();
++        files::process_and_stabilize(
++            armed_sources,
++            &mut file_watcher,
++            &watch_path,
++            &machine_paths,
++            config_path,
++            roots,
++            paths,
++            cpu_count,
++            &mut scheduler,
++            &mut state,
++            &clock,
++            &mut actions,
++            &mut owner_messages,
++            &mut presentation,
++        )?;
++    }
++    let profile_deadline = profile_run
++        .as_ref()
++        .map(|profile| boot.monotonic.saturating_add(profile.duration));
++    let mut profile_shutdown_requested = false;
+ 
+     loop {
++        let loop_now = clock.snapshot().monotonic;
++        if !profile_shutdown_requested
++            && profile_deadline.is_some_and(|deadline| loop_now >= deadline)
++        {
++            profile_shutdown_requested = true;
++            if let Some(stimuli) = &stimuli {
++                let (page_index, page) = state.selected_page();
++                stimuli.time_out(ProfileStimulusState {
++                    presented: presentation.leases.presented,
++                    page_index,
++                    page,
++                    config_generation: state.config_generation,
++                    overlay: state.cfg.display.overlay,
++                });
++            }
++            if let Some(profile) = &profile_run {
++                profile.session.record_shutdown_started();
++                let _ = profile.shutdown.send(true);
++            }
++            enqueue(
++                &mut actions,
++                scheduler.handle(SchedulerEvent::Shutdown { at: now(&clock) }),
++            );
++        }
++        if !profile_shutdown_requested && let Some(stimuli) = &mut stimuli {
++            let _ = stimuli.next_due(loop_now);
++            stimuli.inject_due(
++                loop_now,
++                paths,
++                &clock,
++                state.config_generation,
++                state.cfg.display.overlay,
++            )?;
++        }
+         preempt_for_shutdown(
+             stopped.load(Ordering::Acquire),
+             now(&clock),
+@@ -258,9 +393,10 @@ pub(super) async fn run(
+         if state.terminate {
+             break;
+         }
++        let advanced_at = now(&clock);
+         enqueue(
+             &mut actions,
+-            scheduler.handle(SchedulerEvent::TimeAdvanced { at: now(&clock) }),
++            scheduler.handle(SchedulerEvent::TimeAdvanced { at: advanced_at }),
+         );
+         drain_actions(
+             &mut actions,
+@@ -288,6 +424,7 @@ pub(super) async fn run(
+                 &clock,
+                 &mut scheduler,
+                 &mut actions,
++                state.profile.as_deref(),
+             )?;
+         }
+         if state.first_paint_published && state.theme_reconciliation_pending {
+@@ -325,13 +462,23 @@ pub(super) async fn run(
+         }
+ 
+         let snapshot = clock.snapshot();
+-        let sleep_for = presentation.deadline.map_or_else(
++        let mut sleep_for = presentation.deadline.map_or_else(
+             || sleep_duration(&scheduler, &state, boot, snapshot),
+             |expiry| {
+                 sleep_duration(&scheduler, &state, boot, snapshot)
+                     .min(expiry.saturating_sub(snapshot.monotonic))
+             },
+         );
++        if let Some(deadline) = profile_deadline {
++            sleep_for = sleep_for.min(deadline.saturating_sub(snapshot.monotonic));
++        }
++        if let Some(due) = stimuli
++            .as_mut()
++            .and_then(|stimuli| stimuli.next_due(snapshot.monotonic))
++        {
++            sleep_for = sleep_for.min(due.saturating_sub(snapshot.monotonic));
++        }
++        let scheduled_wake = scheduler.next_wake();
+         match wait_for_wake_with_files(
+             &mut owner_tasks,
+             &mut notification_task,
+@@ -349,7 +496,15 @@ pub(super) async fn run(
+             LoopWake::NotificationExit => {
+                 critical_failure("notification task", &mut scheduler, &clock, &mut actions);
+             }
+-            LoopWake::Shutdown | LoopWake::Sleep => {}
++            LoopWake::Shutdown => {}
++            LoopWake::Sleep => {
++                if let (Some(profile), Some(due)) = (&profile_run, scheduled_wake) {
++                    let at = now(&clock);
++                    if due <= at {
++                        profile.session.record_wake(due.duration(), at.duration());
++                    }
++                }
++            }
+             LoopWake::Files(changed) => {
+                 let changed = changed
+                     .map_err(|error| Error::Runtime(format!("file watch failed: {error}")))?;
+@@ -391,7 +546,9 @@ pub(super) async fn run(
+ 
+     owner_tasks.abort_all();
+     notification_task.abort();
+-    cleanup(paths);
++    if profile_run.is_none() {
++        cleanup(paths);
++    }
+     if let Some(component) = state.critical_component {
+         return Err(Error::Runtime(format!(
+             "critical async daemon {component} exited unexpectedly"
+@@ -418,7 +575,14 @@ fn drain_actions(
+             SchedulerAction::StartJob { ticket } => {
+                 if scheduler.is_current_ticket(&ticket) {
+                     validity.insert(ticket.run_id);
+-                    let selected_index = page_index(paths, state.active.len());
++                    let (selected_index, _) = state.selected_page();
++                    if let Some(profile) = &state.profile {
++                        profile.record_job_queued(
++                            ticket.run_id,
++                            &ticket.job,
++                            clock.snapshot().monotonic,
++                        );
++                    }
+                     let input = JobInput {
+                         ticket: ticket.clone(),
+                         cfg: state.cfg.clone(),
+@@ -452,6 +616,14 @@ fn drain_actions(
+                         .ticket()
+                         .is_none_or(|queued| queued.run_id != ticket.run_id)
+                 });
++                if owner_messages.len() != before
++                    && let Some(profile) = &state.profile
++                {
++                    profile.resolve_attempt(
++                        ticket.run_id,
++                        crate::profiling::AttemptDisposition::Cancelled,
++                    );
++                }
+                 if !was_dispatched || owner_messages.len() != before {
+                     prepend(
+                         actions,
+@@ -463,6 +635,9 @@ fn drain_actions(
+                 }
+             }
+             SchedulerAction::InvalidateJob { job, .. } => {
++                if let Some(profile) = &state.profile {
++                    profile.invalidate_capture(&job);
++                }
+                 invalidate_readings(&job, &mut state.readings);
+                 state.invalidate_decoder(&job);
+                 state.completed_jobs.remove(&job);
+@@ -484,10 +659,17 @@ fn drain_actions(
+             SchedulerAction::PublishDisplay {
+                 publication,
+                 reason,
++                display_deadline,
++                skipped_display_deadlines,
+                 panel,
+                 tooltip,
+             } => {
+-                if panel && state.deferred_first_paint.is_some() {
++                if panel
++                    && state.suppress_panel_publication_before_first_paint(
++                        reason,
++                        skipped_display_deadlines,
++                    )
++                {
+                     continue;
+                 }
+                 let snapshot = clock.snapshot();
+@@ -495,6 +677,8 @@ fn drain_actions(
+                 if let Some(acknowledgement) = state.publish(
+                     publication,
+                     reason,
++                    display_deadline,
++                    skipped_display_deadlines,
+                     panel,
+                     tooltip,
+                     scheduler,
+@@ -506,7 +690,7 @@ fn drain_actions(
+                     prepend(actions, acknowledgement);
+                 }
+                 if state.render_generation != render_generation {
+-                    request_selected_graph(scheduler, state, paths, clock, actions);
++                    request_selected_graph(scheduler, state, clock, actions);
+                 }
+             }
+             SchedulerAction::EvaluateNotifications { ticket } => {
+@@ -617,11 +801,10 @@ fn queue_owner_message(
+ fn request_selected_graph(
+     scheduler: &mut Scheduler,
+     state: &RuntimeState,
+-    paths: &DaemonPaths,
+     clock: &ProductionClock,
+     actions: &mut VecDeque<SchedulerAction>,
+ ) {
+-    let (_, selected) = state.selected_page(paths);
++    let (_, selected) = state.selected_page();
+     if selected != PageId::Graphs {
+         return;
+     }
+@@ -686,12 +869,16 @@ fn deadline_aware_first_paint(
+     match action {
+         SchedulerAction::PublishDisplay {
+             publication,
++            display_deadline,
++            skipped_display_deadlines,
+             panel,
+             tooltip,
+             ..
+         } => SchedulerAction::PublishDisplay {
+             publication,
+             reason: crate::scheduler::PublishReason::FirstPaintTimeout,
++            display_deadline,
++            skipped_display_deadlines,
+             panel,
+             tooltip,
+         },
+diff --git a/src/daemon/async_loop/completion.rs b/src/daemon/async_loop/completion.rs
+index 1d5d462..1208025 100644
+--- a/src/daemon/async_loop/completion.rs
++++ b/src/daemon/async_loop/completion.rs
+@@ -2,6 +2,7 @@ use std::collections::{BTreeSet, VecDeque};
+ 
+ use crate::adapters::ProductionClock;
+ use crate::domain::boundary::{ClockSnapshot, FilesystemRoots};
++use crate::profiling::AttemptDisposition;
+ use crate::scheduler::{
+     CompletionKind, EventDisposition, InventoryUpdate, JobKind, OwnerId, RefreshTrigger, Scheduler,
+     SchedulerAction, SchedulerEvent, SchedulerTime, TimingClass, Transition,
+@@ -21,7 +22,7 @@ pub(super) fn handle_completion(
+     scheduler: &mut Scheduler,
+     state: &mut RuntimeState,
+     roots: &FilesystemRoots,
+-    paths: &DaemonPaths,
++    _paths: &DaemonPaths,
+     clock: &ProductionClock,
+     boot: ClockSnapshot,
+     completion_at: SchedulerTime,
+@@ -33,7 +34,8 @@ pub(super) fn handle_completion(
+         OwnerCompletion::Job(mut completion) => {
+             let decision = completion.decision.take();
+             validity.remove(completion.ticket.run_id);
+-            let rerender = scheduler.is_current_ticket(&completion.ticket)
++            let was_current = scheduler.is_current_ticket(&completion.ticket);
++            let rerender = was_current
+                 && completion.ticket.job.kind == JobKind::PageRender
+                 && !state.render_input_current(&completion);
+             let commit_eligible = state.can_commit(scheduler, &completion);
+@@ -44,6 +46,16 @@ pub(super) fn handle_completion(
+                 notification_ready: commit_eligible && completion.notification_ready,
+             });
+             let current = commit_eligible && finished.disposition == EventDisposition::Accepted;
++            if let Some(profile) = &state.profile {
++                let disposition = if current {
++                    AttemptDisposition::Accepted(completion.completion)
++                } else if !was_current && finished.disposition == EventDisposition::Accepted {
++                    AttemptDisposition::Cancelled
++                } else {
++                    AttemptDisposition::Rejected
++                };
++                profile.resolve_attempt(completion.ticket.run_id, disposition);
++            }
+             let jobs_before_inventory = if current {
+                 state
+                     .scheduler_config()
+@@ -120,7 +132,7 @@ pub(super) fn handle_completion(
+                     state.refresh_deferred_first_paint_jobs();
+                 }
+                 let current_config = state.scheduler_config();
+-                let (_, selected_page) = state.selected_page(paths);
++                let (_, selected_page) = state.selected_page();
+                 let tooltip_demand = current_config.demand.demanded(true, &selected_page);
+                 let introduced = current_config
+                     .jobs
+@@ -174,7 +186,7 @@ pub(super) fn handle_completion(
+                 );
+             }
+             if render_invalidated && !replacement_current {
+-                request_selected_graph(scheduler, state, paths, clock, actions);
++                request_selected_graph(scheduler, state, clock, actions);
+             }
+             if rendered_page
+                 && !actions.iter().any(|action| {
+@@ -195,6 +207,9 @@ pub(super) fn handle_completion(
+         }
+         OwnerCompletion::Cancelled(ticket) => {
+             validity.remove(ticket.run_id);
++            if let Some(profile) = &state.profile {
++                profile.resolve_attempt(ticket.run_id, AttemptDisposition::Cancelled);
++            }
+             enqueue(
+                 actions,
+                 scheduler.handle(SchedulerEvent::JobCancelled {
+@@ -236,7 +251,7 @@ pub(super) fn handle_completion(
+                 );
+                 state.refresh_deferred_first_paint_jobs();
+                 if hardware_changed {
+-                    request_selected_graph(scheduler, state, paths, clock, actions);
++                    request_selected_graph(scheduler, state, clock, actions);
+                     enqueue(
+                         actions,
+                         scheduler
+@@ -269,7 +284,7 @@ pub(super) fn handle_completion(
+                     actions,
+                     scheduler.handle(SchedulerEvent::DisplayRefreshRequested { at: now(clock) }),
+                 );
+-                request_selected_graph(scheduler, state, paths, clock, actions);
++                request_selected_graph(scheduler, state, clock, actions);
+             }
+         }
+     }
+diff --git a/src/daemon/async_loop/files.rs b/src/daemon/async_loop/files.rs
+index d0d1053..2265bd5 100644
+--- a/src/daemon/async_loop/files.rs
++++ b/src/daemon/async_loop/files.rs
+@@ -123,18 +123,19 @@ pub(super) fn process_file_changes(
+             owner_messages,
+         )?;
+         if config_changed && state.update_style(paths, false) {
+-            request_selected_graph(scheduler, state, paths, clock, actions);
++            request_selected_graph(scheduler, state, clock, actions);
+         }
+     }
+     if changed.contains(&WatchSource::Page) {
+-        let (_, page) = state.selected_page(paths);
+-        enqueue(
+-            actions,
+-            scheduler.handle(SchedulerEvent::SelectedPageChanged {
+-                at: now(clock),
+-                page,
+-            }),
+-        );
++        let (index, page) = state.observe_selected_page(paths);
++        let transition = scheduler.handle(SchedulerEvent::SelectedPageChanged {
++            at: now(clock),
++            page: page.clone(),
++        });
++        if let Some(profile) = &state.profile {
++            profile.observe_page(index, page, &transition);
++        }
++        enqueue(actions, transition);
+     }
+     if changed.contains(&WatchSource::Updates) {
+         reload::trigger_external_change(JobKind::UpdatesFile, scheduler, state, clock, actions);
+@@ -152,10 +153,17 @@ pub(super) fn process_file_changes(
+             actions,
+             scheduler.handle(SchedulerEvent::DisplayRefreshRequested { at: now(clock) }),
+         );
+-        request_selected_graph(scheduler, state, paths, clock, actions);
++        request_selected_graph(scheduler, state, clock, actions);
+     }
+     if changed.contains(&WatchSource::Presentation) {
+-        update_presentation(presentation, paths, clock, scheduler, actions)?;
++        update_presentation(
++            presentation,
++            paths,
++            clock,
++            scheduler,
++            actions,
++            state.profile.as_deref(),
++        )?;
+     }
+     Ok(())
+ }
+@@ -215,16 +223,18 @@ pub(super) fn update_presentation(
+     clock: &ProductionClock,
+     scheduler: &mut Scheduler,
+     actions: &mut VecDeque<SchedulerAction>,
++    profile: Option<&crate::profiling::ProfileSession>,
+ ) -> Result<()> {
+     let next = presentation_status(paths, clock)?;
+     if next.leases.presented != current.leases.presented {
+-        enqueue(
+-            actions,
+-            scheduler.handle(SchedulerEvent::TooltipPresented {
+-                at: now(clock),
+-                presented: next.leases.presented,
+-            }),
+-        );
++        let transition = scheduler.handle(SchedulerEvent::TooltipPresented {
++            at: now(clock),
++            presented: next.leases.presented,
++        });
++        if let Some(profile) = profile {
++            profile.observe_presentation(next.leases.presented, &transition);
++        }
++        enqueue(actions, transition);
+     }
+     *current = next;
+     Ok(())
+diff --git a/src/daemon/async_loop/notifications.rs b/src/daemon/async_loop/notifications.rs
+index 8696688..bcf69f5 100644
+--- a/src/daemon/async_loop/notifications.rs
++++ b/src/daemon/async_loop/notifications.rs
+@@ -2,7 +2,6 @@ use std::sync::Arc;
+ 
+ use tokio::sync::{Semaphore, mpsc};
+ 
+-use crate::adapters::ProductionNotificationFacade;
+ use crate::domain::boundary::{NotificationError, NotificationFacade, NotificationPayload};
+ 
+ pub(super) struct QueueFacade<'a>(pub(super) &'a mpsc::Sender<NotificationPayload>);
+@@ -17,11 +16,13 @@ impl NotificationFacade for QueueFacade<'_> {
+     }
+ }
+ 
+-pub(super) async fn run(
++pub(super) async fn run<N>(
+     mut receiver: mpsc::Receiver<NotificationPayload>,
+-    notifications: ProductionNotificationFacade,
++    notifications: N,
+     blocking_lane: Arc<Semaphore>,
+-) {
++) where
++    N: NotificationFacade + Clone + Send + 'static,
++{
+     while let Some(payload) = receiver.recv().await {
+         let Ok(permit) = Arc::clone(&blocking_lane).acquire_owned().await else {
+             return;
+diff --git a/src/daemon/async_loop/reload.rs b/src/daemon/async_loop/reload.rs
+index 12bcbe2..89f7c51 100644
+--- a/src/daemon/async_loop/reload.rs
++++ b/src/daemon/async_loop/reload.rs
+@@ -12,7 +12,9 @@ pub(super) fn check(
+     actions: &mut VecDeque<SchedulerAction>,
+     owner_messages: &mut VecDeque<(OwnerId, OwnerMessage)>,
+ ) -> Result<bool> {
+-    cache_live_geom();
++    if state.profile.is_none() {
++        cache_live_geom();
++    }
+     let new_cfg = match state::load_replacement(config_path) {
+         Ok(cfg) => cfg,
+         Err(error) => {
+@@ -47,13 +49,18 @@ pub(super) fn check(
+     state.config_generation = state.config_generation.next();
+     state.rendered_graph = None;
+     state.render_generation = state.render_generation.saturating_add(1);
+-    enqueue(
+-        actions,
+-        scheduler.handle(SchedulerEvent::ConfigChanged {
+-            at: now(clock),
+-            config: state.scheduler_config(),
+-        }),
+-    );
++    let transition = scheduler.handle(SchedulerEvent::ConfigChanged {
++        at: now(clock),
++        config: state.scheduler_config(),
++    });
++    if let Some(profile) = &state.profile {
++        profile.observe_config(
++            state.config_generation,
++            state.cfg.display.overlay,
++            &transition,
++        );
++    }
++    enqueue(actions, transition);
+     if hardware_changed {
+         state.inventory_generation = state.inventory_generation.next();
+         let config = state.scheduler_config();
+@@ -88,7 +95,7 @@ pub(super) fn check(
+             }),
+         );
+     }
+-    request_selected_graph(scheduler, state, paths, clock, actions);
++    request_selected_graph(scheduler, state, clock, actions);
+     Ok(true)
+ }
+ 
+diff --git a/src/daemon/async_loop/state.rs b/src/daemon/async_loop/state.rs
+index 27bff81..d1fe5bb 100644
+--- a/src/daemon/async_loop/state.rs
++++ b/src/daemon/async_loop/state.rs
+@@ -1,5 +1,7 @@
+ use std::collections::{BTreeMap, BTreeSet};
+ use std::path::{Path, PathBuf};
++use std::sync::Arc;
++use std::time::Instant;
+ use std::time::SystemTime;
+ 
+ use crate::config::{
+@@ -13,10 +15,11 @@ use crate::domain::readings::{
+ use crate::domain::state::NotificationState;
+ use crate::error::Result;
+ use crate::page_commands::{Page, PageCommandCache, build_pages, pager_html, title_html};
++use crate::profiling::ProfileSession;
+ use crate::render::{PageFormatter, PanelFormatter};
+ use crate::scheduler::{
+     ConfigGeneration, InventoryGeneration, OwnerId, PageId, PublicationId, PublishReason, RunId,
+-    Scheduler, SchedulerEvent, SchedulerTime, Transition,
++    Scheduler, SchedulerAction, SchedulerEvent, SchedulerTime, Transition,
+ };
+ use crate::sensors::scheduler_config;
+ 
+@@ -30,6 +33,7 @@ pub(super) struct RuntimeState {
+     pub(super) cfg: Config,
+     pub(super) hw: HardwareInventory,
+     pub(super) active: Vec<Page>,
++    observed_page_index: usize,
+     pub(super) readings: DisplaySnapshot,
+     pub(super) notifications: NotificationState,
+     pub(super) notification_samples: BTreeMap<RunId, DisplaySnapshot>,
+@@ -64,9 +68,10 @@ pub(super) struct RuntimeState {
+         BTreeMap<crate::scheduler::SourceIdentity, RetainedMetricSample<GpuHistoryValue>>,
+     pub(super) terminate: bool,
+     pub(super) critical_component: Option<&'static str>,
+-    pub(super) deferred_first_paint: Option<crate::scheduler::SchedulerAction>,
++    pub(super) deferred_first_paint: Option<SchedulerAction>,
+     pub(super) deferred_first_paint_jobs: BTreeSet<crate::scheduler::JobId>,
+     pub(super) completed_jobs: BTreeSet<crate::scheduler::JobId>,
++    pub(super) profile: Option<Arc<ProfileSession>>,
+ }
+ 
+ impl RuntimeState {
+@@ -93,6 +98,7 @@ impl RuntimeState {
+             css_stamp: mtime(&css_path),
+             overlay_stamp: overlay_path.as_deref().and_then(mtime),
+             theme_reconciliation_pending: true,
++            observed_page_index: page_index(paths, active.len()),
+             cfg,
+             hw,
+             active,
+@@ -133,9 +139,15 @@ impl RuntimeState {
+             deferred_first_paint: None,
+             deferred_first_paint_jobs: BTreeSet::new(),
+             completed_jobs: BTreeSet::new(),
++            profile: None,
+         }
+     }
+ 
++    pub(super) fn configure_profiling(&mut self, profile: Arc<ProfileSession>) {
++        self.profile = Some(profile);
++        self.theme_reconciliation_pending = false;
++    }
++
+     pub(super) fn scheduler_config(&self) -> crate::scheduler::SchedulerConfig {
+         scheduler_config(
+             &self.cfg,
+@@ -145,11 +157,16 @@ impl RuntimeState {
+         )
+     }
+ 
+-    pub(super) fn selected_page(&self, paths: &DaemonPaths) -> (usize, PageId) {
+-        let index = page_index(paths, self.active.len());
++    pub(super) fn selected_page(&self) -> (usize, PageId) {
++        let index = self.observed_page_index % self.active.len().max(1);
+         (index, PageId::from_id(self.active[index].id))
+     }
+ 
++    pub(super) fn observe_selected_page(&mut self, paths: &DaemonPaths) -> (usize, PageId) {
++        self.observed_page_index = page_index(paths, self.active.len());
++        self.selected_page()
++    }
++
+     pub(super) fn can_commit(&self, scheduler: &Scheduler, completion: &JobCompletion) -> bool {
+         scheduler.is_current_ticket(&completion.ticket)
+             && self.render_input_current(completion)
+@@ -228,6 +245,26 @@ impl RuntimeState {
+             .collect();
+     }
+ 
++    pub(super) fn suppress_panel_publication_before_first_paint(
++        &mut self,
++        reason: PublishReason,
++        skipped_display_deadlines: u64,
++    ) -> bool {
++        let Some(SchedulerAction::PublishDisplay {
++            skipped_display_deadlines: deferred_skipped,
++            ..
++        }) = self.deferred_first_paint.as_mut()
++        else {
++            return false;
++        };
++        if reason == PublishReason::DisplayDeadline {
++            *deferred_skipped = deferred_skipped
++                .saturating_add(1)
++                .saturating_add(skipped_display_deadlines);
++        }
++        true
++    }
++
+     pub(super) fn gpu_history_point_for(
+         &self,
+         job: &crate::scheduler::JobTicket,
+@@ -300,6 +337,8 @@ impl RuntimeState {
+         &mut self,
+         publication: PublicationId,
+         reason: PublishReason,
++        display_deadline: Option<SchedulerTime>,
++        skipped_display_deadlines: u64,
+         panel: bool,
+         tooltip: bool,
+         scheduler: &mut Scheduler,
+@@ -308,6 +347,7 @@ impl RuntimeState {
+         snapshot: ClockSnapshot,
+         boot: ClockSnapshot,
+     ) -> Result<Option<Transition>> {
++        let render_started = self.profile.as_ref().map(|_| Instant::now());
+         self.readings.assembled_at = snapshot;
+         if matches!(
+             reason,
+@@ -327,15 +367,19 @@ impl RuntimeState {
+             let html = PanelFormatter::with_now_unix(&self.cfg, &self.hw, clock_unix(snapshot))
+                 .format_panel(&self.readings, &self.css);
+             if self.panel_html.as_ref() != Some(&html) {
+-                write_atomic(&paths.panel, &html)?;
++                if self.profile.is_none() {
++                    write_atomic(&paths.panel, &html)?;
++                }
+                 self.panel_html = Some(html);
+             }
+-            log_boot_ready(
+-                &self.readings,
+-                &mut self.boot_pending,
+-                boot.monotonic,
+-                snapshot.monotonic,
+-            );
++            if self.profile.is_none() {
++                log_boot_ready(
++                    &self.readings,
++                    &mut self.boot_pending,
++                    boot.monotonic,
++                    snapshot.monotonic,
++                );
++            }
+             acknowledgement = Some(scheduler.handle(SchedulerEvent::PanelPublished {
+                 at: SchedulerTime::from_duration(snapshot.monotonic),
+                 publication,
+@@ -344,11 +388,25 @@ impl RuntimeState {
+         if tooltip {
+             self.publish_tooltip(roots, paths)?;
+         }
++        if let (Some(profile), Some(started)) = (&self.profile, render_started) {
++            let render = started.elapsed();
++            let finished_at = snapshot.monotonic.saturating_add(render);
++            profile.record_publication(
++                publication,
++                reason,
++                tooltip,
++                boot.monotonic,
++                finished_at,
++                render,
++                display_deadline.map(SchedulerTime::duration),
++                skipped_display_deadlines,
++            );
++        }
+         Ok(acknowledgement)
+     }
+ 
+     fn publish_tooltip(&mut self, roots: &FilesystemRoots, paths: &DaemonPaths) -> Result<()> {
+-        let (index, selected) = self.selected_page(paths);
++        let (index, selected) = self.selected_page();
+         let html = if selected == PageId::Graphs {
+             self.rendered_graph
+                 .as_ref()
+@@ -372,7 +430,9 @@ impl RuntimeState {
+         if let Some(html) = html
+             && self.tooltip_html.as_ref() != Some(&html)
+         {
+-            write_atomic(&paths.tooltip, &html)?;
++            if self.profile.is_none() {
++                write_atomic(&paths.tooltip, &html)?;
++            }
+             self.tooltip_html = Some(html);
+         }
+         Ok(())
+diff --git a/src/daemon/async_loop/tests.rs b/src/daemon/async_loop/tests.rs
+index 6f678d9..c7e2f60 100644
+--- a/src/daemon/async_loop/tests.rs
++++ b/src/daemon/async_loop/tests.rs
+@@ -376,6 +376,8 @@ fn first_paint_deadline_writes_real_panel_without_owner_completion() {
+         .publish(
+             publication,
+             PublishReason::FirstPaintTimeout,
++            None,
++            0,
+             true,
+             true,
+             &mut scheduler,
+@@ -414,6 +416,8 @@ fn graphs_page_change_publishes_selected_placeholder_not_previous_page() {
+         .publish(
+             crate::scheduler::PublicationId(1),
+             PublishReason::PageChanged,
++            None,
++            0,
+             false,
+             true,
+             &mut scheduler,
+diff --git a/src/daemon/async_loop/tests/completion.rs b/src/daemon/async_loop/tests/completion.rs
+index 028049b..925a71f 100644
+--- a/src/daemon/async_loop/tests/completion.rs
++++ b/src/daemon/async_loop/tests/completion.rs
+@@ -357,6 +357,8 @@ fn deferred_first_paint_suppresses_inventory_display_refresh() {
+     state.deferred_first_paint = Some(SchedulerAction::PublishDisplay {
+         publication: PublicationId(99),
+         reason: PublishReason::FirstPaintReady,
++        display_deadline: None,
++        skipped_display_deadlines: 0,
+         panel: true,
+         tooltip: true,
+     });
+@@ -367,6 +369,8 @@ fn deferred_first_paint_suppresses_inventory_display_refresh() {
+     let mut actions = VecDeque::from([SchedulerAction::PublishDisplay {
+         publication: PublicationId(98),
+         reason: PublishReason::TooltipRefresh,
++        display_deadline: None,
++        skipped_display_deadlines: 0,
+         panel: false,
+         tooltip: true,
+     }]);
+@@ -445,6 +449,7 @@ fn inventory_refresh_replaces_queued_tooltip_only_with_one_full_publication() {
+                 reason,
+                 panel,
+                 tooltip,
++                ..
+             } => Some((*publication, *reason, *panel, *tooltip)),
+             _ => None,
+         })
+@@ -533,6 +538,8 @@ fn deferred_first_paint_limits_sleep_to_original_deadline() {
+     state.deferred_first_paint = Some(SchedulerAction::PublishDisplay {
+         publication: PublicationId(99),
+         reason: PublishReason::FirstPaintReady,
++        display_deadline: None,
++        skipped_display_deadlines: 0,
+         panel: true,
+         tooltip: true,
+     });
+diff --git a/src/daemon/async_loop/tests/control.rs b/src/daemon/async_loop/tests/control.rs
+index bec0c2f..162c654 100644
+--- a/src/daemon/async_loop/tests/control.rs
++++ b/src/daemon/async_loop/tests/control.rs
+@@ -47,6 +47,8 @@ fn shutdown_preempts_pending_completion_and_stale_work() {
+         SchedulerAction::PublishDisplay {
+             publication: PublicationId(99),
+             reason: PublishReason::DisplayDeadline,
++            display_deadline: None,
++            skipped_display_deadlines: 0,
+             panel: true,
+             tooltip: true,
+         },
+diff --git a/src/daemon/async_loop/tests/integration.rs b/src/daemon/async_loop/tests/integration.rs
+index 25af609..d79d93d 100644
+--- a/src/daemon/async_loop/tests/integration.rs
++++ b/src/daemon/async_loop/tests/integration.rs
+@@ -53,7 +53,7 @@ fn production_async_loop_publishes_while_real_owner_task_is_blocked() {
+ 
+     let shutdown_started = realtime_runtime().block_on(async move {
+         let daemon =
+-            tokio::spawn(async move { run(Some(&config), &roots, &paths, services).await });
++            tokio::spawn(async move { run(Some(&config), &roots, &paths, services, None).await });
+         tokio::time::timeout(Duration::from_secs(1), async {
+             while !panel.exists() || !entered.load(Ordering::Acquire) {
+                 tokio::time::sleep(Duration::from_millis(1)).await;
+diff --git a/src/daemon/async_loop/tests/state.rs b/src/daemon/async_loop/tests/state.rs
+index e9ab28d..508cd38 100644
+--- a/src/daemon/async_loop/tests/state.rs
++++ b/src/daemon/async_loop/tests/state.rs
+@@ -1,5 +1,58 @@
+ use super::*;
+ 
++#[test]
++fn profiling_selection_changes_only_after_the_watcher_observes_the_page_file() {
++    let (root, paths) = test_paths("profile-selection");
++    fs::create_dir_all(&paths.state).expect("state root");
++    fs::write(&paths.page, "0").expect("initial profiling page");
++    let mut cfg = Config::default();
++    cfg.pages.order = vec![String::from("graphs")];
++    let active = build_pages(&cfg.pages.order);
++    let mut runtime_state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
++    runtime_state.configure_profiling(Arc::new(ProfileSession::default()));
++    fs::write(&paths.page, "1").expect("requested profiling page");
++
++    assert_eq!(runtime_state.selected_page(), (0, PageId::Main));
++    assert_eq!(
++        runtime_state.observe_selected_page(&paths),
++        (1, PageId::Graphs)
++    );
++    let _ = fs::remove_dir_all(root);
++}
++
++#[test]
++fn suppressed_display_ticks_accumulate_on_deferred_first_paint() {
++    let (root, paths) = test_paths("deferred-profile-ticks");
++    fs::create_dir_all(&paths.state).expect("state root");
++    let cfg = Config::default();
++    let active = build_pages(&cfg.pages.order);
++    let mut state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
++    state.deferred_first_paint = Some(SchedulerAction::PublishDisplay {
++        publication: crate::scheduler::PublicationId(1),
++        reason: PublishReason::FirstPaintReady,
++        display_deadline: None,
++        skipped_display_deadlines: 1,
++        panel: true,
++        tooltip: false,
++    });
++
++    assert!(
++        state.suppress_panel_publication_before_first_paint(PublishReason::DisplayDeadline, 0,)
++    );
++    assert!(
++        state.suppress_panel_publication_before_first_paint(PublishReason::DisplayDeadline, 2,)
++    );
++
++    assert!(matches!(
++        state.deferred_first_paint,
++        Some(SchedulerAction::PublishDisplay {
++            skipped_display_deadlines: 5,
++            ..
++        })
++    ));
++    let _ = fs::remove_dir_all(root);
++}
++
+ #[test]
+ fn stale_generation_completion_is_rejected_before_commit() {
+     let (root, paths) = test_paths("stale");
+@@ -301,6 +354,7 @@ fn panel_only_publication_leaves_existing_tooltip_unchanged() {
+                 reason,
+                 panel,
+                 tooltip,
++                ..
+             } => Some((*publication, *reason, *panel, *tooltip)),
+             _ => None,
+         })
+@@ -311,6 +365,8 @@ fn panel_only_publication_leaves_existing_tooltip_unchanged() {
+         .publish(
+             publication,
+             reason,
++            None,
++            0,
+             panel,
+             tooltip,
+             &mut scheduler,
+@@ -361,6 +417,7 @@ fn tooltip_only_publication_writes_tooltip_without_touching_panel() {
+                 reason,
+                 panel,
+                 tooltip,
++                ..
+             } => Some((*publication, *reason, *panel, *tooltip)),
+             _ => None,
+         })
+@@ -371,6 +428,8 @@ fn tooltip_only_publication_writes_tooltip_without_touching_panel() {
+         .publish(
+             publication,
+             reason,
++            None,
++            0,
+             panel,
+             tooltip,
+             &mut scheduler,
+diff --git a/src/daemon/async_loop/worker.rs b/src/daemon/async_loop/worker.rs
+index c781455..bc0662c 100644
+--- a/src/daemon/async_loop/worker.rs
++++ b/src/daemon/async_loop/worker.rs
+@@ -3,24 +3,27 @@ use std::collections::BTreeSet;
+ use std::sync::Arc;
+ use std::sync::Mutex;
+ use std::sync::atomic::{AtomicU64, Ordering};
+-use std::time::SystemTime;
++use std::time::{Duration, SystemTime};
+ 
+ use tokio::sync::{Semaphore, mpsc, oneshot};
+ use tokio::task::JoinSet;
+ 
+-use crate::adapters::{ProductionClock, ProductionCommandRunner, ProductionDbusFacade};
++use crate::adapters::ProductionClock;
+ use crate::config::Config;
+-use crate::domain::boundary::{ClockSnapshot, FilesystemRoots};
++use crate::domain::boundary::{ClockSnapshot, CommandRunner, DbusFacade, FilesystemRoots};
+ use crate::domain::readings::{DisplaySnapshot, HardwareInventory, MetricSample};
+ use crate::page_commands::{
+     Page, PageCommandAttempt, PageCommandCache, PageSource, attempt_command_with_state_and_clock,
+ };
++use crate::profiling::ProfileSession;
+ use crate::scheduler::{
+     CompletionKind, ConfigGeneration, InventoryGeneration, JobId, JobKind, JobTicket, OwnerId,
+     RescanKind, RunId, SourceIdentity,
+ };
++#[cfg(feature = "nvml")]
++use crate::sensors::gpu_nvidia;
+ use crate::sensors::{
+-    CollectCtx, ReconciliationOutcome, discover_hardware_attempt, disk, gpu_history, gpu_nvidia,
++    CollectCtx, ReconciliationOutcome, discover_hardware_attempt, disk, gpu_history,
+     invalidate_scheduled_job, power, reconcile_inventory_family, rescan_peripherals,
+     reset_counter_baseline,
+ };
+@@ -38,9 +41,10 @@ pub(super) type GpuHistoryValue = (Option<i32>, Option<i32>, gpu_history::Decode
+ pub(super) type GpuHistoryPoint = MetricSample<GpuHistoryValue>;
+ pub(super) type SourcedGpuHistoryPoint = (SourceIdentity, GpuHistoryPoint);
+ 
+-pub(super) struct OwnerServices {
+-    pub(super) commands: ProductionCommandRunner,
+-    pub(super) dbus: ProductionDbusFacade,
++pub(super) struct OwnerServices<C, D> {
++    pub(super) commands: C,
++    pub(super) dbus: D,
++    pub(super) profile: Option<Arc<ProfileSession>>,
+     #[cfg(test)]
+     pub(super) blocked_owner: Option<TestOwnerBlock>,
+ }
+@@ -199,15 +203,19 @@ impl OwnerSenders {
+     }
+ }
+ 
+-pub(super) fn spawn_owners(
++pub(super) fn spawn_owners<C, D>(
+     tasks: &mut JoinSet<OwnerId>,
+-    services: OwnerServices,
++    services: OwnerServices<C, D>,
+     roots: &FilesystemRoots,
+     clock: ProductionClock,
+     completion: mpsc::Sender<OwnerCompletion>,
+     blocking_lane: Arc<Semaphore>,
+     validity: DispatchValidity,
+-) -> OwnerSenders {
++) -> OwnerSenders
++where
++    C: CommandRunner + Clone + Send + 'static,
++    D: DbusFacade + Clone + Send + 'static,
++{
+     let mut senders = BTreeMap::new();
+     for owner in ALL_OWNERS {
+         let (sender, receiver) = mpsc::channel(OWNER_CHANNEL_CAPACITY);
+@@ -218,6 +226,7 @@ pub(super) fn spawn_owners(
+         let completion = completion.clone();
+         let blocking_lane = Arc::clone(&blocking_lane);
+         let validity = validity.clone();
++        let profile = services.profile.clone();
+         #[cfg(test)]
+         let blocked_owner = services.blocked_owner.clone();
+         tasks.spawn(owner_loop(
+@@ -228,6 +237,7 @@ pub(super) fn spawn_owners(
+             clock,
+             blocking_lane,
+             validity,
++            profile,
+             #[cfg(test)]
+             blocked_owner,
+         ));
+@@ -251,16 +261,21 @@ const ALL_OWNERS: [OwnerId; 12] = [
+ ];
+ 
+ #[allow(clippy::too_many_arguments)]
+-async fn owner_loop(
+-    mut worker: WorkerState,
++async fn owner_loop<C, D>(
++    mut worker: WorkerState<C, D>,
+     mut receiver: mpsc::Receiver<OwnerMessage>,
+     completion_sender: mpsc::Sender<OwnerCompletion>,
+     roots: FilesystemRoots,
+     clock: ProductionClock,
+     blocking_lane: Arc<Semaphore>,
+     validity: DispatchValidity,
++    profile: Option<Arc<ProfileSession>>,
+     #[cfg(test)] blocked_owner: Option<TestOwnerBlock>,
+-) -> OwnerId {
++) -> OwnerId
++where
++    C: CommandRunner + Clone + Send + 'static,
++    D: DbusFacade + Clone + Send + 'static,
++{
+     let owner = worker.owner;
+     while let Some(message) = receiver.recv().await {
+         match message {
+@@ -299,9 +314,21 @@ async fn owner_loop(
+                     }
+                     let attempt_roots = roots.clone();
+                     let attempt_clock = clock.clone();
++                    let attempt_profile = profile.clone();
+                     let task = tokio::task::spawn_blocking(move || {
+                         let _permit = permit;
++                        let started_at = attempt_profile.as_ref().map(|profile| {
++                            let at = attempt_clock.snapshot().monotonic;
++                            profile.record_job_started(input.ticket.run_id, at);
++                            at
++                        });
+                         let output = worker.execute(*input, &attempt_roots, &attempt_clock);
++                        if let (Some(profile), Some(_)) = (&attempt_profile, started_at) {
++                            profile.record_job_finished(
++                                output.ticket.run_id,
++                                attempt_clock.snapshot().monotonic,
++                            );
++                        }
+                         (worker, output)
+                     });
+                     let Ok((returned, output)) = task.await else {
+@@ -310,8 +337,20 @@ async fn owner_loop(
+                     worker = returned;
+                     output
+                 } else {
+-                    worker.execute(*input, &roots, &clock)
++                    if let Some(profile) = &profile {
++                        profile.record_job_started(input.ticket.run_id, clock.snapshot().monotonic);
++                    }
++                    let output = worker.execute(*input, &roots, &clock);
++                    if let Some(profile) = &profile {
++                        profile
++                            .record_job_finished(output.ticket.run_id, clock.snapshot().monotonic);
++                    }
++                    output
+                 };
++                if let Some(profile) = &profile {
++                    let captured_at = worker.capture_time(&output.ticket.job);
++                    profile.record_capture_candidate(output.ticket.run_id, captured_at);
++                }
+                 let (decision, accepted) = oneshot::channel();
+                 output.decision = Some(decision);
+                 if completion_sender
+@@ -383,11 +422,11 @@ async fn owner_loop(
+     owner
+ }
+ 
+-struct WorkerState {
++struct WorkerState<C, D> {
+     owner: OwnerId,
+     owners: Owners,
+-    commands: ProductionCommandRunner,
+-    dbus: ProductionDbusFacade,
++    commands: C,
++    dbus: D,
+     command_cache: PageCommandCache,
+     had_process_page: bool,
+     bolt: Option<crate::sensors::hid::BoltHidFacade>,
+@@ -401,8 +440,8 @@ struct WorkerCheckpoint {
+     had_process_page: bool,
+ }
+ 
+-impl WorkerState {
+-    fn new(owner: OwnerId, commands: ProductionCommandRunner, dbus: ProductionDbusFacade) -> Self {
++impl<C: CommandRunner, D: DbusFacade> WorkerState<C, D> {
++    fn new(owner: OwnerId, commands: C, dbus: D) -> Self {
+         Self {
+             owner,
+             owners: Owners::new(),
+@@ -637,6 +676,20 @@ impl WorkerState {
+         }
+     }
+ 
++    fn capture_time(&mut self, job: &JobId) -> Option<Duration> {
++        if job.kind == JobKind::PageCommand {
++            let SourceIdentity::Page(page) = &job.source else {
++                return None;
++            };
++            return self
++                .command_cache
++                .state(page.as_id())
++                .and_then(|state| state.latest.as_ref())
++                .map(|sample| sample.captured_at);
++        }
++        crate::sensors::scheduled_capture_time(job, self.owners.refs())
++    }
++
+     fn execute_page_command(
+         &mut self,
+         ticket: &JobTicket,
+diff --git a/src/daemon/scheduled_loop/executor.rs b/src/daemon/scheduled_loop/executor.rs
+index df9b52a..a790efb 100644
+--- a/src/daemon/scheduled_loop/executor.rs
++++ b/src/daemon/scheduled_loop/executor.rs
+@@ -144,6 +144,7 @@ pub(super) fn execute_transition(
+                 reason,
+                 panel,
+                 tooltip,
++                ..
+             }) => {
+                 if let Some(acknowledgement) = publication::publish(
+                     publication,
+diff --git a/src/daemon/scheduled_loop/executor/tests.rs b/src/daemon/scheduled_loop/executor/tests.rs
+index 089f6c1..cdb8687 100644
+--- a/src/daemon/scheduled_loop/executor/tests.rs
++++ b/src/daemon/scheduled_loop/executor/tests.rs
+@@ -99,6 +99,8 @@ fn newly_emitted_correctness_trace_precedes_retained_start() {
+         SchedulerAction::PublishDisplay {
+             publication: PublicationId(1),
+             reason: PublishReason::DisplayDeadline,
++            display_deadline: None,
++            skipped_display_deadlines: 0,
+             panel: true,
+             tooltip: false,
+         },
+diff --git a/src/daemon/tests.rs b/src/daemon/tests.rs
+index 506669b..cf4f74c 100644
+--- a/src/daemon/tests.rs
++++ b/src/daemon/tests.rs
+@@ -39,6 +39,49 @@ fn shutdown_timeout_is_a_daemon_error_after_cleanup() {
+     assert!(matches!(error, Error::CriticalShutdownTimeout));
+ }
+ 
++#[test]
++fn timed_profile_preserves_report_with_shutdown_error() {
++    let session = ProfileSession::default();
++    let outcome = complete_timed_profile(
++        &session,
++        Duration::from_millis(25),
++        "hidden",
++        Ok(()),
++        None,
++        true,
++    );
++
++    assert!(outcome.report.starts_with("profile:\n"));
++    assert!(outcome.report.contains("  scenario: hidden\n"));
++    assert!(
++        outcome
++            .report
++            .contains("  final_status: error (critical async I/O shutdown timed out)")
++    );
++    assert!(matches!(
++        outcome.error,
++        Some(Error::CriticalShutdownTimeout)
++    ));
++}
++
++#[test]
++fn profiling_cleanup_removes_temp_root_during_unwind() {
++    let root = std::env::temp_dir().join(format!(
++        "plasma-top-profile-cleanup-test-{}",
++        std::process::id()
++    ));
++    let _ = fs::remove_dir_all(&root);
++    fs::create_dir_all(&root).expect("profiling temp root");
++
++    let unwind = std::panic::catch_unwind(|| {
++        let _cleanup = ProfilingCleanup(root.clone());
++        panic!("exercise cleanup guard");
++    });
++
++    assert!(unwind.is_err());
++    assert!(!root.exists());
++}
++
+ #[test]
+ fn cleanup_preserves_last_good_tooltip() {
+     let (root, _roots, paths, _config_path) = integration_tree();
+diff --git a/src/diagnostics.rs b/src/diagnostics.rs
+index 0100da8..0fa3d37 100644
+--- a/src/diagnostics.rs
++++ b/src/diagnostics.rs
+@@ -6,7 +6,7 @@ use std::thread;
+ use std::time::{Duration, Instant};
+ 
+ use crate::adapters::{ProductionClock, ProductionCommandRunner, ProductionIo};
+-use crate::cli::{PanelLayout, RenderCommand, RenderComponent, RenderFormat};
++use crate::cli::{PanelLayout, ProfilingCommand, RenderCommand, RenderComponent, RenderFormat};
+ use crate::config::{Config, apply_canonical_width, load_config, resolve_style};
+ use crate::daemon::{
+     executable_lookup, plasma_is_light, read_css, render_page_id, render_page_with_clock,
+@@ -373,7 +373,22 @@ fn print_readings(r: &DisplaySnapshot) {
+ }
+ 
+ /// Profiles cold/warm collection sections without touching runtime files.
+-pub fn run_profiling(config_path: Option<&Path>) -> Result<()> {
++pub fn run_profiling(command: &ProfilingCommand) -> Result<()> {
++    if let Some(duration) = command.duration {
++        let scenario = command.scenario.as_deref().unwrap_or("main");
++        let outcome = crate::daemon::run_timed_profiling(
++            command.config.as_deref(),
++            duration,
++            scenario,
++            command.stimuli,
++        )?;
++        println!("{}", outcome.report);
++        return outcome.error.map_or(Ok(()), Err);
++    }
++    run_one_shot_profiling(command.config.as_deref())
++}
++
++fn run_one_shot_profiling(config_path: Option<&Path>) -> Result<()> {
+     let startup = Instant::now();
+     let mut cfg = load_config(config_path, None)?;
+     let config_ms = startup.elapsed().as_secs_f64() * 1000.0;
+diff --git a/src/lib.rs b/src/lib.rs
+index b777386..3105727 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -28,6 +28,7 @@ pub mod error;
+ pub(crate) mod file_watch;
+ pub mod notify;
+ pub mod page_commands;
++mod profiling;
+ pub mod render;
+ pub mod runtime;
+ pub(crate) mod scheduler;
+@@ -67,7 +68,7 @@ pub fn run(args: impl IntoIterator<Item = OsString>) -> Result<()> {
+         Command::Daemon(command) => daemon::run_daemon(command.config.as_deref()),
+         Command::Render(command) => diagnostics::run_render(&command),
+         Command::Probe(command) => diagnostics::run_probe(command.config.as_deref()),
+-        Command::Profiling(command) => diagnostics::run_profiling(command.config.as_deref()),
++        Command::Profiling(command) => diagnostics::run_profiling(&command),
+         Command::ListItems => diagnostics::run_list_items(),
+         Command::Page(command) => daemon::run_page(command.direction),
+         Command::Present(command) => {
+diff --git a/src/render/chart.rs b/src/render/chart.rs
+index ecad4fe..fa5c87d 100644
+--- a/src/render/chart.rs
++++ b/src/render/chart.rs
+@@ -127,7 +127,7 @@ pub fn area_chart_png(
+         draw_line(&mut pixels, width, height, plot_x0, &curve, options.line);
+     }
+ 
+-    if let Some(overlay) = options.overlay {
++    if let Some(overlay) = options.overlay.filter(|overlay| !overlay.is_empty()) {
+         let curve = curve_yf(overlay, plot_width, floor_y, span, options.vmax);
+         draw_line(
+             &mut pixels,
+diff --git a/src/render/chart/tests.rs b/src/render/chart/tests.rs
+index 9df07c8..c882c1e 100644
+--- a/src/render/chart/tests.rs
++++ b/src/render/chart/tests.rs
+@@ -107,6 +107,23 @@ fn empty_series_draws_grid_and_labels_only() {
+     assert_eq!(pixel(&decoded, 11, 3), GRID);
+ }
+ 
++#[test]
++fn empty_overlay_draws_grid_and_primary_series_only() {
++    let without_overlay = area_chart_png(&[25.0, 50.0], 12, 8, AreaChartOptions::default());
++    let with_empty_overlay = area_chart_png(
++        &[25.0, 50.0],
++        12,
++        8,
++        AreaChartOptions {
++            overlay: Some(&[]),
++            overlay_line: RED_LINE,
++            ..AreaChartOptions::default()
++        },
++    );
++
++    assert_eq!(with_empty_overlay, without_overlay);
++}
++
+ #[test]
+ fn repeated_calls_are_byte_stable() {
+     let options = AreaChartOptions {
+diff --git a/src/render/pages/tests.rs b/src/render/pages/tests.rs
+index 66a0f01..90ea1e6 100644
+--- a/src/render/pages/tests.rs
++++ b/src/render/pages/tests.rs
+@@ -209,6 +209,23 @@ fn format_graphs_prefers_nvidia_and_omits_absent_network() {
+     assert!(!html.contains("Download"));
+ }
+ 
++#[test]
++fn format_graphs_handles_present_sources_before_histories_exist() {
++    let cfg = Config::default();
++    let hardware = HardwareInventory {
++        has_nvidia: true,
++        net_device: Some(String::from("eth0")),
++        ..HardwareInventory::default()
++    };
++    let formatter = PageFormatter::new(&cfg, &hardware);
++
++    let html = formatter.format_graphs(&DisplaySnapshot::default(), "", "", None);
++
++    assert_eq!(html.matches("data:image/png;base64,").count(), 4);
++    assert!(html.contains("GPU usage"));
++    assert!(html.contains("Download"));
++}
++
+ #[test]
+ fn graph_value_helpers_match_threshold_classes() {
+     assert!(graph_value_band(None, Some((50, 70))).contains(EMPTY_VALUE));
+diff --git a/src/scheduler/machine.rs b/src/scheduler/machine.rs
+index 4967253..ff0fe17 100644
+--- a/src/scheduler/machine.rs
++++ b/src/scheduler/machine.rs
+@@ -219,6 +219,8 @@ impl Scheduler {
+             SchedulerEvent::DisplayRefreshRequested { .. } => {
+                 self.issue_publish(
+                     PublishReason::ConfigChanged,
++                    None,
++                    0,
+                     true,
+                     self.effective_presented,
+                     &mut actions,
+@@ -226,7 +228,14 @@ impl Scheduler {
+                 EventDisposition::Accepted
+             }
+             SchedulerEvent::TooltipRefreshRequested { .. } => {
+-                self.issue_publish(PublishReason::TooltipRefresh, false, true, &mut actions);
++                self.issue_publish(
++                    PublishReason::TooltipRefresh,
++                    None,
++                    0,
++                    false,
++                    true,
++                    &mut actions,
++                );
+                 EventDisposition::Accepted
+             }
+             SchedulerEvent::JobFinished {
+@@ -418,6 +427,8 @@ impl Scheduler {
+         if self.first_paint_issued {
+             self.issue_publish(
+                 PublishReason::ConfigChanged,
++                None,
++                0,
+                 true,
+                 self.effective_presented,
+                 actions,
+@@ -509,7 +520,7 @@ impl Scheduler {
+         {
+             self.activation_deadline = None;
+             self.activation_waiting.clear();
+-            self.issue_publish(PublishReason::TooltipRefresh, false, true, actions);
++            self.issue_publish(PublishReason::TooltipRefresh, None, 0, false, true, actions);
+         }
+ 
+         if self.first_paint_issued
+@@ -517,8 +528,14 @@ impl Scheduler {
+                 .next_display
+                 .is_some_and(|deadline| deadline <= self.now)
+         {
++            let deadline = self.next_display;
++            let skipped = deadline.map_or(0, |deadline| {
++                skipped_intervals(deadline, self.display_interval, self.now)
++            });
+             self.issue_publish(
+                 PublishReason::DisplayDeadline,
++                deadline,
++                skipped,
+                 true,
+                 self.effective_presented,
+                 actions,
+@@ -666,7 +683,7 @@ impl Scheduler {
+         }
+         if self.activation_deadline.is_some() && self.activation_waiting.is_empty() {
+             self.activation_deadline = None;
+-            self.issue_publish(PublishReason::TooltipRefresh, false, true, actions);
++            self.issue_publish(PublishReason::TooltipRefresh, None, 0, false, true, actions);
+         }
+         true
+     }
+@@ -838,6 +855,9 @@ impl Scheduler {
+         self.first_paint_issued = true;
+         self.first_paint_deadline = None;
+         self.first_paint_waiting.clear();
++        let skipped = self.next_display.map_or(0, |deadline| {
++            due_intervals(deadline, self.display_interval, self.now)
++        });
+         if self
+             .next_display
+             .is_some_and(|deadline| deadline <= self.now)
+@@ -846,7 +866,14 @@ impl Scheduler {
+             self.next_display = Some(advance_past(deadline, self.display_interval, self.now));
+             self.reanchor_fast_jobs();
+         }
+-        self.issue_publish(reason, true, self.effective_presented, actions);
++        self.issue_publish(
++            reason,
++            None,
++            skipped,
++            true,
++            self.effective_presented,
++            actions,
++        );
+     }
+ 
+     #[expect(
+@@ -856,6 +883,8 @@ impl Scheduler {
+     fn issue_publish(
+         &mut self,
+         reason: PublishReason,
++        display_deadline: Option<SchedulerTime>,
++        skipped_display_deadlines: u64,
+         panel: bool,
+         tooltip: bool,
+         actions: &mut Vec<SchedulerAction>,
+@@ -878,6 +907,8 @@ impl Scheduler {
+             if let Some(SchedulerAction::PublishDisplay {
+                 publication,
+                 reason: existing_reason,
++                display_deadline: existing_deadline,
++                skipped_display_deadlines: existing_skipped,
+                 panel: existing_panel,
+                 tooltip: existing_tooltip,
+             }) = actions.iter_mut().find(|action| {
+@@ -891,6 +922,8 @@ impl Scheduler {
+                 )
+             }) {
+                 *existing_reason = reason;
++                *existing_deadline = display_deadline;
++                *existing_skipped = skipped_display_deadlines;
+                 *existing_panel = true;
+                 *existing_tooltip = true;
+                 self.panel_publications.insert(*publication);
+@@ -905,6 +938,8 @@ impl Scheduler {
+         actions.push(SchedulerAction::PublishDisplay {
+             publication,
+             reason,
++            display_deadline,
++            skipped_display_deadlines,
+             panel,
+             tooltip,
+         });
+@@ -918,3 +953,23 @@ impl Scheduler {
+         self.demand.demanded(presented, page)
+     }
+ }
++
++fn skipped_intervals(deadline: SchedulerTime, cadence: Duration, now: SchedulerTime) -> u64 {
++    if cadence.is_zero() || now <= deadline {
++        return 0;
++    }
++    u64::try_from(
++        now.duration()
++            .saturating_sub(deadline.duration())
++            .as_nanos()
++            / cadence.as_nanos(),
++    )
++    .unwrap_or(u64::MAX)
++}
++
++fn due_intervals(deadline: SchedulerTime, cadence: Duration, now: SchedulerTime) -> u64 {
++    if cadence.is_zero() || now < deadline {
++        return 0;
++    }
++    skipped_intervals(deadline, cadence, now).saturating_add(1)
++}
+diff --git a/src/scheduler/machine/demand.rs b/src/scheduler/machine/demand.rs
+index dafef28..1abe6cc 100644
+--- a/src/scheduler/machine/demand.rs
++++ b/src/scheduler/machine/demand.rs
+@@ -61,7 +61,14 @@ impl Scheduler {
+                 self.activate_jobs(&before, &after, true);
+             }
+             if !was_presented {
+-                self.issue_publish(PublishReason::TooltipActivated, false, true, actions);
++                self.issue_publish(
++                    PublishReason::TooltipActivated,
++                    None,
++                    0,
++                    false,
++                    true,
++                    actions,
++                );
+             }
+         } else if was_presented && self.effective_presented {
+             self.deactivation_deadline = Some(self.now.saturating_add(DEACTIVATION_GRACE));
+@@ -83,7 +90,7 @@ impl Scheduler {
+             self.cancel_demand_ended(&before, &after, actions);
+             self.activate_jobs(&before, &after, true);
+             if self.presented {
+-                self.issue_publish(PublishReason::PageChanged, false, true, actions);
++                self.issue_publish(PublishReason::PageChanged, None, 0, false, true, actions);
+             }
+         }
+     }
+diff --git a/src/scheduler/model.rs b/src/scheduler/model.rs
+index 552c5d4..6778063 100644
+--- a/src/scheduler/model.rs
++++ b/src/scheduler/model.rs
+@@ -112,6 +112,18 @@ impl PageId {
+             other => Self::Other(other.to_owned()),
+         }
+     }
++
++    pub(crate) fn as_id(&self) -> &str {
++        match self {
++            Self::Main => "main",
++            Self::Processes => "processes",
++            Self::CpuCores => "cpu_cores",
++            Self::Connections => "connections",
++            Self::Fastfetch => "fastfetch",
++            Self::Graphs => "graphs",
++            Self::Other(page) => page,
++        }
++    }
+ }
+ 
+ #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+@@ -497,6 +509,10 @@ pub(crate) enum SchedulerAction {
+     PublishDisplay {
+         publication: PublicationId,
+         reason: PublishReason,
++        /// Nominal typed display deadline for scheduled publication only.
++        display_deadline: Option<SchedulerTime>,
++        /// Display deadlines skipped before this publication was issued.
++        skipped_display_deadlines: u64,
+         panel: bool,
+         tooltip: bool,
+     },
+diff --git a/src/scheduler/tests/mod.rs b/src/scheduler/tests/mod.rs
+index d7f53b7..cd7602e 100644
+--- a/src/scheduler/tests/mod.rs
++++ b/src/scheduler/tests/mod.rs
+@@ -109,6 +109,7 @@ fn publications(transition: &Transition) -> Vec<(PublicationId, PublishReason, b
+                 reason,
+                 panel,
+                 tooltip,
++                ..
+             } => Some((*publication, *reason, *panel, *tooltip)),
+             SchedulerAction::CancelJob { .. }
+             | SchedulerAction::InvalidateJob { .. }
+diff --git a/src/scheduler/tests/timing.rs b/src/scheduler/tests/timing.rs
+index 0e62058..79c8c67 100644
+--- a/src/scheduler/tests/timing.rs
++++ b/src/scheduler/tests/timing.rs
+@@ -91,6 +91,59 @@ fn publication_deadline_does_not_wait_for_prefetched_job() {
+     );
+ }
+ 
++#[test]
++fn display_publication_carries_nominal_deadline_and_real_skips() {
++    let mut scheduler = Scheduler::new();
++    let initial = startup(
++        &mut scheduler,
++        config(Duration::from_secs(1), Vec::new(), std::iter::empty()),
++    );
++    let publication = publications(&initial)[0].0;
++    let _ = scheduler.handle(SchedulerEvent::PanelPublished {
++        at: at_millis(200),
++        publication,
++    });
++
++    let late = scheduler.handle(SchedulerEvent::TimeAdvanced {
++        at: at_millis(3_200),
++    });
++    let timing = late.actions.iter().find_map(|action| match action {
++        SchedulerAction::PublishDisplay {
++            reason: PublishReason::DisplayDeadline,
++            display_deadline,
++            skipped_display_deadlines,
++            ..
++        } => Some((*display_deadline, *skipped_display_deadlines)),
++        _ => None,
++    });
++
++    assert_eq!(timing, Some((Some(at_seconds(1)), 2)));
++}
++
++#[test]
++fn display_deadlines_suppressed_before_first_paint_are_skipped() {
++    let cpu = job(OwnerId::Cpu, JobKind::Cpu);
++    let mut spec = JobSpec::fast(cpu.clone(), Duration::from_millis(100));
++    spec.startup_panel = true;
++    let mut scheduler = Scheduler::new();
++    let _ = startup(
++        &mut scheduler,
++        config(Duration::from_millis(100), vec![spec], [cpu]),
++    );
++
++    let timeout = scheduler.handle(SchedulerEvent::TimeAdvanced { at: at_millis(200) });
++    let skipped = timeout.actions.iter().find_map(|action| match action {
++        SchedulerAction::PublishDisplay {
++            reason: PublishReason::FirstPaintTimeout,
++            skipped_display_deadlines,
++            ..
++        } => Some(*skipped_display_deadlines),
++        _ => None,
++    });
++
++    assert_eq!(skipped, Some(2));
++}
++
+ #[test]
+ fn missed_periodic_ticks_skip_catch_up_and_keep_phase() {
+     let network = job(OwnerId::Network, JobKind::NetworkIdentity);
+diff --git a/src/sensors/scheduled.rs b/src/sensors/scheduled.rs
+index 7adc9b3..384d106 100644
+--- a/src/sensors/scheduled.rs
++++ b/src/sensors/scheduled.rs
+@@ -1,4 +1,5 @@
+ use std::collections::{BTreeSet, VecDeque};
++use std::time::Duration;
+ 
+ use crate::config::Config;
+ use crate::domain::boundary::ClockSnapshot;
+@@ -27,8 +28,11 @@ use super::{cpu, memory, network};
+ 
+ #[path = "scheduled/invalidation.rs"]
+ mod invalidation;
++#[path = "scheduled/profiling.rs"]
++mod profiling;
+ 
+ pub(crate) use invalidation::invalidate_scheduled_job;
++pub(crate) use profiling::capture_time as scheduled_capture_time;
+ 
+ pub(crate) struct JobExecution {
+     pub(crate) completion: CompletionKind,
+@@ -817,7 +821,7 @@ fn sample_at_history_deadline<T>(
+ fn history_capture_time(
+     deadline: Option<HistoryDeadline>,
+     ctx: &mut CollectCtx<'_, '_>,
+-) -> std::time::Duration {
++) -> Duration {
+     deadline.map_or_else(
+         || (ctx.clock)().monotonic,
+         |deadline| deadline.at().duration(),
+diff --git a/src/sensors/tests/scheduled_execution.rs b/src/sensors/tests/scheduled_execution.rs
+index 1b8b07a..de5911c 100644
+--- a/src/sensors/tests/scheduled_execution.rs
++++ b/src/sensors/tests/scheduled_execution.rs
+@@ -76,10 +76,9 @@ fn selected_process_diagnostic_runs_exactly_baseline_then_warm_scan() {
+ }
+ 
+ #[test]
+-fn cpu_notification_subsamples_survive_aggregate_failure() {
++fn cpu_composite_retains_captures_on_baseline_and_partial_failure() {
+     let tree = TempTree::new();
+     baseline_proc(&tree);
+-    tree.write("proc/stat", "malformed\n");
+     tree.write("sys/class/hwmon/hwmon0/temp1_input", "52000\n");
+     let cfg = cfg_panel(&["cpu_temp", "load_avg"]);
+     let mut hw = HardwareInventory {
+@@ -89,7 +88,8 @@ fn cpu_notification_subsamples_survive_aggregate_failure() {
+     let mut owners = TestOwners::default();
+     let mut commands = FakeCommandRunner::new();
+     let mut dbus = FakeDbus::new();
+-    let mut capture_clock = fixed_clock(1);
++    let now = std::cell::Cell::new(1);
++    let mut capture_clock = || clock(now.get());
+     let proc_root = tree.proc();
+     let sys_root = tree.sys();
+     let mut ctx = crate::sensors::CollectCtx {
+@@ -102,26 +102,53 @@ fn cpu_notification_subsamples_survive_aggregate_failure() {
+         clock: &mut capture_clock,
+         skip_slow: false,
+     };
+-    let result = crate::sensors::execute_scheduled_job(
+-        &crate::scheduler::JobId::singleton(
+-            crate::scheduler::OwnerId::Cpu,
+-            crate::scheduler::JobKind::Cpu,
+-        ),
++    let job = crate::scheduler::JobId::singleton(
++        crate::scheduler::OwnerId::Cpu,
++        crate::scheduler::JobKind::Cpu,
++    );
++    let mut readings = DisplaySnapshot::default();
++    let baseline = crate::sensors::execute_scheduled_job(
++        &job,
++        owners.refs(),
++        &mut hw,
++        &cfg,
++        &mut ctx,
++        &mut readings,
++        None,
++    );
++    assert_eq!(
++        baseline.completion,
++        crate::scheduler::CompletionKind::Baseline
++    );
++    assert!(baseline.notification_ready);
++    assert_eq!(
++        crate::sensors::scheduled_capture_time(&job, owners.refs()),
++        Some(Duration::from_secs(1))
++    );
++
++    tree.write("proc/stat", "malformed\n");
++    now.set(2);
++    let failed = crate::sensors::execute_scheduled_job(
++        &job,
+         owners.refs(),
+         &mut hw,
+         &cfg,
+         &mut ctx,
+-        &mut DisplaySnapshot::default(),
++        &mut readings,
+         None,
+     );
+ 
+-    assert_eq!(result.completion, crate::scheduler::CompletionKind::Failed);
+-    assert!(result.notification_ready);
+-    assert_eq!(result.notifications.cpu_temp, Some(52));
++    assert_eq!(failed.completion, crate::scheduler::CompletionKind::Failed);
++    assert!(failed.notification_ready);
++    assert_eq!(failed.notifications.cpu_temp, Some(52));
+     assert_eq!(
+-        result.notifications.load_average.map(|load| load.one),
++        failed.notifications.load_average.map(|load| load.one),
+         Some(0.5)
+     );
++    assert_eq!(
++        crate::sensors::scheduled_capture_time(&job, owners.refs()),
++        Some(Duration::from_secs(2))
++    );
+ }
+ 
+ #[test]
+@@ -210,6 +237,55 @@ fn captured_route_switch_from_wifi_to_wired_clears_wireless_display_fields() {
+     assert_eq!(readings.net_device.as_deref(), Some("eth0"));
+     assert_eq!(readings.wifi_ssid, None);
+     assert_eq!(readings.wifi_signal_percent, None);
++    assert_eq!(
++        crate::sensors::scheduled_capture_time(&job, owners.refs()),
++        Some(Duration::from_secs(10))
++    );
++}
++
++#[test]
++fn profiling_capture_time_uses_stale_cpu_auxiliary_sample() {
++    let mut owners = TestOwners::default();
++    owners.cpu.usage.record_value(50, Duration::from_secs(10));
++    owners
++        .cpu
++        .temperature
++        .record_value(60, Duration::from_secs(2));
++    let job = crate::scheduler::JobId::singleton(
++        crate::scheduler::OwnerId::Cpu,
++        crate::scheduler::JobKind::Cpu,
++    );
++
++    assert_eq!(
++        crate::sensors::scheduled_capture_time(&job, owners.refs()),
++        Some(Duration::from_secs(2))
++    );
++}
++
++#[test]
++fn profiling_capture_time_uses_stale_memory_auxiliary_sample() {
++    let mut owners = TestOwners::default();
++    owners.memory.usage.record_value(
++        memory::MemoryUsage {
++            percent: 50,
++            used_gib: 2,
++            total_gib: 4,
++        },
++        Duration::from_secs(10),
++    );
++    owners
++        .memory
++        .swap_usage
++        .record_value(25, Duration::from_secs(3));
++    let job = crate::scheduler::JobId::singleton(
++        crate::scheduler::OwnerId::Memory,
++        crate::scheduler::JobKind::Memory,
++    );
++
++    assert_eq!(
++        crate::sensors::scheduled_capture_time(&job, owners.refs()),
++        Some(Duration::from_secs(3))
++    );
+ }
+ 
+ fn execute_history_job(
+diff --git a/tests/cli_daemon.rs b/tests/cli_daemon.rs
+index 8ec39c5..2faf9e2 100644
+--- a/tests/cli_daemon.rs
++++ b/tests/cli_daemon.rs
+@@ -149,3 +149,153 @@ fn page_command_only_touches_isolated_state_subtree() {
+     assert_eq!(root_entries, vec!["state"]);
+     fs::remove_dir_all(root).expect("cleanup fixture");
+ }
++
++#[test]
++fn timed_profiling_runs_async_scheduler_without_runtime_publications() {
++    let root = temp_root("profiling");
++    let _ = fs::remove_dir_all(&root);
++    fs::create_dir_all(&root).expect("runtime fixture");
++    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
++
++    let output = Command::new(binary())
++        .args([
++            "profiling",
++            "--config",
++            "config/config.toml",
++            "--duration",
++            "0.05",
++            "--scenario",
++            "hidden",
++        ])
++        .current_dir(&manifest)
++        .env("XDG_RUNTIME_DIR", &root)
++        .output()
++        .expect("spawn timed profiling");
++
++    assert!(
++        output.status.success(),
++        "timed profiling failed: {}",
++        String::from_utf8_lossy(&output.stderr)
++    );
++    let report = String::from_utf8(output.stdout).expect("utf8 profiling report");
++    assert!(
++        report.starts_with("profile:\n"),
++        "unexpected report prefix: {report}"
++    );
++    for field in [
++        "  duration_seconds: 0.050\n",
++        "  scenario: hidden\n",
++        "jobs:\n",
++        "timing:\n",
++        "  maximum_sample_age:",
++        "  wake_lateness:",
++        "  first_paint_latency:",
++        "  publication_lateness:",
++        "  skipped_display_deadlines:",
++        "  stimuli: disabled",
++        "  write_time: not_applicable",
++        "  shutdown_duration:",
++        "  shutdown_over_500ms: 0",
++        "  final_status: ok",
++    ] {
++        assert!(
++            report.contains(field),
++            "missing report field {field:?}: {report}"
++        );
++    }
++    assert!(
++        !report.contains("[boot]"),
++        "profiling leaked boot logs: {report}"
++    );
++    assert!(!report.contains("event_control_latency:"));
++    assert!(!report.contains("render_tooltip_activated:"));
++    assert!(!report.contains("render_page_changed:"));
++    assert!(!root.join("plasma-top").exists());
++    fs::remove_dir_all(root).expect("cleanup fixture");
++}
++
++#[test]
++fn timed_profiling_stimuli_report_publication_latency_without_mutating_config() {
++    let root = temp_root("profiling-stimuli");
++    let _ = fs::remove_dir_all(&root);
++    fs::create_dir_all(&root).expect("profiling fixture");
++    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
++    let config = root.join("config.toml");
++    let original = fs::read(manifest.join("config/config.toml")).expect("shipped config");
++    fs::write(&config, &original).expect("isolated input config");
++
++    let output = Command::new(binary())
++        .args([
++            "profiling",
++            "--config",
++            config.to_str().expect("utf8 fixture path"),
++            "--duration",
++            "2.5",
++            "--scenario",
++            "main",
++            "--stimuli",
++        ])
++        .current_dir(&manifest)
++        .env("XDG_RUNTIME_DIR", &root)
++        .output()
++        .expect("spawn profiling stimuli");
++
++    assert!(
++        output.status.success(),
++        "timed profiling failed: {}",
++        String::from_utf8_lossy(&output.stderr)
++    );
++    let report = String::from_utf8(output.stdout).expect("utf8 profiling report");
++    for field in [
++        "  stimuli: enabled",
++        "  aggregate_scope: scenario plus profiling stimuli",
++        "event_page_latency: p50=",
++        "event_control_latency: p50=",
++        "event_config_latency: p50=",
++        "stimulus_actions: planned=",
++        "stimulus_requested_state:",
++        "stimulus_observed_state:",
++        "shutdown_duration:",
++        "final_status: ok",
++    ] {
++        assert!(report.contains(field), "missing {field:?}: {report}");
++    }
++    assert_eq!(fs::read(&config).expect("input config remains"), original);
++    assert!(!root.join("plasma-top").exists());
++    fs::remove_dir_all(root).expect("cleanup fixture");
++}
++
++#[test]
++fn timed_profiling_rejects_unconfigured_page() {
++    let output = Command::new(binary())
++        .args([
++            "profiling",
++            "--config",
++            "config/config.toml",
++            "--duration",
++            "0.01",
++            "--scenario",
++            "not_a_page",
++        ])
++        .current_dir(env!("CARGO_MANIFEST_DIR"))
++        .output()
++        .expect("spawn invalid profiling scenario");
++
++    assert!(!output.status.success());
++    assert!(
++        String::from_utf8_lossy(&output.stderr)
++            .contains("profiling scenario page 'not_a_page' is not configured in pages.order")
++    );
++}
++
++#[test]
++fn timed_profiling_rejects_full_alias_before_startup() {
++    let output = Command::new(binary())
++        .args(["profiling", "--duration", "0.01", "--scenario", "full"])
++        .current_dir(env!("CARGO_MANIFEST_DIR"))
++        .output()
++        .expect("spawn full profiling alias");
++
++    assert_eq!(output.status.code(), Some(2));
++    assert!(String::from_utf8_lossy(&output.stderr).contains("unsupported alias: 'full'"));
++}

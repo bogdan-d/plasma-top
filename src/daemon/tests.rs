@@ -40,6 +40,49 @@ fn shutdown_timeout_is_a_daemon_error_after_cleanup() {
 }
 
 #[test]
+fn timed_profile_preserves_report_with_shutdown_error() {
+    let session = ProfileSession::default();
+    let outcome = complete_timed_profile(
+        &session,
+        Duration::from_millis(25),
+        "hidden",
+        Ok(()),
+        None,
+        true,
+    );
+
+    assert!(outcome.report.starts_with("profile:\n"));
+    assert!(outcome.report.contains("  scenario: hidden\n"));
+    assert!(
+        outcome
+            .report
+            .contains("  final_status: error (critical async I/O shutdown timed out)")
+    );
+    assert!(matches!(
+        outcome.error,
+        Some(Error::CriticalShutdownTimeout)
+    ));
+}
+
+#[test]
+fn profiling_cleanup_removes_temp_root_during_unwind() {
+    let root = std::env::temp_dir().join(format!(
+        "plasma-top-profile-cleanup-test-{}",
+        std::process::id()
+    ));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).expect("profiling temp root");
+
+    let unwind = std::panic::catch_unwind(|| {
+        let _cleanup = ProfilingCleanup(root.clone());
+        panic!("exercise cleanup guard");
+    });
+
+    assert!(unwind.is_err());
+    assert!(!root.exists());
+}
+
+#[test]
 fn cleanup_preserves_last_good_tooltip() {
     let (root, _roots, paths, _config_path) = integration_tree();
     fs::create_dir_all(&paths.state).expect("runtime state");

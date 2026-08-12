@@ -1,0 +1,9 @@
+baseline_commit=7c95731b105d704ba7b78d8cb5deb7a19f9277bf
+baseline_subject=docs: add .pi/ to .gitignore for tooling cache exclusion
+archive_checkout=/tmp/plasma-top-sync-baseline.tmQCij
+rustc=rustc 1.97.1 (8bab26f4f 2026-07-14) (Homebrew)
+cargo=cargo 1.97.1 (c980f4866 2026-06-30) (Homebrew)
+baseline_binary=/var/mnt/xdata/code/_self/plasma-top/.scratch/async-metric-scheduler/runs/development/binaries/plasma-top-baseline-7c95731
+baseline_binary_sha256=ff5b09911406d146ef0b1bbfbcb4274852398f39e64f75f643c5ea789cebe71b
+baseline_config_sha256=50260ac6747364493d1588250134bfda2fce9420ec6cc8a8994ba610efca6718
+baseline_cargo_lock_sha256=fc4689c863aebc4c265f5434f985be6b88728e5c562fd976c90886732579ef17

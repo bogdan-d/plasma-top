@@ -357,6 +357,8 @@ fn deferred_first_paint_suppresses_inventory_display_refresh() {
     state.deferred_first_paint = Some(SchedulerAction::PublishDisplay {
         publication: PublicationId(99),
         reason: PublishReason::FirstPaintReady,
+        display_deadline: None,
+        skipped_display_deadlines: 0,
         panel: true,
         tooltip: true,
     });
@@ -367,6 +369,8 @@ fn deferred_first_paint_suppresses_inventory_display_refresh() {
     let mut actions = VecDeque::from([SchedulerAction::PublishDisplay {
         publication: PublicationId(98),
         reason: PublishReason::TooltipRefresh,
+        display_deadline: None,
+        skipped_display_deadlines: 0,
         panel: false,
         tooltip: true,
     }]);
@@ -445,6 +449,7 @@ fn inventory_refresh_replaces_queued_tooltip_only_with_one_full_publication() {
                 reason,
                 panel,
                 tooltip,
+                ..
             } => Some((*publication, *reason, *panel, *tooltip)),
             _ => None,
         })
@@ -533,6 +538,8 @@ fn deferred_first_paint_limits_sleep_to_original_deadline() {
     state.deferred_first_paint = Some(SchedulerAction::PublishDisplay {
         publication: PublicationId(99),
         reason: PublishReason::FirstPaintReady,
+        display_deadline: None,
+        skipped_display_deadlines: 0,
         panel: true,
         tooltip: true,
     });

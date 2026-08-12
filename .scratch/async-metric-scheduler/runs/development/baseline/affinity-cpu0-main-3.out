@@ -1,0 +1,32 @@
+── Tooltip output (full) ──────────────────────────────────
+CPU & MEM
+ 
+ Cpu usage: ⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀        12%
+ Mem usage: 33G / 125G        26%
+ Cpu freq:  Turbo         5.1 GHz
+ 
+DRIVES
+ 
+󰄫 Root:     0G / 0G           100%
+󰄫 Q_16: 14488G / 14900G        97%
+󰄫 R_14:  7346G / 13037G        56%
+󰄫 T_01:   862G / 953G          90%
+ 
+THERMAL
+ 
+ Cpu temp:                   73°C
+󰋊 Nvme:    36°C  󰋊 Nvme:      49°C
+ 
+I/O
+ 
+ Read:       0   Write:        0
+󰕒 Upload:   43K  󰇚 Dload:       8K
+󰛳 Network:       tun0 - 10.8.11.20
+󰣸 Wifi:                    -- - --
+ 
+LOAD
+ 
+󰥔 Uptime:                    5h 7m
+󰐟 Load avg:         4.98 4.53 3.93
+
+

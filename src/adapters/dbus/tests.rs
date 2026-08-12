@@ -167,3 +167,28 @@ fn stale_disconnect_completion_does_not_match_a_new_connection() {
     assert!(!connection_matches(Some(current), old));
     assert!(connection_matches(Some(current), current));
 }
+
+#[test]
+fn notification_send_counts_as_dbus_call_when_profiled() {
+    use crate::profiling::{ProfileSession, ProfilingNotificationFacade};
+
+    let (sender, _receiver) = mpsc::channel(1);
+    let stopped = Arc::new(AtomicBool::new(true));
+    let profile = Arc::new(ProfileSession::default());
+    let production = ProductionNotificationFacade::new(sender, stopped);
+    let mut facade = ProfilingNotificationFacade::new(production, Arc::clone(&profile));
+    let payload = NotificationPayload {
+        title: String::from("title"),
+        body: String::from("body"),
+        icon: String::from("icon"),
+        urgency: crate::domain::boundary::NotificationUrgency::Critical,
+        timeout: crate::domain::boundary::NotificationTimeout::Never,
+    };
+
+    assert!(facade.send(&payload).is_err());
+    assert!(
+        profile
+            .report(Duration::from_secs(1), "hidden")
+            .contains("  dbus_calls: 1\n")
+    );
+}

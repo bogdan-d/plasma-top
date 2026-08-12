@@ -170,3 +170,89 @@ fn repeated_render_flags_keep_last_value_like_argparse() {
         })
     );
 }
+
+#[test]
+fn timed_profiling_defaults_to_main_and_accepts_fractional_seconds() {
+    assert_eq!(
+        parse(&["plasma-top", "profiling", "--duration", "0.25"]),
+        Ok(Cli {
+            command: Command::Profiling(ProfilingCommand {
+                config: None,
+                duration: Some(Duration::from_millis(250)),
+                scenario: Some(String::from("main")),
+                stimuli: false,
+            }),
+        })
+    );
+}
+
+#[test]
+fn profiling_rejects_invalid_duration_and_scenario_without_duration() {
+    for value in ["0", "-1", "NaN", "inf", "text", "0.0000000001"] {
+        assert!(matches!(
+            parse(&["plasma-top", "profiling", "--duration", value]),
+            Err(CliError::InvalidDuration { .. })
+        ));
+    }
+    assert_eq!(
+        parse(&["plasma-top", "profiling", "--scenario", "hidden"]),
+        Err(CliError::ScenarioRequiresDuration)
+    );
+    assert_eq!(
+        parse(&["plasma-top", "profiling", "--stimuli"]),
+        Err(CliError::StimuliRequireDuration)
+    );
+}
+
+#[test]
+fn profiling_stimuli_are_an_explicit_timed_opt_in() {
+    assert_eq!(
+        parse(&[
+            "plasma-top",
+            "profiling",
+            "--duration",
+            "1",
+            "--scenario",
+            "hidden",
+            "--stimuli",
+        ]),
+        Ok(Cli {
+            command: Command::Profiling(ProfilingCommand {
+                duration: Some(Duration::from_secs(1)),
+                scenario: Some(String::from("hidden")),
+                stimuli: true,
+                ..ProfilingCommand::default()
+            }),
+        })
+    );
+}
+
+#[test]
+fn profiling_rejects_legacy_full_scenario_alias() {
+    assert_eq!(
+        parse(&[
+            "plasma-top",
+            "profiling",
+            "--duration",
+            "1",
+            "--scenario",
+            "full",
+        ]),
+        Err(CliError::InvalidProfilingScenario {
+            value: String::from("full"),
+        })
+    );
+}
+
+#[test]
+fn one_shot_profiling_contract_is_unchanged() {
+    assert_eq!(
+        parse(&["plasma-top", "profiling", "--config", "custom.toml"]),
+        Ok(Cli {
+            command: Command::Profiling(ProfilingCommand {
+                config: Some(PathBuf::from("custom.toml")),
+                ..ProfilingCommand::default()
+            }),
+        })
+    );
+}

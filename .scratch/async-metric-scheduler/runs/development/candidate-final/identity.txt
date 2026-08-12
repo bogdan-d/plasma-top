@@ -1,0 +1,13 @@
+base_head=d2b357d482a7c4138f6edbd36c700f34366f2ed7
+base_head_subject=docs: track plasmoidviewer repair
+worktree_tracked_diff_sha256=d34225bdacf74ae21523413ef8c08e76ae418f5975317bd79ac8f82b71ad940a
+staged_diff_sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+tracked_diff_path=.scratch/async-metric-scheduler/runs/development/candidate-final/worktree-tracked.diff
+staged_diff_path=.scratch/async-metric-scheduler/runs/development/candidate-final/worktree-staged.diff
+candidate_input_hashes=.scratch/async-metric-scheduler/runs/development/candidate-final/candidate-input-files.sha256
+rustc 1.97.1 (8bab26f4f 2026-07-14) (Homebrew)
+cargo 1.97.1 (c980f4866 2026-06-30) (Homebrew)
+candidate_binary=/var/mnt/xdata/code/_self/plasma-top/.scratch/async-metric-scheduler/runs/development/binaries/plasma-top-candidate-final-d2b357d-diff-d34225bdacf7
+candidate_binary_sha256=6174bd27fe30a5a63f5dccf18b6bd2f00be052fea8fd8e6b0b5d4afc2ec4c8ea
+config_sha256=50260ac6747364493d1588250134bfda2fce9420ec6cc8a8994ba610efca6718
+cargo_lock_sha256=28c05558909cb624261a1141ea1357ffd5e7d79bb1c0a3d5b60250a28dbf3b13

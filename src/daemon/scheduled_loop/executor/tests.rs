@@ -99,6 +99,8 @@ fn newly_emitted_correctness_trace_precedes_retained_start() {
         SchedulerAction::PublishDisplay {
             publication: PublicationId(1),
             reason: PublishReason::DisplayDeadline,
+            display_deadline: None,
+            skipped_display_deadlines: 0,
             panel: true,
             tooltip: false,
         },

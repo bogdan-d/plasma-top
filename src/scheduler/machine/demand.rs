@@ -61,7 +61,14 @@ impl Scheduler {
                 self.activate_jobs(&before, &after, true);
             }
             if !was_presented {
-                self.issue_publish(PublishReason::TooltipActivated, false, true, actions);
+                self.issue_publish(
+                    PublishReason::TooltipActivated,
+                    None,
+                    0,
+                    false,
+                    true,
+                    actions,
+                );
             }
         } else if was_presented && self.effective_presented {
             self.deactivation_deadline = Some(self.now.saturating_add(DEACTIVATION_GRACE));
@@ -83,7 +90,7 @@ impl Scheduler {
             self.cancel_demand_ended(&before, &after, actions);
             self.activate_jobs(&before, &after, true);
             if self.presented {
-                self.issue_publish(PublishReason::PageChanged, false, true, actions);
+                self.issue_publish(PublishReason::PageChanged, None, 0, false, true, actions);
             }
         }
     }

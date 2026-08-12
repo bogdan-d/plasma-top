@@ -3,24 +3,27 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 use tokio::sync::{Semaphore, mpsc, oneshot};
 use tokio::task::JoinSet;
 
-use crate::adapters::{ProductionClock, ProductionCommandRunner, ProductionDbusFacade};
+use crate::adapters::ProductionClock;
 use crate::config::Config;
-use crate::domain::boundary::{ClockSnapshot, FilesystemRoots};
+use crate::domain::boundary::{ClockSnapshot, CommandRunner, DbusFacade, FilesystemRoots};
 use crate::domain::readings::{DisplaySnapshot, HardwareInventory, MetricSample};
 use crate::page_commands::{
     Page, PageCommandAttempt, PageCommandCache, PageSource, attempt_command_with_state_and_clock,
 };
+use crate::profiling::ProfileSession;
 use crate::scheduler::{
     CompletionKind, ConfigGeneration, InventoryGeneration, JobId, JobKind, JobTicket, OwnerId,
     RescanKind, RunId, SourceIdentity,
 };
+#[cfg(feature = "nvml")]
+use crate::sensors::gpu_nvidia;
 use crate::sensors::{
-    CollectCtx, ReconciliationOutcome, discover_hardware_attempt, disk, gpu_history, gpu_nvidia,
+    CollectCtx, ReconciliationOutcome, discover_hardware_attempt, disk, gpu_history,
     invalidate_scheduled_job, power, reconcile_inventory_family, rescan_peripherals,
     reset_counter_baseline,
 };
@@ -38,9 +41,10 @@ pub(super) type GpuHistoryValue = (Option<i32>, Option<i32>, gpu_history::Decode
 pub(super) type GpuHistoryPoint = MetricSample<GpuHistoryValue>;
 pub(super) type SourcedGpuHistoryPoint = (SourceIdentity, GpuHistoryPoint);
 
-pub(super) struct OwnerServices {
-    pub(super) commands: ProductionCommandRunner,
-    pub(super) dbus: ProductionDbusFacade,
+pub(super) struct OwnerServices<C, D> {
+    pub(super) commands: C,
+    pub(super) dbus: D,
+    pub(super) profile: Option<Arc<ProfileSession>>,
     #[cfg(test)]
     pub(super) blocked_owner: Option<TestOwnerBlock>,
 }
@@ -199,15 +203,19 @@ impl OwnerSenders {
     }
 }
 
-pub(super) fn spawn_owners(
+pub(super) fn spawn_owners<C, D>(
     tasks: &mut JoinSet<OwnerId>,
-    services: OwnerServices,
+    services: OwnerServices<C, D>,
     roots: &FilesystemRoots,
     clock: ProductionClock,
     completion: mpsc::Sender<OwnerCompletion>,
     blocking_lane: Arc<Semaphore>,
     validity: DispatchValidity,
-) -> OwnerSenders {
+) -> OwnerSenders
+where
+    C: CommandRunner + Clone + Send + 'static,
+    D: DbusFacade + Clone + Send + 'static,
+{
     let mut senders = BTreeMap::new();
     for owner in ALL_OWNERS {
         let (sender, receiver) = mpsc::channel(OWNER_CHANNEL_CAPACITY);
@@ -218,6 +226,7 @@ pub(super) fn spawn_owners(
         let completion = completion.clone();
         let blocking_lane = Arc::clone(&blocking_lane);
         let validity = validity.clone();
+        let profile = services.profile.clone();
         #[cfg(test)]
         let blocked_owner = services.blocked_owner.clone();
         tasks.spawn(owner_loop(
@@ -228,6 +237,7 @@ pub(super) fn spawn_owners(
             clock,
             blocking_lane,
             validity,
+            profile,
             #[cfg(test)]
             blocked_owner,
         ));
@@ -251,16 +261,21 @@ const ALL_OWNERS: [OwnerId; 12] = [
 ];
 
 #[allow(clippy::too_many_arguments)]
-async fn owner_loop(
-    mut worker: WorkerState,
+async fn owner_loop<C, D>(
+    mut worker: WorkerState<C, D>,
     mut receiver: mpsc::Receiver<OwnerMessage>,
     completion_sender: mpsc::Sender<OwnerCompletion>,
     roots: FilesystemRoots,
     clock: ProductionClock,
     blocking_lane: Arc<Semaphore>,
     validity: DispatchValidity,
+    profile: Option<Arc<ProfileSession>>,
     #[cfg(test)] blocked_owner: Option<TestOwnerBlock>,
-) -> OwnerId {
+) -> OwnerId
+where
+    C: CommandRunner + Clone + Send + 'static,
+    D: DbusFacade + Clone + Send + 'static,
+{
     let owner = worker.owner;
     while let Some(message) = receiver.recv().await {
         match message {
@@ -299,9 +314,21 @@ async fn owner_loop(
                     }
                     let attempt_roots = roots.clone();
                     let attempt_clock = clock.clone();
+                    let attempt_profile = profile.clone();
                     let task = tokio::task::spawn_blocking(move || {
                         let _permit = permit;
+                        let started_at = attempt_profile.as_ref().map(|profile| {
+                            let at = attempt_clock.snapshot().monotonic;
+                            profile.record_job_started(input.ticket.run_id, at);
+                            at
+                        });
                         let output = worker.execute(*input, &attempt_roots, &attempt_clock);
+                        if let (Some(profile), Some(_)) = (&attempt_profile, started_at) {
+                            profile.record_job_finished(
+                                output.ticket.run_id,
+                                attempt_clock.snapshot().monotonic,
+                            );
+                        }
                         (worker, output)
                     });
                     let Ok((returned, output)) = task.await else {
@@ -310,8 +337,20 @@ async fn owner_loop(
                     worker = returned;
                     output
                 } else {
-                    worker.execute(*input, &roots, &clock)
+                    if let Some(profile) = &profile {
+                        profile.record_job_started(input.ticket.run_id, clock.snapshot().monotonic);
+                    }
+                    let output = worker.execute(*input, &roots, &clock);
+                    if let Some(profile) = &profile {
+                        profile
+                            .record_job_finished(output.ticket.run_id, clock.snapshot().monotonic);
+                    }
+                    output
                 };
+                if let Some(profile) = &profile {
+                    let captured_at = worker.capture_time(&output.ticket.job);
+                    profile.record_capture_candidate(output.ticket.run_id, captured_at);
+                }
                 let (decision, accepted) = oneshot::channel();
                 output.decision = Some(decision);
                 if completion_sender
@@ -383,11 +422,11 @@ async fn owner_loop(
     owner
 }
 
-struct WorkerState {
+struct WorkerState<C, D> {
     owner: OwnerId,
     owners: Owners,
-    commands: ProductionCommandRunner,
-    dbus: ProductionDbusFacade,
+    commands: C,
+    dbus: D,
     command_cache: PageCommandCache,
     had_process_page: bool,
     bolt: Option<crate::sensors::hid::BoltHidFacade>,
@@ -401,8 +440,8 @@ struct WorkerCheckpoint {
     had_process_page: bool,
 }
 
-impl WorkerState {
-    fn new(owner: OwnerId, commands: ProductionCommandRunner, dbus: ProductionDbusFacade) -> Self {
+impl<C: CommandRunner, D: DbusFacade> WorkerState<C, D> {
+    fn new(owner: OwnerId, commands: C, dbus: D) -> Self {
         Self {
             owner,
             owners: Owners::new(),
@@ -635,6 +674,20 @@ impl WorkerState {
             gpu_history_point,
             decision: None,
         }
+    }
+
+    fn capture_time(&mut self, job: &JobId) -> Option<Duration> {
+        if job.kind == JobKind::PageCommand {
+            let SourceIdentity::Page(page) = &job.source else {
+                return None;
+            };
+            return self
+                .command_cache
+                .state(page.as_id())
+                .and_then(|state| state.latest.as_ref())
+                .map(|sample| sample.captured_at);
+        }
+        crate::sensors::scheduled_capture_time(job, self.owners.refs())
     }
 
     fn execute_page_command(

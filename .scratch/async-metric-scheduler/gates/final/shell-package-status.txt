@@ -1,0 +1,3 @@
+bash_n_exit=0
+user_install_exit=0
+package_layout_exit=0

@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use tokio::sync::{Semaphore, mpsc};
 
-use crate::adapters::ProductionNotificationFacade;
 use crate::domain::boundary::{NotificationError, NotificationFacade, NotificationPayload};
 
 pub(super) struct QueueFacade<'a>(pub(super) &'a mpsc::Sender<NotificationPayload>);
@@ -17,11 +16,13 @@ impl NotificationFacade for QueueFacade<'_> {
     }
 }
 
-pub(super) async fn run(
+pub(super) async fn run<N>(
     mut receiver: mpsc::Receiver<NotificationPayload>,
-    notifications: ProductionNotificationFacade,
+    notifications: N,
     blocking_lane: Arc<Semaphore>,
-) {
+) where
+    N: NotificationFacade + Clone + Send + 'static,
+{
     while let Some(payload) = receiver.recv().await {
         let Ok(permit) = Arc::clone(&blocking_lane).acquire_owned().await else {
             return;

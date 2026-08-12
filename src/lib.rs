@@ -28,6 +28,7 @@ pub mod error;
 pub(crate) mod file_watch;
 pub mod notify;
 pub mod page_commands;
+mod profiling;
 pub mod render;
 pub mod runtime;
 pub(crate) mod scheduler;
@@ -67,7 +68,7 @@ pub fn run(args: impl IntoIterator<Item = OsString>) -> Result<()> {
         Command::Daemon(command) => daemon::run_daemon(command.config.as_deref()),
         Command::Render(command) => diagnostics::run_render(&command),
         Command::Probe(command) => diagnostics::run_probe(command.config.as_deref()),
-        Command::Profiling(command) => diagnostics::run_profiling(command.config.as_deref()),
+        Command::Profiling(command) => diagnostics::run_profiling(&command),
         Command::ListItems => diagnostics::run_list_items(),
         Command::Page(command) => daemon::run_page(command.direction),
         Command::Present(command) => {

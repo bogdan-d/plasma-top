@@ -123,18 +123,19 @@ pub(super) fn process_file_changes(
             owner_messages,
         )?;
         if config_changed && state.update_style(paths, false) {
-            request_selected_graph(scheduler, state, paths, clock, actions);
+            request_selected_graph(scheduler, state, clock, actions);
         }
     }
     if changed.contains(&WatchSource::Page) {
-        let (_, page) = state.selected_page(paths);
-        enqueue(
-            actions,
-            scheduler.handle(SchedulerEvent::SelectedPageChanged {
-                at: now(clock),
-                page,
-            }),
-        );
+        let (index, page) = state.observe_selected_page(paths);
+        let transition = scheduler.handle(SchedulerEvent::SelectedPageChanged {
+            at: now(clock),
+            page: page.clone(),
+        });
+        if let Some(profile) = &state.profile {
+            profile.observe_page(index, page, &transition);
+        }
+        enqueue(actions, transition);
     }
     if changed.contains(&WatchSource::Updates) {
         reload::trigger_external_change(JobKind::UpdatesFile, scheduler, state, clock, actions);
@@ -152,10 +153,17 @@ pub(super) fn process_file_changes(
             actions,
             scheduler.handle(SchedulerEvent::DisplayRefreshRequested { at: now(clock) }),
         );
-        request_selected_graph(scheduler, state, paths, clock, actions);
+        request_selected_graph(scheduler, state, clock, actions);
     }
     if changed.contains(&WatchSource::Presentation) {
-        update_presentation(presentation, paths, clock, scheduler, actions)?;
+        update_presentation(
+            presentation,
+            paths,
+            clock,
+            scheduler,
+            actions,
+            state.profile.as_deref(),
+        )?;
     }
     Ok(())
 }
@@ -215,16 +223,18 @@ pub(super) fn update_presentation(
     clock: &ProductionClock,
     scheduler: &mut Scheduler,
     actions: &mut VecDeque<SchedulerAction>,
+    profile: Option<&crate::profiling::ProfileSession>,
 ) -> Result<()> {
     let next = presentation_status(paths, clock)?;
     if next.leases.presented != current.leases.presented {
-        enqueue(
-            actions,
-            scheduler.handle(SchedulerEvent::TooltipPresented {
-                at: now(clock),
-                presented: next.leases.presented,
-            }),
-        );
+        let transition = scheduler.handle(SchedulerEvent::TooltipPresented {
+            at: now(clock),
+            presented: next.leases.presented,
+        });
+        if let Some(profile) = profile {
+            profile.observe_presentation(next.leases.presented, &transition);
+        }
+        enqueue(actions, transition);
     }
     *current = next;
     Ok(())

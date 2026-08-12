@@ -153,6 +153,11 @@ impl ProductionIo {
         Self::start_inner(false, false)
     }
 
+    /// Starts signal-free services with detailed counters for a timed profiling session.
+    pub(crate) fn start_for_profiling() -> Result<Self> {
+        Self::start_inner(false, true)
+    }
+
     /// Starts diagnostics I/O services after the first system-bus attempt completes.
     ///
     /// The wait is bounded by the system-bus connection attempt itself. An unavailable bus leaves the service running so diagnostics can report absent D-Bus data.
@@ -356,6 +361,11 @@ impl ProductionIo {
     /// Subscribes daemon orchestration to shell shutdown without polling.
     pub(crate) fn shutdown_receiver(&self) -> watch::Receiver<bool> {
         self.external_shutdown.subscribe()
+    }
+
+    /// Returns a profiling-only handle that initiates the same bounded shell shutdown as a signal.
+    pub(crate) fn shutdown_request(&self) -> watch::Sender<bool> {
+        self.external_shutdown.clone()
     }
 
     /// Marks the daemon orchestration task finished so the shell can close its runtime safely.

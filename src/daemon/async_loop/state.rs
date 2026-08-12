@@ -1,5 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::Instant;
 use std::time::SystemTime;
 
 use crate::config::{
@@ -13,10 +15,11 @@ use crate::domain::readings::{
 use crate::domain::state::NotificationState;
 use crate::error::Result;
 use crate::page_commands::{Page, PageCommandCache, build_pages, pager_html, title_html};
+use crate::profiling::ProfileSession;
 use crate::render::{PageFormatter, PanelFormatter};
 use crate::scheduler::{
     ConfigGeneration, InventoryGeneration, OwnerId, PageId, PublicationId, PublishReason, RunId,
-    Scheduler, SchedulerEvent, SchedulerTime, Transition,
+    Scheduler, SchedulerAction, SchedulerEvent, SchedulerTime, Transition,
 };
 use crate::sensors::scheduler_config;
 
@@ -30,6 +33,7 @@ pub(super) struct RuntimeState {
     pub(super) cfg: Config,
     pub(super) hw: HardwareInventory,
     pub(super) active: Vec<Page>,
+    observed_page_index: usize,
     pub(super) readings: DisplaySnapshot,
     pub(super) notifications: NotificationState,
     pub(super) notification_samples: BTreeMap<RunId, DisplaySnapshot>,
@@ -64,9 +68,10 @@ pub(super) struct RuntimeState {
         BTreeMap<crate::scheduler::SourceIdentity, RetainedMetricSample<GpuHistoryValue>>,
     pub(super) terminate: bool,
     pub(super) critical_component: Option<&'static str>,
-    pub(super) deferred_first_paint: Option<crate::scheduler::SchedulerAction>,
+    pub(super) deferred_first_paint: Option<SchedulerAction>,
     pub(super) deferred_first_paint_jobs: BTreeSet<crate::scheduler::JobId>,
     pub(super) completed_jobs: BTreeSet<crate::scheduler::JobId>,
+    pub(super) profile: Option<Arc<ProfileSession>>,
 }
 
 impl RuntimeState {
@@ -93,6 +98,7 @@ impl RuntimeState {
             css_stamp: mtime(&css_path),
             overlay_stamp: overlay_path.as_deref().and_then(mtime),
             theme_reconciliation_pending: true,
+            observed_page_index: page_index(paths, active.len()),
             cfg,
             hw,
             active,
@@ -133,7 +139,13 @@ impl RuntimeState {
             deferred_first_paint: None,
             deferred_first_paint_jobs: BTreeSet::new(),
             completed_jobs: BTreeSet::new(),
+            profile: None,
         }
+    }
+
+    pub(super) fn configure_profiling(&mut self, profile: Arc<ProfileSession>) {
+        self.profile = Some(profile);
+        self.theme_reconciliation_pending = false;
     }
 
     pub(super) fn scheduler_config(&self) -> crate::scheduler::SchedulerConfig {
@@ -145,9 +157,14 @@ impl RuntimeState {
         )
     }
 
-    pub(super) fn selected_page(&self, paths: &DaemonPaths) -> (usize, PageId) {
-        let index = page_index(paths, self.active.len());
+    pub(super) fn selected_page(&self) -> (usize, PageId) {
+        let index = self.observed_page_index % self.active.len().max(1);
         (index, PageId::from_id(self.active[index].id))
+    }
+
+    pub(super) fn observe_selected_page(&mut self, paths: &DaemonPaths) -> (usize, PageId) {
+        self.observed_page_index = page_index(paths, self.active.len());
+        self.selected_page()
     }
 
     pub(super) fn can_commit(&self, scheduler: &Scheduler, completion: &JobCompletion) -> bool {
@@ -228,6 +245,26 @@ impl RuntimeState {
             .collect();
     }
 
+    pub(super) fn suppress_panel_publication_before_first_paint(
+        &mut self,
+        reason: PublishReason,
+        skipped_display_deadlines: u64,
+    ) -> bool {
+        let Some(SchedulerAction::PublishDisplay {
+            skipped_display_deadlines: deferred_skipped,
+            ..
+        }) = self.deferred_first_paint.as_mut()
+        else {
+            return false;
+        };
+        if reason == PublishReason::DisplayDeadline {
+            *deferred_skipped = deferred_skipped
+                .saturating_add(1)
+                .saturating_add(skipped_display_deadlines);
+        }
+        true
+    }
+
     pub(super) fn gpu_history_point_for(
         &self,
         job: &crate::scheduler::JobTicket,
@@ -300,6 +337,8 @@ impl RuntimeState {
         &mut self,
         publication: PublicationId,
         reason: PublishReason,
+        display_deadline: Option<SchedulerTime>,
+        skipped_display_deadlines: u64,
         panel: bool,
         tooltip: bool,
         scheduler: &mut Scheduler,
@@ -308,6 +347,7 @@ impl RuntimeState {
         snapshot: ClockSnapshot,
         boot: ClockSnapshot,
     ) -> Result<Option<Transition>> {
+        let render_started = self.profile.as_ref().map(|_| Instant::now());
         self.readings.assembled_at = snapshot;
         if matches!(
             reason,
@@ -327,15 +367,19 @@ impl RuntimeState {
             let html = PanelFormatter::with_now_unix(&self.cfg, &self.hw, clock_unix(snapshot))
                 .format_panel(&self.readings, &self.css);
             if self.panel_html.as_ref() != Some(&html) {
-                write_atomic(&paths.panel, &html)?;
+                if self.profile.is_none() {
+                    write_atomic(&paths.panel, &html)?;
+                }
                 self.panel_html = Some(html);
             }
-            log_boot_ready(
-                &self.readings,
-                &mut self.boot_pending,
-                boot.monotonic,
-                snapshot.monotonic,
-            );
+            if self.profile.is_none() {
+                log_boot_ready(
+                    &self.readings,
+                    &mut self.boot_pending,
+                    boot.monotonic,
+                    snapshot.monotonic,
+                );
+            }
             acknowledgement = Some(scheduler.handle(SchedulerEvent::PanelPublished {
                 at: SchedulerTime::from_duration(snapshot.monotonic),
                 publication,
@@ -344,11 +388,25 @@ impl RuntimeState {
         if tooltip {
             self.publish_tooltip(roots, paths)?;
         }
+        if let (Some(profile), Some(started)) = (&self.profile, render_started) {
+            let render = started.elapsed();
+            let finished_at = snapshot.monotonic.saturating_add(render);
+            profile.record_publication(
+                publication,
+                reason,
+                tooltip,
+                boot.monotonic,
+                finished_at,
+                render,
+                display_deadline.map(SchedulerTime::duration),
+                skipped_display_deadlines,
+            );
+        }
         Ok(acknowledgement)
     }
 
     fn publish_tooltip(&mut self, roots: &FilesystemRoots, paths: &DaemonPaths) -> Result<()> {
-        let (index, selected) = self.selected_page(paths);
+        let (index, selected) = self.selected_page();
         let html = if selected == PageId::Graphs {
             self.rendered_graph
                 .as_ref()
@@ -372,7 +430,9 @@ impl RuntimeState {
         if let Some(html) = html
             && self.tooltip_html.as_ref() != Some(&html)
         {
-            write_atomic(&paths.tooltip, &html)?;
+            if self.profile.is_none() {
+                write_atomic(&paths.tooltip, &html)?;
+            }
             self.tooltip_html = Some(html);
         }
         Ok(())

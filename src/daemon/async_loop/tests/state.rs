@@ -1,6 +1,59 @@
 use super::*;
 
 #[test]
+fn profiling_selection_changes_only_after_the_watcher_observes_the_page_file() {
+    let (root, paths) = test_paths("profile-selection");
+    fs::create_dir_all(&paths.state).expect("state root");
+    fs::write(&paths.page, "0").expect("initial profiling page");
+    let mut cfg = Config::default();
+    cfg.pages.order = vec![String::from("graphs")];
+    let active = build_pages(&cfg.pages.order);
+    let mut runtime_state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
+    runtime_state.configure_profiling(Arc::new(ProfileSession::default()));
+    fs::write(&paths.page, "1").expect("requested profiling page");
+
+    assert_eq!(runtime_state.selected_page(), (0, PageId::Main));
+    assert_eq!(
+        runtime_state.observe_selected_page(&paths),
+        (1, PageId::Graphs)
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn suppressed_display_ticks_accumulate_on_deferred_first_paint() {
+    let (root, paths) = test_paths("deferred-profile-ticks");
+    fs::create_dir_all(&paths.state).expect("state root");
+    let cfg = Config::default();
+    let active = build_pages(&cfg.pages.order);
+    let mut state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
+    state.deferred_first_paint = Some(SchedulerAction::PublishDisplay {
+        publication: crate::scheduler::PublicationId(1),
+        reason: PublishReason::FirstPaintReady,
+        display_deadline: None,
+        skipped_display_deadlines: 1,
+        panel: true,
+        tooltip: false,
+    });
+
+    assert!(
+        state.suppress_panel_publication_before_first_paint(PublishReason::DisplayDeadline, 0,)
+    );
+    assert!(
+        state.suppress_panel_publication_before_first_paint(PublishReason::DisplayDeadline, 2,)
+    );
+
+    assert!(matches!(
+        state.deferred_first_paint,
+        Some(SchedulerAction::PublishDisplay {
+            skipped_display_deadlines: 5,
+            ..
+        })
+    ));
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn stale_generation_completion_is_rejected_before_commit() {
     let (root, paths) = test_paths("stale");
     fs::create_dir_all(&paths.state).expect("state root");
@@ -301,6 +354,7 @@ fn panel_only_publication_leaves_existing_tooltip_unchanged() {
                 reason,
                 panel,
                 tooltip,
+                ..
             } => Some((*publication, *reason, *panel, *tooltip)),
             _ => None,
         })
@@ -311,6 +365,8 @@ fn panel_only_publication_leaves_existing_tooltip_unchanged() {
         .publish(
             publication,
             reason,
+            None,
+            0,
             panel,
             tooltip,
             &mut scheduler,
@@ -361,6 +417,7 @@ fn tooltip_only_publication_writes_tooltip_without_touching_panel() {
                 reason,
                 panel,
                 tooltip,
+                ..
             } => Some((*publication, *reason, *panel, *tooltip)),
             _ => None,
         })
@@ -371,6 +428,8 @@ fn tooltip_only_publication_writes_tooltip_without_touching_panel() {
         .publish(
             publication,
             reason,
+            None,
+            0,
             panel,
             tooltip,
             &mut scheduler,

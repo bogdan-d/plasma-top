@@ -1,0 +1,9 @@
+case=explicit-stimulus
+mode=normal
+scenario=main
+repeat=3
+stimuli=enabled
+command=/usr/bin/time -v -o .scratch/async-metric-scheduler/runs/development/candidate-final/stimulus-normal-main-3.time /var/mnt/xdata/code/_self/plasma-top/.scratch/async-metric-scheduler/runs/development/binaries/plasma-top-candidate-final-d2b357d-diff-d34225bdacf7 profiling --config /var/mnt/xdata/code/_self/plasma-top/config/config.toml --duration 8.2 --scenario main --stimuli 
+started_at=2026-08-12T18:01:29+03:00
+exit_status=0
+finished_at=2026-08-12T18:01:37+03:00

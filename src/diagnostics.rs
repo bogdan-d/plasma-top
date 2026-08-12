@@ -6,7 +6,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::adapters::{ProductionClock, ProductionCommandRunner, ProductionIo};
-use crate::cli::{PanelLayout, RenderCommand, RenderComponent, RenderFormat};
+use crate::cli::{PanelLayout, ProfilingCommand, RenderCommand, RenderComponent, RenderFormat};
 use crate::config::{Config, apply_canonical_width, load_config, resolve_style};
 use crate::daemon::{
     executable_lookup, plasma_is_light, read_css, render_page_id, render_page_with_clock,
@@ -373,7 +373,22 @@ fn print_readings(r: &DisplaySnapshot) {
 }
 
 /// Profiles cold/warm collection sections without touching runtime files.
-pub fn run_profiling(config_path: Option<&Path>) -> Result<()> {
+pub fn run_profiling(command: &ProfilingCommand) -> Result<()> {
+    if let Some(duration) = command.duration {
+        let scenario = command.scenario.as_deref().unwrap_or("main");
+        let outcome = crate::daemon::run_timed_profiling(
+            command.config.as_deref(),
+            duration,
+            scenario,
+            command.stimuli,
+        )?;
+        println!("{}", outcome.report);
+        return outcome.error.map_or(Ok(()), Err);
+    }
+    run_one_shot_profiling(command.config.as_deref())
+}
+
+fn run_one_shot_profiling(config_path: Option<&Path>) -> Result<()> {
     let startup = Instant::now();
     let mut cfg = load_config(config_path, None)?;
     let config_ms = startup.elapsed().as_secs_f64() * 1000.0;

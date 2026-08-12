@@ -127,7 +127,7 @@ pub fn area_chart_png(
         draw_line(&mut pixels, width, height, plot_x0, &curve, options.line);
     }
 
-    if let Some(overlay) = options.overlay {
+    if let Some(overlay) = options.overlay.filter(|overlay| !overlay.is_empty()) {
         let curve = curve_yf(overlay, plot_width, floor_y, span, options.vmax);
         draw_line(
             &mut pixels,

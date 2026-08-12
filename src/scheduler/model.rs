@@ -112,6 +112,18 @@ impl PageId {
             other => Self::Other(other.to_owned()),
         }
     }
+
+    pub(crate) fn as_id(&self) -> &str {
+        match self {
+            Self::Main => "main",
+            Self::Processes => "processes",
+            Self::CpuCores => "cpu_cores",
+            Self::Connections => "connections",
+            Self::Fastfetch => "fastfetch",
+            Self::Graphs => "graphs",
+            Self::Other(page) => page,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -497,6 +509,10 @@ pub(crate) enum SchedulerAction {
     PublishDisplay {
         publication: PublicationId,
         reason: PublishReason,
+        /// Nominal typed display deadline for scheduled publication only.
+        display_deadline: Option<SchedulerTime>,
+        /// Display deadlines skipped before this publication was issued.
+        skipped_display_deadlines: u64,
         panel: bool,
         tooltip: bool,
     },

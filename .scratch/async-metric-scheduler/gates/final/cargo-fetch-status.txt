@@ -1,0 +1,3 @@
+cargo_fetch_exit=0
+cargo_lock_hash_stable=yes
+cargo_lock_git_diff_exit=0

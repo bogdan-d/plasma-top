@@ -1,0 +1,46 @@
+command: cargo test --all-features command_timeout_kills_without_waiting
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.03s
+     Running unittests src/lib.rs (target/debug/deps/plasma_top-9f1f364490d8d6db)
+
+running 1 test
+test adapters::tests::command_timeout_kills_without_waiting_for_natural_exit ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 788 filtered out; finished in 0.04s
+
+     Running unittests src/main.rs (target/debug/deps/plasma_top-828ce5f9f8c1a7d5)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/cli_daemon.rs (target/debug/deps/cli_daemon-1b028deccdc2dd27)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+
+     Running tests/config_default_load.rs (target/debug/deps/config_default_load-d1acebdc8ca39635)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+     Running tests/runtime_atomic.rs (target/debug/deps/runtime_atomic-82de63cdc5aa0be5)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests/runtime_page.rs (target/debug/deps/runtime_page-cc35bfd9e7f36b3b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 11 filtered out; finished in 0.00s
+
+     Running tests/runtime_paths.rs (target/debug/deps/runtime_paths-0e9af1a23359e644)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+exit_status=0

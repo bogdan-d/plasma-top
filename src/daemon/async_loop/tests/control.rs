@@ -47,6 +47,8 @@ fn shutdown_preempts_pending_completion_and_stale_work() {
         SchedulerAction::PublishDisplay {
             publication: PublicationId(99),
             reason: PublishReason::DisplayDeadline,
+            display_deadline: None,
+            skipped_display_deadlines: 0,
             panel: true,
             tooltip: true,
         },

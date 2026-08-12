@@ -76,10 +76,9 @@ fn selected_process_diagnostic_runs_exactly_baseline_then_warm_scan() {
 }
 
 #[test]
-fn cpu_notification_subsamples_survive_aggregate_failure() {
+fn cpu_composite_retains_captures_on_baseline_and_partial_failure() {
     let tree = TempTree::new();
     baseline_proc(&tree);
-    tree.write("proc/stat", "malformed\n");
     tree.write("sys/class/hwmon/hwmon0/temp1_input", "52000\n");
     let cfg = cfg_panel(&["cpu_temp", "load_avg"]);
     let mut hw = HardwareInventory {
@@ -89,7 +88,8 @@ fn cpu_notification_subsamples_survive_aggregate_failure() {
     let mut owners = TestOwners::default();
     let mut commands = FakeCommandRunner::new();
     let mut dbus = FakeDbus::new();
-    let mut capture_clock = fixed_clock(1);
+    let now = std::cell::Cell::new(1);
+    let mut capture_clock = || clock(now.get());
     let proc_root = tree.proc();
     let sys_root = tree.sys();
     let mut ctx = crate::sensors::CollectCtx {
@@ -102,25 +102,52 @@ fn cpu_notification_subsamples_survive_aggregate_failure() {
         clock: &mut capture_clock,
         skip_slow: false,
     };
-    let result = crate::sensors::execute_scheduled_job(
-        &crate::scheduler::JobId::singleton(
-            crate::scheduler::OwnerId::Cpu,
-            crate::scheduler::JobKind::Cpu,
-        ),
+    let job = crate::scheduler::JobId::singleton(
+        crate::scheduler::OwnerId::Cpu,
+        crate::scheduler::JobKind::Cpu,
+    );
+    let mut readings = DisplaySnapshot::default();
+    let baseline = crate::sensors::execute_scheduled_job(
+        &job,
         owners.refs(),
         &mut hw,
         &cfg,
         &mut ctx,
-        &mut DisplaySnapshot::default(),
+        &mut readings,
+        None,
+    );
+    assert_eq!(
+        baseline.completion,
+        crate::scheduler::CompletionKind::Baseline
+    );
+    assert!(baseline.notification_ready);
+    assert_eq!(
+        crate::sensors::scheduled_capture_time(&job, owners.refs()),
+        Some(Duration::from_secs(1))
+    );
+
+    tree.write("proc/stat", "malformed\n");
+    now.set(2);
+    let failed = crate::sensors::execute_scheduled_job(
+        &job,
+        owners.refs(),
+        &mut hw,
+        &cfg,
+        &mut ctx,
+        &mut readings,
         None,
     );
 
-    assert_eq!(result.completion, crate::scheduler::CompletionKind::Failed);
-    assert!(result.notification_ready);
-    assert_eq!(result.notifications.cpu_temp, Some(52));
+    assert_eq!(failed.completion, crate::scheduler::CompletionKind::Failed);
+    assert!(failed.notification_ready);
+    assert_eq!(failed.notifications.cpu_temp, Some(52));
     assert_eq!(
-        result.notifications.load_average.map(|load| load.one),
+        failed.notifications.load_average.map(|load| load.one),
         Some(0.5)
+    );
+    assert_eq!(
+        crate::sensors::scheduled_capture_time(&job, owners.refs()),
+        Some(Duration::from_secs(2))
     );
 }
 
@@ -210,6 +237,55 @@ fn captured_route_switch_from_wifi_to_wired_clears_wireless_display_fields() {
     assert_eq!(readings.net_device.as_deref(), Some("eth0"));
     assert_eq!(readings.wifi_ssid, None);
     assert_eq!(readings.wifi_signal_percent, None);
+    assert_eq!(
+        crate::sensors::scheduled_capture_time(&job, owners.refs()),
+        Some(Duration::from_secs(10))
+    );
+}
+
+#[test]
+fn profiling_capture_time_uses_stale_cpu_auxiliary_sample() {
+    let mut owners = TestOwners::default();
+    owners.cpu.usage.record_value(50, Duration::from_secs(10));
+    owners
+        .cpu
+        .temperature
+        .record_value(60, Duration::from_secs(2));
+    let job = crate::scheduler::JobId::singleton(
+        crate::scheduler::OwnerId::Cpu,
+        crate::scheduler::JobKind::Cpu,
+    );
+
+    assert_eq!(
+        crate::sensors::scheduled_capture_time(&job, owners.refs()),
+        Some(Duration::from_secs(2))
+    );
+}
+
+#[test]
+fn profiling_capture_time_uses_stale_memory_auxiliary_sample() {
+    let mut owners = TestOwners::default();
+    owners.memory.usage.record_value(
+        memory::MemoryUsage {
+            percent: 50,
+            used_gib: 2,
+            total_gib: 4,
+        },
+        Duration::from_secs(10),
+    );
+    owners
+        .memory
+        .swap_usage
+        .record_value(25, Duration::from_secs(3));
+    let job = crate::scheduler::JobId::singleton(
+        crate::scheduler::OwnerId::Memory,
+        crate::scheduler::JobKind::Memory,
+    );
+
+    assert_eq!(
+        crate::sensors::scheduled_capture_time(&job, owners.refs()),
+        Some(Duration::from_secs(3))
+    );
 }
 
 fn execute_history_job(

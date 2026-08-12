@@ -92,6 +92,59 @@ fn publication_deadline_does_not_wait_for_prefetched_job() {
 }
 
 #[test]
+fn display_publication_carries_nominal_deadline_and_real_skips() {
+    let mut scheduler = Scheduler::new();
+    let initial = startup(
+        &mut scheduler,
+        config(Duration::from_secs(1), Vec::new(), std::iter::empty()),
+    );
+    let publication = publications(&initial)[0].0;
+    let _ = scheduler.handle(SchedulerEvent::PanelPublished {
+        at: at_millis(200),
+        publication,
+    });
+
+    let late = scheduler.handle(SchedulerEvent::TimeAdvanced {
+        at: at_millis(3_200),
+    });
+    let timing = late.actions.iter().find_map(|action| match action {
+        SchedulerAction::PublishDisplay {
+            reason: PublishReason::DisplayDeadline,
+            display_deadline,
+            skipped_display_deadlines,
+            ..
+        } => Some((*display_deadline, *skipped_display_deadlines)),
+        _ => None,
+    });
+
+    assert_eq!(timing, Some((Some(at_seconds(1)), 2)));
+}
+
+#[test]
+fn display_deadlines_suppressed_before_first_paint_are_skipped() {
+    let cpu = job(OwnerId::Cpu, JobKind::Cpu);
+    let mut spec = JobSpec::fast(cpu.clone(), Duration::from_millis(100));
+    spec.startup_panel = true;
+    let mut scheduler = Scheduler::new();
+    let _ = startup(
+        &mut scheduler,
+        config(Duration::from_millis(100), vec![spec], [cpu]),
+    );
+
+    let timeout = scheduler.handle(SchedulerEvent::TimeAdvanced { at: at_millis(200) });
+    let skipped = timeout.actions.iter().find_map(|action| match action {
+        SchedulerAction::PublishDisplay {
+            reason: PublishReason::FirstPaintTimeout,
+            skipped_display_deadlines,
+            ..
+        } => Some(*skipped_display_deadlines),
+        _ => None,
+    });
+
+    assert_eq!(skipped, Some(2));
+}
+
+#[test]
 fn missed_periodic_ticks_skip_catch_up_and_keep_phase() {
     let network = job(OwnerId::Network, JobKind::NetworkIdentity);
     let mut scheduler = Scheduler::new();

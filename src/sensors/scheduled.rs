@@ -1,4 +1,5 @@
 use std::collections::{BTreeSet, VecDeque};
+use std::time::Duration;
 
 use crate::config::Config;
 use crate::domain::boundary::ClockSnapshot;
@@ -27,8 +28,11 @@ use super::{cpu, memory, network};
 
 #[path = "scheduled/invalidation.rs"]
 mod invalidation;
+#[path = "scheduled/profiling.rs"]
+mod profiling;
 
 pub(crate) use invalidation::invalidate_scheduled_job;
+pub(crate) use profiling::capture_time as scheduled_capture_time;
 
 pub(crate) struct JobExecution {
     pub(crate) completion: CompletionKind,
@@ -817,7 +821,7 @@ fn sample_at_history_deadline<T>(
 fn history_capture_time(
     deadline: Option<HistoryDeadline>,
     ctx: &mut CollectCtx<'_, '_>,
-) -> std::time::Duration {
+) -> Duration {
     deadline.map_or_else(
         || (ctx.clock)().monotonic,
         |deadline| deadline.at().duration(),

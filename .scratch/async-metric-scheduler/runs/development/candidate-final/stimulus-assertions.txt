@@ -1,0 +1,8 @@
+stimulus_runs=6
+all_reports_stimuli_enabled=yes
+all_runs_completed_serial_sequence=yes
+all_runs_no_timed_out_action=yes
+all_reports_final_status_ok=yes
+runtime_unchanged=yes
+profile_temp_unchanged=yes
+config_and_fixture_hashes_unchanged=yes

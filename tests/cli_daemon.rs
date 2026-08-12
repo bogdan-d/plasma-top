@@ -149,3 +149,153 @@ fn page_command_only_touches_isolated_state_subtree() {
     assert_eq!(root_entries, vec!["state"]);
     fs::remove_dir_all(root).expect("cleanup fixture");
 }
+
+#[test]
+fn timed_profiling_runs_async_scheduler_without_runtime_publications() {
+    let root = temp_root("profiling");
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).expect("runtime fixture");
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+
+    let output = Command::new(binary())
+        .args([
+            "profiling",
+            "--config",
+            "config/config.toml",
+            "--duration",
+            "0.05",
+            "--scenario",
+            "hidden",
+        ])
+        .current_dir(&manifest)
+        .env("XDG_RUNTIME_DIR", &root)
+        .output()
+        .expect("spawn timed profiling");
+
+    assert!(
+        output.status.success(),
+        "timed profiling failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let report = String::from_utf8(output.stdout).expect("utf8 profiling report");
+    assert!(
+        report.starts_with("profile:\n"),
+        "unexpected report prefix: {report}"
+    );
+    for field in [
+        "  duration_seconds: 0.050\n",
+        "  scenario: hidden\n",
+        "jobs:\n",
+        "timing:\n",
+        "  maximum_sample_age:",
+        "  wake_lateness:",
+        "  first_paint_latency:",
+        "  publication_lateness:",
+        "  skipped_display_deadlines:",
+        "  stimuli: disabled",
+        "  write_time: not_applicable",
+        "  shutdown_duration:",
+        "  shutdown_over_500ms: 0",
+        "  final_status: ok",
+    ] {
+        assert!(
+            report.contains(field),
+            "missing report field {field:?}: {report}"
+        );
+    }
+    assert!(
+        !report.contains("[boot]"),
+        "profiling leaked boot logs: {report}"
+    );
+    assert!(!report.contains("event_control_latency:"));
+    assert!(!report.contains("render_tooltip_activated:"));
+    assert!(!report.contains("render_page_changed:"));
+    assert!(!root.join("plasma-top").exists());
+    fs::remove_dir_all(root).expect("cleanup fixture");
+}
+
+#[test]
+fn timed_profiling_stimuli_report_publication_latency_without_mutating_config() {
+    let root = temp_root("profiling-stimuli");
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).expect("profiling fixture");
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let config = root.join("config.toml");
+    let original = fs::read(manifest.join("config/config.toml")).expect("shipped config");
+    fs::write(&config, &original).expect("isolated input config");
+
+    let output = Command::new(binary())
+        .args([
+            "profiling",
+            "--config",
+            config.to_str().expect("utf8 fixture path"),
+            "--duration",
+            "2.5",
+            "--scenario",
+            "main",
+            "--stimuli",
+        ])
+        .current_dir(&manifest)
+        .env("XDG_RUNTIME_DIR", &root)
+        .output()
+        .expect("spawn profiling stimuli");
+
+    assert!(
+        output.status.success(),
+        "timed profiling failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let report = String::from_utf8(output.stdout).expect("utf8 profiling report");
+    for field in [
+        "  stimuli: enabled",
+        "  aggregate_scope: scenario plus profiling stimuli",
+        "event_page_latency: p50=",
+        "event_control_latency: p50=",
+        "event_config_latency: p50=",
+        "stimulus_actions: planned=",
+        "stimulus_requested_state:",
+        "stimulus_observed_state:",
+        "shutdown_duration:",
+        "final_status: ok",
+    ] {
+        assert!(report.contains(field), "missing {field:?}: {report}");
+    }
+    assert_eq!(fs::read(&config).expect("input config remains"), original);
+    assert!(!root.join("plasma-top").exists());
+    fs::remove_dir_all(root).expect("cleanup fixture");
+}
+
+#[test]
+fn timed_profiling_rejects_unconfigured_page() {
+    let output = Command::new(binary())
+        .args([
+            "profiling",
+            "--config",
+            "config/config.toml",
+            "--duration",
+            "0.01",
+            "--scenario",
+            "not_a_page",
+        ])
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .expect("spawn invalid profiling scenario");
+
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("profiling scenario page 'not_a_page' is not configured in pages.order")
+    );
+}
+
+#[test]
+fn timed_profiling_rejects_full_alias_before_startup() {
+    let output = Command::new(binary())
+        .args(["profiling", "--duration", "0.01", "--scenario", "full"])
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .expect("spawn full profiling alias");
+
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("unsupported alias: 'full'"));
+}

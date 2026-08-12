@@ -2,6 +2,7 @@ use std::collections::{BTreeSet, VecDeque};
 
 use crate::adapters::ProductionClock;
 use crate::domain::boundary::{ClockSnapshot, FilesystemRoots};
+use crate::profiling::AttemptDisposition;
 use crate::scheduler::{
     CompletionKind, EventDisposition, InventoryUpdate, JobKind, OwnerId, RefreshTrigger, Scheduler,
     SchedulerAction, SchedulerEvent, SchedulerTime, TimingClass, Transition,
@@ -21,7 +22,7 @@ pub(super) fn handle_completion(
     scheduler: &mut Scheduler,
     state: &mut RuntimeState,
     roots: &FilesystemRoots,
-    paths: &DaemonPaths,
+    _paths: &DaemonPaths,
     clock: &ProductionClock,
     boot: ClockSnapshot,
     completion_at: SchedulerTime,
@@ -33,7 +34,8 @@ pub(super) fn handle_completion(
         OwnerCompletion::Job(mut completion) => {
             let decision = completion.decision.take();
             validity.remove(completion.ticket.run_id);
-            let rerender = scheduler.is_current_ticket(&completion.ticket)
+            let was_current = scheduler.is_current_ticket(&completion.ticket);
+            let rerender = was_current
                 && completion.ticket.job.kind == JobKind::PageRender
                 && !state.render_input_current(&completion);
             let commit_eligible = state.can_commit(scheduler, &completion);
@@ -44,6 +46,16 @@ pub(super) fn handle_completion(
                 notification_ready: commit_eligible && completion.notification_ready,
             });
             let current = commit_eligible && finished.disposition == EventDisposition::Accepted;
+            if let Some(profile) = &state.profile {
+                let disposition = if current {
+                    AttemptDisposition::Accepted(completion.completion)
+                } else if !was_current && finished.disposition == EventDisposition::Accepted {
+                    AttemptDisposition::Cancelled
+                } else {
+                    AttemptDisposition::Rejected
+                };
+                profile.resolve_attempt(completion.ticket.run_id, disposition);
+            }
             let jobs_before_inventory = if current {
                 state
                     .scheduler_config()
@@ -120,7 +132,7 @@ pub(super) fn handle_completion(
                     state.refresh_deferred_first_paint_jobs();
                 }
                 let current_config = state.scheduler_config();
-                let (_, selected_page) = state.selected_page(paths);
+                let (_, selected_page) = state.selected_page();
                 let tooltip_demand = current_config.demand.demanded(true, &selected_page);
                 let introduced = current_config
                     .jobs
@@ -174,7 +186,7 @@ pub(super) fn handle_completion(
                 );
             }
             if render_invalidated && !replacement_current {
-                request_selected_graph(scheduler, state, paths, clock, actions);
+                request_selected_graph(scheduler, state, clock, actions);
             }
             if rendered_page
                 && !actions.iter().any(|action| {
@@ -195,6 +207,9 @@ pub(super) fn handle_completion(
         }
         OwnerCompletion::Cancelled(ticket) => {
             validity.remove(ticket.run_id);
+            if let Some(profile) = &state.profile {
+                profile.resolve_attempt(ticket.run_id, AttemptDisposition::Cancelled);
+            }
             enqueue(
                 actions,
                 scheduler.handle(SchedulerEvent::JobCancelled {
@@ -236,7 +251,7 @@ pub(super) fn handle_completion(
                 );
                 state.refresh_deferred_first_paint_jobs();
                 if hardware_changed {
-                    request_selected_graph(scheduler, state, paths, clock, actions);
+                    request_selected_graph(scheduler, state, clock, actions);
                     enqueue(
                         actions,
                         scheduler
@@ -269,7 +284,7 @@ pub(super) fn handle_completion(
                     actions,
                     scheduler.handle(SchedulerEvent::DisplayRefreshRequested { at: now(clock) }),
                 );
-                request_selected_graph(scheduler, state, paths, clock, actions);
+                request_selected_graph(scheduler, state, clock, actions);
             }
         }
     }

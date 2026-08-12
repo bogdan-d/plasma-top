@@ -1,0 +1,7 @@
+steady_runs=24
+all_reports_stimuli_disabled=yes
+all_reports_have_no_stimulus_records=yes
+all_reports_final_status_ok=yes
+runtime_unchanged=yes
+profile_temp_unchanged=yes
+config_and_fixture_hashes_unchanged=yes

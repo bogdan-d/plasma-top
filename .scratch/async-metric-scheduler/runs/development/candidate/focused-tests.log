@@ -1,0 +1,110 @@
+command: cargo test --all-features profiling -- --nocapture
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.07s
+     Running unittests src/lib.rs (target/debug/deps/plasma_top-9f1f364490d8d6db)
+
+running 14 tests
+
+thread 'daemon::tests::profiling_cleanup_removes_temp_root_during_unwind' (1168339) panicked at src/daemon/tests.rs:53:9:
+exercise cleanup guard
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test cli::tests::one_shot_profiling_contract_is_unchanged ... ok
+test cli::tests::profiling_rejects_legacy_full_scenario_alias ... ok
+test cli::tests::timed_profiling_defaults_to_main_and_accepts_fractional_seconds ... ok
+test cli::tests::profiling_rejects_invalid_duration_and_scenario_without_duration ... ok
+test daemon::tests::profiling_cleanup_removes_temp_root_during_unwind ... ok
+test profiling::tests::nearest_rank_percentiles_cover_tail ... ok
+test sensors::tests::scheduled_execution::profiling_capture_time_uses_stale_cpu_auxiliary_sample ... ok
+test sensors::tests::scheduled_execution::profiling_capture_time_uses_stale_memory_auxiliary_sample ... ok
+test profiling::tests::unresolved_and_cancelled_attempts_are_explicit ... ok
+test profiling::tests::accepted_composite_baseline_and_partial_failure_update_retained_capture ... ok
+test profiling::tests::publication_uses_render_completion_and_typed_deadline ... ok
+test profiling::tests::accepted_capture_age_survives_failure_and_rejected_completion ... ok
+test profiling::tests::nvidia_backends_share_retained_capture_identity ... ok
+test daemon::async_loop::tests::state_tests::profiling_selection_overrides_absent_runtime_page_file ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 775 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/debug/deps/plasma_top-828ce5f9f8c1a7d5)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/cli_daemon.rs (target/debug/deps/cli_daemon-1b028deccdc2dd27)
+
+running 3 tests
+test timed_profiling_rejects_full_alias_before_startup ... ok
+test timed_profiling_rejects_unconfigured_page ... ok
+test timed_profiling_runs_async_scheduler_without_runtime_publications ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.06s
+
+     Running tests/config_default_load.rs (target/debug/deps/config_default_load-d1acebdc8ca39635)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+     Running tests/runtime_atomic.rs (target/debug/deps/runtime_atomic-82de63cdc5aa0be5)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests/runtime_page.rs (target/debug/deps/runtime_page-cc35bfd9e7f36b3b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 11 filtered out; finished in 0.00s
+
+     Running tests/runtime_paths.rs (target/debug/deps/runtime_paths-0e9af1a23359e644)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+command: cargo test --all-features command_timeout_kills_without_waiting_for_natural_exit -- --exact
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.04s
+     Running unittests src/lib.rs (target/debug/deps/plasma_top-9f1f364490d8d6db)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 789 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/debug/deps/plasma_top-828ce5f9f8c1a7d5)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/cli_daemon.rs (target/debug/deps/cli_daemon-1b028deccdc2dd27)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+
+     Running tests/config_default_load.rs (target/debug/deps/config_default_load-d1acebdc8ca39635)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+     Running tests/runtime_atomic.rs (target/debug/deps/runtime_atomic-82de63cdc5aa0be5)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests/runtime_page.rs (target/debug/deps/runtime_page-cc35bfd9e7f36b3b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 11 filtered out; finished in 0.00s
+
+     Running tests/runtime_paths.rs (target/debug/deps/runtime_paths-0e9af1a23359e644)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+exit_status=0

@@ -53,7 +53,7 @@ fn production_async_loop_publishes_while_real_owner_task_is_blocked() {
 
     let shutdown_started = realtime_runtime().block_on(async move {
         let daemon =
-            tokio::spawn(async move { run(Some(&config), &roots, &paths, services).await });
+            tokio::spawn(async move { run(Some(&config), &roots, &paths, services, None).await });
         tokio::time::timeout(Duration::from_secs(1), async {
             while !panel.exists() || !entered.load(Ordering::Acquire) {
                 tokio::time::sleep(Duration::from_millis(1)).await;

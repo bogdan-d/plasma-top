@@ -219,6 +219,8 @@ impl Scheduler {
             SchedulerEvent::DisplayRefreshRequested { .. } => {
                 self.issue_publish(
                     PublishReason::ConfigChanged,
+                    None,
+                    0,
                     true,
                     self.effective_presented,
                     &mut actions,
@@ -226,7 +228,14 @@ impl Scheduler {
                 EventDisposition::Accepted
             }
             SchedulerEvent::TooltipRefreshRequested { .. } => {
-                self.issue_publish(PublishReason::TooltipRefresh, false, true, &mut actions);
+                self.issue_publish(
+                    PublishReason::TooltipRefresh,
+                    None,
+                    0,
+                    false,
+                    true,
+                    &mut actions,
+                );
                 EventDisposition::Accepted
             }
             SchedulerEvent::JobFinished {
@@ -418,6 +427,8 @@ impl Scheduler {
         if self.first_paint_issued {
             self.issue_publish(
                 PublishReason::ConfigChanged,
+                None,
+                0,
                 true,
                 self.effective_presented,
                 actions,
@@ -509,7 +520,7 @@ impl Scheduler {
         {
             self.activation_deadline = None;
             self.activation_waiting.clear();
-            self.issue_publish(PublishReason::TooltipRefresh, false, true, actions);
+            self.issue_publish(PublishReason::TooltipRefresh, None, 0, false, true, actions);
         }
 
         if self.first_paint_issued
@@ -517,8 +528,14 @@ impl Scheduler {
                 .next_display
                 .is_some_and(|deadline| deadline <= self.now)
         {
+            let deadline = self.next_display;
+            let skipped = deadline.map_or(0, |deadline| {
+                skipped_intervals(deadline, self.display_interval, self.now)
+            });
             self.issue_publish(
                 PublishReason::DisplayDeadline,
+                deadline,
+                skipped,
                 true,
                 self.effective_presented,
                 actions,
@@ -666,7 +683,7 @@ impl Scheduler {
         }
         if self.activation_deadline.is_some() && self.activation_waiting.is_empty() {
             self.activation_deadline = None;
-            self.issue_publish(PublishReason::TooltipRefresh, false, true, actions);
+            self.issue_publish(PublishReason::TooltipRefresh, None, 0, false, true, actions);
         }
         true
     }
@@ -838,6 +855,9 @@ impl Scheduler {
         self.first_paint_issued = true;
         self.first_paint_deadline = None;
         self.first_paint_waiting.clear();
+        let skipped = self.next_display.map_or(0, |deadline| {
+            due_intervals(deadline, self.display_interval, self.now)
+        });
         if self
             .next_display
             .is_some_and(|deadline| deadline <= self.now)
@@ -846,7 +866,14 @@ impl Scheduler {
             self.next_display = Some(advance_past(deadline, self.display_interval, self.now));
             self.reanchor_fast_jobs();
         }
-        self.issue_publish(reason, true, self.effective_presented, actions);
+        self.issue_publish(
+            reason,
+            None,
+            skipped,
+            true,
+            self.effective_presented,
+            actions,
+        );
     }
 
     #[expect(
@@ -856,6 +883,8 @@ impl Scheduler {
     fn issue_publish(
         &mut self,
         reason: PublishReason,
+        display_deadline: Option<SchedulerTime>,
+        skipped_display_deadlines: u64,
         panel: bool,
         tooltip: bool,
         actions: &mut Vec<SchedulerAction>,
@@ -878,6 +907,8 @@ impl Scheduler {
             if let Some(SchedulerAction::PublishDisplay {
                 publication,
                 reason: existing_reason,
+                display_deadline: existing_deadline,
+                skipped_display_deadlines: existing_skipped,
                 panel: existing_panel,
                 tooltip: existing_tooltip,
             }) = actions.iter_mut().find(|action| {
@@ -891,6 +922,8 @@ impl Scheduler {
                 )
             }) {
                 *existing_reason = reason;
+                *existing_deadline = display_deadline;
+                *existing_skipped = skipped_display_deadlines;
                 *existing_panel = true;
                 *existing_tooltip = true;
                 self.panel_publications.insert(*publication);
@@ -905,6 +938,8 @@ impl Scheduler {
         actions.push(SchedulerAction::PublishDisplay {
             publication,
             reason,
+            display_deadline,
+            skipped_display_deadlines,
             panel,
             tooltip,
         });
@@ -917,4 +952,24 @@ impl Scheduler {
     fn current_demand_for(&self, presented: bool, page: &super::model::PageId) -> BTreeSet<JobId> {
         self.demand.demanded(presented, page)
     }
+}
+
+fn skipped_intervals(deadline: SchedulerTime, cadence: Duration, now: SchedulerTime) -> u64 {
+    if cadence.is_zero() || now <= deadline {
+        return 0;
+    }
+    u64::try_from(
+        now.duration()
+            .saturating_sub(deadline.duration())
+            .as_nanos()
+            / cadence.as_nanos(),
+    )
+    .unwrap_or(u64::MAX)
+}
+
+fn due_intervals(deadline: SchedulerTime, cadence: Duration, now: SchedulerTime) -> u64 {
+    if cadence.is_zero() || now < deadline {
+        return 0;
+    }
+    skipped_intervals(deadline, cadence, now).saturating_add(1)
 }

@@ -5,6 +5,7 @@ use std::error::Error as StdError;
 use std::ffi::OsString;
 use std::fmt::{self, Display, Formatter};
 use std::path::PathBuf;
+use std::time::Duration;
 
 use crate::runtime::presentation::InstanceId;
 
@@ -31,7 +32,7 @@ pub enum Command {
     /// Future raw probe entry point.
     Probe(ConfigCommand),
     /// Future profiling entry point.
-    Profiling(ConfigCommand),
+    Profiling(ProfilingCommand),
     /// Future list-items diagnostic entry point.
     ListItems,
     /// Future page-step entry point.
@@ -49,6 +50,19 @@ pub enum Command {
 pub struct ConfigCommand {
     /// Optional path to a specific TOML configuration file.
     pub config: Option<PathBuf>,
+}
+
+/// Parsed arguments for one-shot or timed scheduler profiling.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ProfilingCommand {
+    /// Optional path to a specific TOML configuration file.
+    pub config: Option<PathBuf>,
+    /// Timed scheduler run length. Absence preserves one-shot profiling.
+    pub duration: Option<Duration>,
+    /// Timed presentation scenario (`hidden`, `main`, or a configured page id).
+    pub scenario: Option<String>,
+    /// Opts a timed run into bounded page, presentation, and config stimuli.
+    pub stimuli: bool,
 }
 
 /// Parsed arguments for the future `render` command.
@@ -189,6 +203,20 @@ pub enum CliError {
         /// The rejected value.
         value: String,
     },
+    /// A profiling duration was not finite and strictly positive.
+    InvalidDuration {
+        /// The rejected value.
+        value: String,
+    },
+    /// A profiling scenario was supplied without timed mode.
+    ScenarioRequiresDuration,
+    /// Profiling stimuli were requested without timed mode.
+    StimuliRequireDuration,
+    /// The legacy `full` alias is not a documented profiling scenario.
+    InvalidProfilingScenario {
+        /// The rejected scenario.
+        value: String,
+    },
 }
 
 impl Cli {
@@ -234,7 +262,7 @@ impl Cli {
             "daemon" => Command::Daemon(parse_config_command("daemon", tail)?),
             "render" => Command::Render(parse_render_command(tail)?),
             "probe" => Command::Probe(parse_config_command("probe", tail)?),
-            "profiling" => Command::Profiling(parse_config_command("profiling", tail)?),
+            "profiling" => Command::Profiling(parse_profiling_command(tail)?),
             "list-items" => parse_list_items_command(tail)?,
             "page" => Command::Page(parse_page_command(tail)?),
             "present" => Command::Present(parse_presentation_command("present", tail)?),
@@ -323,6 +351,26 @@ impl Display for CliError {
                 "{}\nplasma-top {command}: error: instance-id must be a positive decimal integer: '{value}'",
                 usage_text(command)
             ),
+            Self::InvalidDuration { value } => write!(
+                formatter,
+                "{}\nplasma-top profiling: error: argument --duration: must be a finite positive number of seconds: '{value}'",
+                usage_text("profiling")
+            ),
+            Self::ScenarioRequiresDuration => write!(
+                formatter,
+                "{}\nplasma-top profiling: error: argument --scenario requires --duration",
+                usage_text("profiling")
+            ),
+            Self::StimuliRequireDuration => write!(
+                formatter,
+                "{}\nplasma-top profiling: error: argument --stimuli requires --duration",
+                usage_text("profiling")
+            ),
+            Self::InvalidProfilingScenario { value } => write!(
+                formatter,
+                "{}\nplasma-top profiling: error: scenario must be 'hidden', 'main', or a configured page id; unsupported alias: '{value}'",
+                usage_text("profiling")
+            ),
         }
     }
 }
@@ -334,7 +382,9 @@ fn usage_text(command: &str) -> &'static str {
         }
         "daemon" => "usage: plasma-top daemon [-h] [--config PATH]",
         "probe" => "usage: plasma-top probe [-h] [--config PATH]",
-        "profiling" => "usage: plasma-top profiling [-h] [--config PATH]",
+        "profiling" => {
+            "usage: plasma-top profiling [-h] [--config PATH] [--duration SECONDS] [--scenario hidden|main|PAGE] [--stimuli]"
+        }
         "list-items" => "usage: plasma-top list-items [-h]",
         "page" => "usage: plasma-top page [-h] {next,prev}",
         "present" => "usage: plasma-top present [-h] instance-id",
@@ -358,7 +408,7 @@ pub(crate) fn help_text() -> &'static str {
         "    render [--config PATH] [--component panel|tooltip|both] [--format text|html] \\\n",
         "           [--layout auto|horizontal|vertical] [--page full|processes|cpu_cores|connections|fastfetch|graphs]\n",
         "    probe [--config PATH]\n",
-        "    profiling [--config PATH]\n",
+        "    profiling [--config PATH] [--duration SECONDS] [--scenario hidden|main|PAGE] [--stimuli]\n",
         "    list-items\n",
         "    page <next|prev>\n",
         "    click\n",
@@ -377,7 +427,7 @@ pub(crate) fn subcommand_help(command: &str) -> &'static str {
             "usage: plasma-top probe [-h] [--config PATH]\n\noptions:\n  -h, --help     show this help message and exit\n  --config PATH  Path to the TOML (default: ~/.config/plasma-top/config.toml,\n                 else the shipped config)"
         }
         "profiling" => {
-            "usage: plasma-top profiling [-h] [--config PATH]\n\noptions:\n  -h, --help     show this help message and exit\n  --config PATH  Path to the TOML (default: ~/.config/plasma-top/config.toml,\n                 else the shipped config)"
+            "usage: plasma-top profiling [-h] [--config PATH] [--duration SECONDS] [--scenario hidden|main|PAGE] [--stimuli]\n\noptions:\n  -h, --help          show this help message and exit\n  --config PATH       Path to the TOML (default: ~/.config/plasma-top/config.toml,\n                      else the shipped config)\n  --duration SECONDS  Run the real async scheduler for a finite positive duration\n  --scenario VALUE    hidden, main (default with --duration), or a configured page id\n  --stimuli           Opt into serial page/presentation/config stimulus measurement"
         }
         "list-items" => {
             "usage: plasma-top list-items [-h]\n\noptions:\n  -h, --help  show this help message and exit"
@@ -433,6 +483,57 @@ fn parse_config_command(
         }
     }
 
+    Ok(parsed)
+}
+
+fn parse_profiling_command(mut args: TailArgs) -> Result<ProfilingCommand, CliError> {
+    let command = "profiling";
+    let mut parsed = ProfilingCommand::default();
+    while let Some(argument) = args.pop_front() {
+        let flag = into_text(argument)?;
+        match flag.as_str() {
+            "--config" => parsed.config = Some(args.take_value_path(command, "--config")?),
+            "--duration" => {
+                let value = into_text(args.take_value(command, "--duration")?)?;
+                let seconds = value
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|seconds| seconds.is_finite() && *seconds > 0.0)
+                    .ok_or_else(|| CliError::InvalidDuration {
+                        value: value.clone(),
+                    })?;
+                parsed.duration = Some(
+                    Duration::try_from_secs_f64(seconds)
+                        .ok()
+                        .filter(|duration| !duration.is_zero())
+                        .ok_or(CliError::InvalidDuration { value })?,
+                );
+            }
+            "--scenario" => {
+                let value = into_text(args.take_value(command, "--scenario")?)?;
+                if value == "full" {
+                    return Err(CliError::InvalidProfilingScenario { value });
+                }
+                parsed.scenario = Some(value);
+            }
+            "--stimuli" => parsed.stimuli = true,
+            _ => {
+                return Err(CliError::UnknownArgument {
+                    command,
+                    argument: flag,
+                });
+            }
+        }
+    }
+    if parsed.duration.is_none() && parsed.scenario.is_some() {
+        return Err(CliError::ScenarioRequiresDuration);
+    }
+    if parsed.duration.is_none() && parsed.stimuli {
+        return Err(CliError::StimuliRequireDuration);
+    }
+    if parsed.duration.is_some() && parsed.scenario.is_none() {
+        parsed.scenario = Some(String::from("main"));
+    }
     Ok(parsed)
 }
 

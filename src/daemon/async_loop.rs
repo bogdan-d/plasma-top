@@ -13,17 +13,24 @@ use crate::adapters::{
     ProductionNotificationFacade,
 };
 use crate::config::{cache_live_geom, load_config};
-use crate::domain::boundary::{ClockSnapshot, FilesystemRoots, NotificationPayload};
+use crate::domain::boundary::{
+    ClockSnapshot, CommandRunner, DbusFacade, FilesystemRoots, NotificationFacade,
+    NotificationPayload,
+};
 use crate::error::{Error, Result};
 use crate::file_watch::FileWatcher;
 use crate::notify::check_and_notify;
+use crate::page_commands::build_pages;
+use crate::profiling::{
+    ProfileSession, ProfileStimuli, ProfileStimulusConfig, ProfileStimulusState,
+};
 use crate::scheduler::{
     InventoryUpdate, JobKind, OwnerId, PageId, RefreshTrigger, Scheduler, SchedulerAction,
     SchedulerEvent, SchedulerTime, Transition,
 };
 use crate::sensors::{discover_local_hardware, discover_local_hardware_attempt};
 
-use super::{DaemonPaths, cleanup, page_index, publish_pages, write_atomic};
+use super::{DaemonPaths, cleanup, publish_pages, write_atomic};
 
 #[path = "async_loop/completion.rs"]
 mod completion;
@@ -61,10 +68,14 @@ const BLOCKING_LANE_CAPACITY: usize = 1;
 const OWNER_PENDING_CAPACITY: usize = 1024;
 const FIRST_PAINT_DEADLINE: Duration = Duration::from_millis(200);
 
-pub(super) struct DaemonServices {
-    pub(super) commands: ProductionCommandRunner,
-    pub(super) dbus: ProductionDbusFacade,
-    pub(super) notifications: ProductionNotificationFacade,
+pub(super) struct DaemonServices<
+    C = ProductionCommandRunner,
+    D = ProductionDbusFacade,
+    N = ProductionNotificationFacade,
+> {
+    pub(super) commands: C,
+    pub(super) dbus: D,
+    pub(super) notifications: N,
     pub(super) stopped: Arc<AtomicBool>,
     pub(super) events: ProductionIoEvents,
     pub(super) clock: ProductionClock,
@@ -73,12 +84,34 @@ pub(super) struct DaemonServices {
     pub(super) blocked_owner: Option<worker::TestOwnerBlock>,
 }
 
-pub(super) async fn run(
+pub(super) struct ProfileRun {
+    pub(super) duration: Duration,
+    pub(super) presented: bool,
+    pub(super) selected_page: PageId,
+    pub(super) stimuli: bool,
+    pub(super) session: Arc<ProfileSession>,
+    pub(super) config_stimulus: ProfileConfigStimulus,
+    pub(super) shutdown: tokio::sync::watch::Sender<bool>,
+}
+
+pub(super) struct ProfileConfigStimulus {
+    pub(super) path: std::path::PathBuf,
+    pub(super) original: Vec<u8>,
+    pub(super) alternate: Vec<u8>,
+}
+
+pub(super) async fn run<C, D, N>(
     config_path: Option<&Path>,
     roots: &FilesystemRoots,
     paths: &DaemonPaths,
-    services: DaemonServices,
-) -> Result<()> {
+    services: DaemonServices<C, D, N>,
+    profile_run: Option<ProfileRun>,
+) -> Result<()>
+where
+    C: CommandRunner + Clone + Send + 'static,
+    D: DbusFacade + Clone + Send + 'static,
+    N: NotificationFacade + Clone + Send + 'static,
+{
     let DaemonServices {
         commands,
         dbus,
@@ -92,15 +125,50 @@ pub(super) async fn run(
     } = services;
     fs::create_dir_all(&paths.runtime)?;
     fs::create_dir_all(&paths.state)?;
-    cleanup(paths);
-    write_atomic(&paths.page, "0")?;
+    if profile_run.is_none() {
+        cleanup(paths);
+        write_atomic(&paths.page, "0")?;
+    }
 
     let boot = clock.snapshot();
     let cfg = load_config(config_path, None)?;
     let cpu_count = std::thread::available_parallelism().map_or(1, std::num::NonZero::get);
     let hw = discover_local_hardware(&roots.sys_root, &roots.proc_root, &cfg, cpu_count);
-    let active = publish_pages(paths, &cfg)?;
+    let active = if profile_run.is_some() {
+        build_pages(&cfg.pages.order)
+    } else {
+        publish_pages(paths, &cfg)?
+    };
+    if let Some(profile) = &profile_run
+        && profile.selected_page != PageId::Main
+        && !active
+            .iter()
+            .any(|page| PageId::from_id(page.id) == profile.selected_page)
+    {
+        return Err(Error::Runtime(format!(
+            "profiling scenario page '{}' is not configured in pages.order",
+            profile.selected_page.as_id()
+        )));
+    }
+    let selected_index = profile_run.as_ref().map_or(0, |profile| {
+        active
+            .iter()
+            .position(|page| PageId::from_id(page.id) == profile.selected_page)
+            .unwrap_or(0)
+    });
+    if let Some(profile) = &profile_run {
+        write_atomic(&paths.page, &selected_index.to_string())?;
+        write_atomic(&paths.npages, &active.len().to_string())?;
+        let presented = paths.state.join("presented");
+        fs::create_dir_all(&presented)?;
+        if profile.presented {
+            write_atomic(&presented.join("1"), "")?;
+        }
+    }
     let mut state = RuntimeState::new(paths, cfg, hw, active);
+    if let Some(profile) = &profile_run {
+        state.configure_profiling(Arc::clone(&profile.session));
+    }
     let (watch_path, machine_paths) = state::config_watch_paths(config_path);
     let mut file_watcher = FileWatcher::new(files::watch_targets(
         &watch_path,
@@ -110,6 +178,28 @@ pub(super) async fn run(
     ))
     .map_err(|error| Error::Runtime(format!("file watch installation failed: {error}")))?;
     let mut presentation = files::presentation_status(paths, &clock)?;
+    let mut stimuli = profile_run
+        .as_ref()
+        .filter(|profile| profile.stimuli)
+        .map(|profile| {
+            ProfileStimuli::new(ProfileStimulusConfig {
+                ready_at: clock.snapshot().monotonic,
+                initially_presented: profile.presented,
+                selected_page: selected_index,
+                page_count: state.active.len(),
+                pages: state
+                    .active
+                    .iter()
+                    .map(|page| PageId::from_id(page.id))
+                    .collect(),
+                config_path: profile.config_stimulus.path.clone(),
+                config_original: profile.config_stimulus.original.clone(),
+                config_alternate: profile.config_stimulus.alternate.clone(),
+                config_generation: state.config_generation,
+                overlay: state.cfg.display.overlay,
+                session: Arc::clone(&profile.session),
+            })
+        });
     let blocking_lane = Arc::new(Semaphore::new(BLOCKING_LANE_CAPACITY));
     let (completion_sender, mut completions) = mpsc::channel(worker::COMPLETION_CHANNEL_CAPACITY);
     let mut owner_tasks = JoinSet::new();
@@ -119,6 +209,9 @@ pub(super) async fn run(
         worker::OwnerServices {
             commands,
             dbus,
+            profile: profile_run
+                .as_ref()
+                .map(|profile| Arc::clone(&profile.session)),
             #[cfg(test)]
             blocked_owner,
         },
@@ -153,7 +246,7 @@ pub(super) async fn run(
             presented: presentation.leases.presented,
         }),
     );
-    let (_, selected) = state.selected_page(paths);
+    let (_, selected) = state.selected_page();
     enqueue(
         &mut actions,
         scheduler.handle(SchedulerEvent::SelectedPageChanged {
@@ -161,26 +254,68 @@ pub(super) async fn run(
             page: selected,
         }),
     );
-    cache_live_geom();
-    let armed_sources = file_watcher.rescan_sources();
-    files::process_and_stabilize(
-        armed_sources,
-        &mut file_watcher,
-        &watch_path,
-        &machine_paths,
-        config_path,
-        roots,
-        paths,
-        cpu_count,
-        &mut scheduler,
-        &mut state,
-        &clock,
-        &mut actions,
-        &mut owner_messages,
-        &mut presentation,
-    )?;
+    if profile_run.is_none() {
+        cache_live_geom();
+    }
+    if profile_run.is_none() {
+        let armed_sources = file_watcher.rescan_sources();
+        files::process_and_stabilize(
+            armed_sources,
+            &mut file_watcher,
+            &watch_path,
+            &machine_paths,
+            config_path,
+            roots,
+            paths,
+            cpu_count,
+            &mut scheduler,
+            &mut state,
+            &clock,
+            &mut actions,
+            &mut owner_messages,
+            &mut presentation,
+        )?;
+    }
+    let profile_deadline = profile_run
+        .as_ref()
+        .map(|profile| boot.monotonic.saturating_add(profile.duration));
+    let mut profile_shutdown_requested = false;
 
     loop {
+        let loop_now = clock.snapshot().monotonic;
+        if !profile_shutdown_requested
+            && profile_deadline.is_some_and(|deadline| loop_now >= deadline)
+        {
+            profile_shutdown_requested = true;
+            if let Some(stimuli) = &stimuli {
+                let (page_index, page) = state.selected_page();
+                stimuli.time_out(ProfileStimulusState {
+                    presented: presentation.leases.presented,
+                    page_index,
+                    page,
+                    config_generation: state.config_generation,
+                    overlay: state.cfg.display.overlay,
+                });
+            }
+            if let Some(profile) = &profile_run {
+                profile.session.record_shutdown_started();
+                let _ = profile.shutdown.send(true);
+            }
+            enqueue(
+                &mut actions,
+                scheduler.handle(SchedulerEvent::Shutdown { at: now(&clock) }),
+            );
+        }
+        if !profile_shutdown_requested && let Some(stimuli) = &mut stimuli {
+            let _ = stimuli.next_due(loop_now);
+            stimuli.inject_due(
+                loop_now,
+                paths,
+                &clock,
+                state.config_generation,
+                state.cfg.display.overlay,
+            )?;
+        }
         preempt_for_shutdown(
             stopped.load(Ordering::Acquire),
             now(&clock),
@@ -258,9 +393,10 @@ pub(super) async fn run(
         if state.terminate {
             break;
         }
+        let advanced_at = now(&clock);
         enqueue(
             &mut actions,
-            scheduler.handle(SchedulerEvent::TimeAdvanced { at: now(&clock) }),
+            scheduler.handle(SchedulerEvent::TimeAdvanced { at: advanced_at }),
         );
         drain_actions(
             &mut actions,
@@ -288,6 +424,7 @@ pub(super) async fn run(
                 &clock,
                 &mut scheduler,
                 &mut actions,
+                state.profile.as_deref(),
             )?;
         }
         if state.first_paint_published && state.theme_reconciliation_pending {
@@ -325,13 +462,23 @@ pub(super) async fn run(
         }
 
         let snapshot = clock.snapshot();
-        let sleep_for = presentation.deadline.map_or_else(
+        let mut sleep_for = presentation.deadline.map_or_else(
             || sleep_duration(&scheduler, &state, boot, snapshot),
             |expiry| {
                 sleep_duration(&scheduler, &state, boot, snapshot)
                     .min(expiry.saturating_sub(snapshot.monotonic))
             },
         );
+        if let Some(deadline) = profile_deadline {
+            sleep_for = sleep_for.min(deadline.saturating_sub(snapshot.monotonic));
+        }
+        if let Some(due) = stimuli
+            .as_mut()
+            .and_then(|stimuli| stimuli.next_due(snapshot.monotonic))
+        {
+            sleep_for = sleep_for.min(due.saturating_sub(snapshot.monotonic));
+        }
+        let scheduled_wake = scheduler.next_wake();
         match wait_for_wake_with_files(
             &mut owner_tasks,
             &mut notification_task,
@@ -349,7 +496,15 @@ pub(super) async fn run(
             LoopWake::NotificationExit => {
                 critical_failure("notification task", &mut scheduler, &clock, &mut actions);
             }
-            LoopWake::Shutdown | LoopWake::Sleep => {}
+            LoopWake::Shutdown => {}
+            LoopWake::Sleep => {
+                if let (Some(profile), Some(due)) = (&profile_run, scheduled_wake) {
+                    let at = now(&clock);
+                    if due <= at {
+                        profile.session.record_wake(due.duration(), at.duration());
+                    }
+                }
+            }
             LoopWake::Files(changed) => {
                 let changed = changed
                     .map_err(|error| Error::Runtime(format!("file watch failed: {error}")))?;
@@ -391,7 +546,9 @@ pub(super) async fn run(
 
     owner_tasks.abort_all();
     notification_task.abort();
-    cleanup(paths);
+    if profile_run.is_none() {
+        cleanup(paths);
+    }
     if let Some(component) = state.critical_component {
         return Err(Error::Runtime(format!(
             "critical async daemon {component} exited unexpectedly"
@@ -418,7 +575,14 @@ fn drain_actions(
             SchedulerAction::StartJob { ticket } => {
                 if scheduler.is_current_ticket(&ticket) {
                     validity.insert(ticket.run_id);
-                    let selected_index = page_index(paths, state.active.len());
+                    let (selected_index, _) = state.selected_page();
+                    if let Some(profile) = &state.profile {
+                        profile.record_job_queued(
+                            ticket.run_id,
+                            &ticket.job,
+                            clock.snapshot().monotonic,
+                        );
+                    }
                     let input = JobInput {
                         ticket: ticket.clone(),
                         cfg: state.cfg.clone(),
@@ -452,6 +616,14 @@ fn drain_actions(
                         .ticket()
                         .is_none_or(|queued| queued.run_id != ticket.run_id)
                 });
+                if owner_messages.len() != before
+                    && let Some(profile) = &state.profile
+                {
+                    profile.resolve_attempt(
+                        ticket.run_id,
+                        crate::profiling::AttemptDisposition::Cancelled,
+                    );
+                }
                 if !was_dispatched || owner_messages.len() != before {
                     prepend(
                         actions,
@@ -463,6 +635,9 @@ fn drain_actions(
                 }
             }
             SchedulerAction::InvalidateJob { job, .. } => {
+                if let Some(profile) = &state.profile {
+                    profile.invalidate_capture(&job);
+                }
                 invalidate_readings(&job, &mut state.readings);
                 state.invalidate_decoder(&job);
                 state.completed_jobs.remove(&job);
@@ -484,10 +659,17 @@ fn drain_actions(
             SchedulerAction::PublishDisplay {
                 publication,
                 reason,
+                display_deadline,
+                skipped_display_deadlines,
                 panel,
                 tooltip,
             } => {
-                if panel && state.deferred_first_paint.is_some() {
+                if panel
+                    && state.suppress_panel_publication_before_first_paint(
+                        reason,
+                        skipped_display_deadlines,
+                    )
+                {
                     continue;
                 }
                 let snapshot = clock.snapshot();
@@ -495,6 +677,8 @@ fn drain_actions(
                 if let Some(acknowledgement) = state.publish(
                     publication,
                     reason,
+                    display_deadline,
+                    skipped_display_deadlines,
                     panel,
                     tooltip,
                     scheduler,
@@ -506,7 +690,7 @@ fn drain_actions(
                     prepend(actions, acknowledgement);
                 }
                 if state.render_generation != render_generation {
-                    request_selected_graph(scheduler, state, paths, clock, actions);
+                    request_selected_graph(scheduler, state, clock, actions);
                 }
             }
             SchedulerAction::EvaluateNotifications { ticket } => {
@@ -617,11 +801,10 @@ fn queue_owner_message(
 fn request_selected_graph(
     scheduler: &mut Scheduler,
     state: &RuntimeState,
-    paths: &DaemonPaths,
     clock: &ProductionClock,
     actions: &mut VecDeque<SchedulerAction>,
 ) {
-    let (_, selected) = state.selected_page(paths);
+    let (_, selected) = state.selected_page();
     if selected != PageId::Graphs {
         return;
     }
@@ -686,12 +869,16 @@ fn deadline_aware_first_paint(
     match action {
         SchedulerAction::PublishDisplay {
             publication,
+            display_deadline,
+            skipped_display_deadlines,
             panel,
             tooltip,
             ..
         } => SchedulerAction::PublishDisplay {
             publication,
             reason: crate::scheduler::PublishReason::FirstPaintTimeout,
+            display_deadline,
+            skipped_display_deadlines,
             panel,
             tooltip,
         },
