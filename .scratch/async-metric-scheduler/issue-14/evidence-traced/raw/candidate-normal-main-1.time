@@ -1,0 +1,23 @@
+	Command being timed: "env -i LC_ALL=C HOME=/tmp/plasma-top-issue14.7dP5VMtI/candidate-normal-main-1/home XDG_CONFIG_HOME=/tmp/plasma-top-issue14.7dP5VMtI/candidate-normal-main-1/config-home XDG_CACHE_HOME=/tmp/plasma-top-issue14.7dP5VMtI/candidate-normal-main-1/cache-home XDG_DATA_HOME=/tmp/plasma-top-issue14.7dP5VMtI/candidate-normal-main-1/data-home XDG_RUNTIME_DIR=/tmp/plasma-top-issue14.7dP5VMtI/candidate-normal-main-1/runtime-home TMPDIR=/tmp/plasma-top-issue14.7dP5VMtI/candidate-normal-main-1/tmp PLASMA_TOP_CODE_ROOT=/var/mnt/xdata/code/_self/plasma-top PATH=/run/user/1000/fnm_multishells/154284_1786583955320/bin:/home/bogdan/.local/share/fnm:/home/linuxbrew/.linuxbrew/opt/php@8.3/sbin:/home/linuxbrew/.linuxbrew/opt/php@8.3/bin:/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:/run/user/1000/fnm_multishells/2897_1786524180615/bin:/home/bogdan/.local/share/fnm:/home/linuxbrew/.linuxbrew/opt/php@8.3/sbin:/home/linuxbrew/.linuxbrew/opt/php@8.3/bin:/home/bogdan/.cargo/bin:/home/bogdan/.local/bin:/home/bogdan/bin:/usr/lib64/ccache:/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/var/home/bogdan/.lmstudio/bin:/var/home/bogdan/.lmstudio/bin DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus /var/mnt/xdata/code/_self/plasma-top/.scratch/async-metric-scheduler/issue-14/evidence-traced-v2/binaries/candidate-plasma-top daemon --config /tmp/plasma-top-issue14.7dP5VMtI/candidate-normal-main-1/config/config.toml"
+	User time (seconds): 0.03
+	System time (seconds): 0.02
+	Percent of CPU this job got: 0%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:08.31
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 14892
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 1756
+	Voluntary context switches: 10748
+	Involuntary context switches: 19
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 8
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

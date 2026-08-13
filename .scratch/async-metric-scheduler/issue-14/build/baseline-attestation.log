@@ -1,0 +1,8 @@
+command=cargo build --release --locked --features nvml
+captured_utc=2026-08-13T00:52:16Z
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Finished `release` profile [optimized] target(s) in 0.05s
+f2fc3f9b7da4790520b9bc018b9424ee32ba534f5b3e0fe5ef9f07ec90323f21  target/release/plasma-top
+7c95731b105d704ba7b78d8cb5deb7a19f9277bf

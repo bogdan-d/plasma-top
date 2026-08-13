@@ -1,7 +1,7 @@
 # Compare synchronous and async daemon runtime
 
 Type: task
-Status: ready-for-agent
+Status: resolved
 Blocked by: 11, 12, 13
 
 ## Objective
@@ -43,3 +43,9 @@ Issue 08 compared the synchronous commit's one-shot profiling/render boundaries 
 ## Validation
 
 Run focused harness tests, `shellcheck` and `shfmt` for any changed shell scripts, representative short safety runs, the complete normal and CPU-0 matrix, artifact-integrity checks, and the full repository gates from `docs/DEVELOPMENT.md`. Do not restart plasmashell or use the disabled plasmoidviewer workflow.
+
+## Answer
+
+Compared fixed baseline `7c95731b105d704ba7b78d8cb5deb7a19f9277bf` with async candidate `ae53de61ac9e29650cebc7e77da8a6cce2350c4a` using isolated release daemons, matched assets/configuration, three normal and three CPU-0 repetitions, and separate traced and untraced matrices. All 120 runs remained healthy, published valid intended output, exited cleanly, and left no harness-owned children or state.
+
+The async daemon is not generally faster: whole-process CPU was equal in normal hidden/main and usually 0.01 seconds higher per eight-second run for graphs, processes, and CPU-0 groups. Whole-process peak RSS remained within 0.8 MiB. Its clear improvement is hidden demand scoping, reducing steady publications from 10 to 1–3 while the synchronous daemon necessarily continues tooltip work. No development-host blocker remains for issue 09, but laptop energy, wakeups, and hardware counters remain unavailable and must be measured there. Commands, hashes, raw evidence, tables, protocol limits, and the concise conclusion are in `.scratch/async-metric-scheduler/issue-14/REPORT.md` and the two scoped evidence directories.
