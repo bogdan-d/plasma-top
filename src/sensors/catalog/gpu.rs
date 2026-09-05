@@ -147,17 +147,7 @@ impl Catalog<'_> {
             self.intel_usage_jobs()
         };
         jobs.extend(gpu_sources);
-        let gpu_source = self
-            .hw
-            .has_nvidia
-            .then(|| String::from("nvidia"))
-            .or_else(|| {
-                self.hw.amd_gpu.is_none().then_some(())?;
-                self.hw
-                    .intel_gpu_pci
-                    .as_ref()
-                    .map(|pci| format!("intel:{pci}"))
-            });
+        let gpu_source = crate::sensors::gpu_history::selected_source(self.hw);
         if let Some(source) = gpu_source {
             jobs.insert(self.insert(JobSpec::source_history(
                 JobId::with_source(

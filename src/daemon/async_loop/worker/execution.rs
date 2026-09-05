@@ -38,16 +38,38 @@ impl<C: CommandRunner, D: DbusFacade> WorkerState<C, D> {
                         readings.gpu_usage = point.and_then(|sample| sample.value.0);
                         readings.gpu_dec = point.and_then(|sample| sample.value.1);
                     }
+                    (SourceIdentity::Device(source), point) if source.starts_with("amd:") => {
+                        readings.gpu_amd_usage = point.and_then(|sample| sample.value.0);
+                        readings.gpu_amd_codec_usage = point.and_then(|sample| sample.value.1);
+                    }
                     (SourceIdentity::Device(source), point) if source.starts_with("intel:") => {
                         readings.gpu_intel_usage = point.and_then(|sample| sample.value.0);
                         readings.gpu_intel_dec_usage = point.and_then(|sample| sample.value.1);
                     }
                     _ => {}
                 }
-                let decoder_outcome = input
-                    .gpu_history_point
-                    .as_ref()
-                    .map_or(input.gpu_decoder_outcome, |sample| sample.value.2);
+                let decoder_outcome = if matches!(&ticket.job.source, SourceIdentity::Device(source) if source.starts_with("amd:"))
+                {
+                    if hw
+                        .amd_gpu
+                        .as_ref()
+                        .is_none_or(|source| source.codec_usage_path.is_none())
+                    {
+                        gpu_history::DecoderOutcome::ConfirmedAbsent
+                    } else {
+                        input
+                            .gpu_history_point
+                            .as_ref()
+                            .map_or(gpu_history::DecoderOutcome::Unmeasured, |sample| {
+                                sample.value.2
+                            })
+                    }
+                } else {
+                    input
+                        .gpu_history_point
+                        .as_ref()
+                        .map_or(input.gpu_decoder_outcome, |sample| sample.value.2)
+                };
                 let captured_at = ticket.history_deadline.map_or_else(
                     || clock.snapshot(),
                     |deadline| ClockSnapshot {
@@ -64,12 +86,12 @@ impl<C: CommandRunner, D: DbusFacade> WorkerState<C, D> {
                     true,
                 );
                 let completion = if let Some(result) = result {
-                    if let Some(history) = result.usage {
-                        readings.gpu_usage_history = history.value;
-                    }
-                    if let Some(history) = result.decoder {
-                        readings.gpu_dec_history = history.value;
-                    }
+                    readings.gpu_usage_history =
+                        result.usage.map(|sample| sample.value).unwrap_or_default();
+                    readings.gpu_dec_history = result
+                        .decoder
+                        .map(|sample| sample.value)
+                        .unwrap_or_default();
                     CompletionKind::Captured
                 } else {
                     CompletionKind::ConfirmedAbsent
@@ -140,18 +162,27 @@ impl<C: CommandRunner, D: DbusFacade> WorkerState<C, D> {
                 )
             }
         };
-        let decoder_outcome = job_decoder_outcome(
-            ticket.job.kind,
-            completion,
-            readings.gpu_dec,
-            readings.gpu_intel_dec_usage,
-        );
+        let decoder_outcome = if ticket.job.kind == JobKind::AmdFast {
+            Some(self.owners.amd_gpu.codec_outcome())
+        } else {
+            job_decoder_outcome(
+                ticket.job.kind,
+                completion,
+                readings.gpu_dec,
+                readings.gpu_intel_dec_usage,
+            )
+        };
         let gpu_history_point = match ticket.job.kind {
             JobKind::NvidiaNvml | JobKind::NvidiaFallback => self
                 .owners
                 .nvidia
                 .latest_history_point()
                 .map(|sample| (SourceIdentity::Device(String::from("nvidia")), sample)),
+            JobKind::AmdFast => self
+                .owners
+                .amd_gpu
+                .latest_history_point()
+                .map(|sample| (ticket.job.source.clone(), sample)),
             JobKind::IntelUsage => {
                 let source = match &ticket.job.source {
                     SourceIdentity::Device(pci) => SourceIdentity::Device(format!("intel:{pci}")),
@@ -197,3 +228,7 @@ impl<C: CommandRunner, D: DbusFacade> WorkerState<C, D> {
         }
     }
 }
+
+#[cfg(all(test, feature = "test-support"))]
+#[path = "execution/tests.rs"]
+mod tests;

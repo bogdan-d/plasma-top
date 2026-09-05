@@ -574,3 +574,5 @@ fn configured_labels_are_used_in_exact_payload_text() {
 
     assert_eq!(facade.calls(), &[expected("Offline", "dialog-error")]);
 }
+
+mod amd;

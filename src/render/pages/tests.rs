@@ -234,3 +234,41 @@ fn graph_value_helpers_match_threshold_classes() {
         r#"<span class="val ">0%</span>"#
     );
 }
+
+#[test]
+fn amd_graph_legend_uses_codec_label_and_its_own_threshold() {
+    let mut cfg = Config::default();
+    cfg.thresholds.gpu_amd_usage = [50, 70];
+    cfg.thresholds.gpu_amd_codec_usage = 10;
+    cfg.labels.insert(
+        "gpu_amd_codec_usage".into(),
+        toml::Value::String("AMD codec activity".into()),
+    );
+    let mut hw = HardwareInventory {
+        amd_gpu: Some(crate::domain::readings::AmdGpuSource::default()),
+        intel_gpu_pci: Some(String::from("0000:00:02.0")),
+        ..HardwareInventory::default()
+    };
+    let mut readings = DisplaySnapshot {
+        gpu_amd_usage: Some(73),
+        gpu_amd_codec_usage: Some(9),
+        gpu_intel_usage: Some(1),
+        gpu_intel_dec_usage: Some(2),
+        gpu_usage_history: vec![73],
+        gpu_dec_history: vec![9],
+        ..DisplaySnapshot::default()
+    };
+    let html = PageFormatter::new(&cfg, &hw).format_graphs(&readings, "", "", None);
+    assert!(html.contains("AMD codec activity:"));
+    assert!(!html.contains("Decoder"));
+    assert!(html.contains(r#"class="val crit">73%"#));
+    assert!(html.contains(r#"class="val ">9%"#));
+    assert_eq!(html.matches("data:image/png").count(), 3);
+    readings.gpu_amd_codec_usage = Some(11);
+    let html = PageFormatter::new(&cfg, &hw).format_graphs(&readings, "", "", None);
+    assert!(html.contains(r#"class="val active">11%"#));
+    hw.has_nvidia = true;
+    let html = PageFormatter::new(&cfg, &hw).format_graphs(&readings, "", "", None);
+    assert!(html.contains("Decoder:"));
+    assert!(!html.contains("AMD codec activity"));
+}

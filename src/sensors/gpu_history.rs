@@ -6,16 +6,16 @@ use crate::config::Config;
 use crate::domain::boundary::ClockSnapshot;
 use crate::domain::readings::{DisplaySnapshot, HardwareInventory, MetricSample};
 
-/// Selected Intel/NVIDIA graph histories, independent of either GPU owner.
+/// Selected GPU graph histories, independent of the vendor owners.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct GpuHistoryState {
     /// Selected GPU owner identity for the retained history.
     pub source: Option<String>,
     /// Active GPU usage history.
     pub usage: Vec<i32>,
-    /// Active GPU decoder history.
+    /// Active GPU decoder or AMD codec history.
     pub decoder: Vec<i32>,
-    /// Latest real decoder sample, retained independently from usage.
+    /// Latest real decoder or AMD codec sample, retained independently from usage.
     pub latest_decoder: Option<i32>,
     /// Monotonic instant of the last history sample.
     pub sampled_at: Option<Duration>,
@@ -55,6 +55,8 @@ impl GpuHistoryState {
         };
         let usage = if hw.has_nvidia {
             readings.gpu_usage
+        } else if hw.amd_gpu.is_some() {
+            readings.gpu_amd_usage
         } else {
             readings.gpu_intel_usage
         };
@@ -118,7 +120,7 @@ pub enum DecoderOutcome {
 
 /// Samples the preferred GPU into graphs-page history.
 ///
-/// NVIDIA wins on hybrid machines based on hardware presence, even when its current reading is absent. A missing usage sample preserves and re-exposes existing history without inserting a gap.
+/// NVIDIA, AMDGPU, then Intel win by hardware presence, even when the preferred device has no current reading. A missing usage sample preserves and re-exposes existing history without inserting a gap.
 #[must_use]
 pub fn sample_gpu_history(
     state: &mut GpuHistoryState,
@@ -132,9 +134,11 @@ pub fn sample_gpu_history(
     state.sample(cfg, hw, readings, decoder_outcome, clock, append)
 }
 
-fn selected_source(hw: &HardwareInventory) -> Option<String> {
+pub(crate) fn selected_source(hw: &HardwareInventory) -> Option<String> {
     if hw.has_nvidia {
         Some(String::from("nvidia"))
+    } else if let Some(amd) = &hw.amd_gpu {
+        Some(format!("amd:{}", amd.pci_identity))
     } else {
         hw.intel_gpu_pci
             .as_deref()

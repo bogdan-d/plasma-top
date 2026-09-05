@@ -523,3 +523,82 @@ fn forced_theme_rescan_reselects_style_when_mtime_is_preserved() {
     );
     let _ = fs::remove_dir_all(root);
 }
+
+#[test]
+fn amd_history_commit_keeps_deadlines_and_slow_invalidation_independent() {
+    use crate::sensors::gpu_history::DecoderOutcome;
+    let (root, paths) = test_paths("amd-history-commit");
+    fs::create_dir_all(&paths.state).expect("state root");
+    let cfg = Config::default();
+    let active = build_pages(&cfg.pages.order);
+    let mut state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
+    let source = SourceIdentity::Device(String::from("amd:0000:c3:00.0"));
+    let fast = JobId::with_source(OwnerId::AmdGpu, JobKind::AmdFast, source.clone());
+    let mut history = JobTicket {
+        metrics: Default::default(),
+        run_id: RunId(1),
+        job: JobId::with_source(OwnerId::GpuHistory, JobKind::GpuHistory, source.clone()),
+        config_generation: ConfigGeneration(1),
+        inventory_generation: InventoryGeneration(1),
+        history_deadline: Some(HistoryDeadline::new(SchedulerTime::from_duration(
+            Duration::from_secs(2),
+        ))),
+    };
+    let generation = state.render_generation;
+    for (at, codec) in [(1, 23), (3, 64)] {
+        let completion = worker::JobCompletion {
+            ticket: JobTicket {
+                job: fast.clone(),
+                run_id: RunId(at),
+                ..history.clone()
+            },
+            completion: CompletionKind::Captured,
+            readings: DisplaySnapshot {
+                gpu_amd_usage: Some(71),
+                gpu_amd_codec_usage: Some(codec),
+                ..DisplaySnapshot::default()
+            },
+            notifications: DisplaySnapshot::default(),
+            notification_ready: false,
+            hw: HardwareInventory::default(),
+            resolved_mounts: Vec::new(),
+            command_cache: None,
+            rendered_page: None,
+            style_generation: 1,
+            render_generation: generation,
+            decoder_outcome: Some(DecoderOutcome::Value(codec)),
+            gpu_history_point: Some((
+                source.clone(),
+                crate::domain::readings::MetricSample::new(
+                    (Some(71), Some(codec), DecoderOutcome::Value(codec)),
+                    Duration::from_secs(at),
+                ),
+            )),
+            decision: None,
+        };
+        state.commit(&completion);
+    }
+    assert_eq!(state.render_generation, generation + 2);
+    assert_eq!(
+        state
+            .gpu_history_point_for(&history)
+            .expect("deadline point")
+            .value
+            .1,
+        Some(23)
+    );
+    state.invalidate_decoder(&JobId::with_source(
+        OwnerId::AmdGpu,
+        JobKind::AmdSlow,
+        source,
+    ));
+    assert!(state.gpu_history_point_for(&history).is_some());
+    history.job.source = SourceIdentity::Device(String::from("amd:0000:01:00.0"));
+    assert!(state.gpu_history_point_for(&history).is_none());
+    state.invalidate_decoder(&fast);
+    state.invalidate_job_readings(&fast);
+    assert!(state.gpu_history_samples.is_empty());
+    assert_eq!(state.readings.gpu_amd_usage, None);
+    assert_eq!(state.render_generation, generation + 3);
+    let _ = fs::remove_dir_all(root);
+}

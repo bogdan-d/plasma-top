@@ -170,6 +170,30 @@ pub fn check_and_notify(
         );
     }
 
+    if enabled.gpu_amd_temp
+        && let Some(temp) = readings.gpu_amd_temp
+        && sustained(
+            &mut state.gpu_amd_temp,
+            f64::from(temp),
+            f64::from(thresholds.gpu_amd_temp),
+            f64::from(thresholds.gpu_amd_temp) - cool,
+            hold,
+            now,
+        )
+    {
+        emit(
+            facade,
+            &mut report,
+            payload(
+                format!(
+                    "{} {temp}{TEMP_SCALE}",
+                    label(labels, "gpu_amd_temp", "AMD GPU temperature")
+                ),
+                ERROR_ICON,
+            ),
+        );
+    }
+
     if enabled.disk_usage {
         for (mount, usage) in &readings.disk_usage {
             let Some(usage) = usage else { continue };

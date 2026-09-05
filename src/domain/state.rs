@@ -33,6 +33,8 @@ pub struct NotificationState {
     pub cpu_temp: NotificationLatch,
     /// NVIDIA-temperature sustained-alert state.
     pub gpu_nvidia_temp: NotificationLatch,
+    /// AMD edge-temperature sustained-alert state.
+    pub gpu_amd_temp: NotificationLatch,
     /// Disk-temperature sustained-alert state keyed by disk label.
     pub hd_temp: BTreeMap<String, NotificationLatch>,
     /// Fifteen-minute load sustained-alert state.

@@ -46,6 +46,49 @@ impl AmdGpuState {
         &self.samples
     }
 
+    pub(crate) fn codec_outcome(&self) -> super::gpu_history::DecoderOutcome {
+        use super::gpu_history::DecoderOutcome;
+        if self
+            .source
+            .as_ref()
+            .is_none_or(|source| source.codec_usage_path.is_none())
+        {
+            DecoderOutcome::ConfirmedAbsent
+        } else if let Some(sample) = &self.samples.codec_usage.latest {
+            DecoderOutcome::Value(sample.value)
+        } else if self.samples.codec_usage.latest_attempt_failed {
+            DecoderOutcome::TransientFailure
+        } else {
+            DecoderOutcome::Unmeasured
+        }
+    }
+
+    pub(crate) fn latest_history_point(
+        &self,
+    ) -> Option<crate::domain::readings::MetricSample<(Option<i32>, Option<i32>)>> {
+        // The pair becomes observable after its latest graph-field attempt; a failed sibling retains its older value.
+        let at = self
+            .samples
+            .usage
+            .attempted_at
+            .max(self.samples.codec_usage.attempted_at)?;
+        Some(crate::domain::readings::MetricSample::new(
+            (
+                self.samples
+                    .usage
+                    .latest
+                    .as_ref()
+                    .map(|sample| sample.value),
+                self.samples
+                    .codec_usage
+                    .latest
+                    .as_ref()
+                    .map(|sample| sample.value),
+            ),
+            at,
+        ))
+    }
+
     /// Clears all samples on device replacement, or only affected samples on capability/path changes.
     pub fn reconcile_source(&mut self, source: Option<&AmdGpuSource>) {
         if self.source.as_ref() == source {

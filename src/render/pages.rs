@@ -289,7 +289,45 @@ impl<'a> PageFormatter<'a> {
                 )]),
         ];
 
-        if self.hw.has_nvidia {
+        let gpu = if self.hw.has_nvidia {
+            Some((
+                readings.gpu_usage,
+                readings.gpu_dec,
+                self.cfg.thresholds.gpu_nvidia_usage.as_slice(),
+                self.cfg.thresholds.gpu_nvidia_dec_usage,
+                "Decoder",
+            ))
+        } else if self.hw.amd_gpu.is_some() {
+            Some((
+                readings.gpu_amd_usage,
+                readings.gpu_amd_codec_usage,
+                self.cfg.thresholds.gpu_amd_usage.as_slice(),
+                self.cfg.thresholds.gpu_amd_codec_usage,
+                self.cfg
+                    .labels
+                    .get("gpu_amd_codec_usage")
+                    .and_then(toml::Value::as_str)
+                    .unwrap_or("AMD GPU codec"),
+            ))
+        } else if self.hw.intel_gpu_pci.is_some() {
+            Some((
+                readings.gpu_intel_usage,
+                readings.gpu_intel_dec_usage,
+                self.cfg.thresholds.gpu_intel_usage.as_slice(),
+                self.cfg.thresholds.gpu_intel_dec_usage,
+                "Decoder",
+            ))
+        } else {
+            None
+        };
+        if let Some((
+            usage_value,
+            secondary_value,
+            usage_thresholds,
+            secondary_threshold,
+            secondary_label,
+        )) = gpu
+        {
             let usage = readings
                 .gpu_usage_history
                 .iter()
@@ -320,67 +358,14 @@ impl<'a> PageFormatter<'a> {
                             Some(GREEN_LINE),
                             "GPU usage",
                             graph_value_band(
-                                readings.gpu_usage,
-                                Some((
-                                    self.cfg.thresholds.gpu_nvidia_usage[0],
-                                    self.cfg.thresholds.gpu_nvidia_usage[1],
-                                )),
+                                usage_value,
+                                Some((usage_thresholds[0], usage_thresholds[1])),
                             ),
                         ),
                         (
                             Some(ORANGE_LINE),
-                            "Decoder",
-                            graph_value_active(
-                                readings.gpu_dec,
-                                Some(self.cfg.thresholds.gpu_nvidia_dec_usage),
-                            ),
-                        ),
-                    ]),
-            );
-        } else if self.hw.intel_gpu_pci.is_some() {
-            let overlay = readings
-                .gpu_dec_history
-                .iter()
-                .map(|value| f64::from(*value))
-                .collect::<Vec<_>>();
-            let png = area_chart_png(
-                &readings
-                    .gpu_usage_history
-                    .iter()
-                    .map(|value| f64::from(*value))
-                    .collect::<Vec<_>>(),
-                width,
-                GRAPH_HEIGHT,
-                AreaChartOptions {
-                    left_pad: GRAPH_LEFT_PAD,
-                    line: GREEN_LINE,
-                    fill: GREEN_FILL,
-                    overlay: Some(&overlay),
-                    overlay_line: ORANGE_LINE,
-                    ..AreaChartOptions::default()
-                },
-            );
-            blocks.push(
-                png_img(&png, width)
-                    + &legend(vec![
-                        (
-                            Some(GREEN_LINE),
-                            "GPU usage",
-                            graph_value_band(
-                                readings.gpu_intel_usage,
-                                Some((
-                                    self.cfg.thresholds.gpu_intel_usage[0],
-                                    self.cfg.thresholds.gpu_intel_usage[1],
-                                )),
-                            ),
-                        ),
-                        (
-                            Some(ORANGE_LINE),
-                            "Decoder",
-                            graph_value_active(
-                                readings.gpu_intel_dec_usage,
-                                Some(self.cfg.thresholds.gpu_intel_dec_usage),
-                            ),
+                            secondary_label,
+                            graph_value_active(secondary_value, Some(secondary_threshold)),
                         ),
                     ]),
             );

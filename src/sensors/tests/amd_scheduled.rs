@@ -215,3 +215,100 @@ fn amd_config() -> Config {
         "gpu_amd_fan_speed",
     ])
 }
+
+#[test]
+fn amd_history_deadline_selects_usage_and_codec_independently() {
+    use crate::scheduler::{HistoryDeadline, SchedulerTime};
+    let tree = TempTree::new();
+    let mut hw = fixture(&tree);
+    let mut owners = TestOwners::default();
+    let mut cfg = amd_config();
+    cfg.pages.order = vec![String::from("graphs")];
+    let mut readings = DisplaySnapshot::default();
+    let fast = ticket(JobKind::AmdFast, crate::sensors::gpu_amd::FAST_METRICS);
+    run(&tree, &mut owners, &mut hw, &cfg, &mut readings, &fast, 1);
+    tree.write("sys/amd/usage", "broken");
+    tree.write("sys/amd/codec", "64");
+    run(&tree, &mut owners, &mut hw, &cfg, &mut readings, &fast, 3);
+    let mut history = ticket(JobKind::GpuHistory, &[]);
+    history.job.owner = OwnerId::GpuHistory;
+    history.history_deadline = Some(HistoryDeadline::new(SchedulerTime::from_duration(
+        Duration::from_secs(2),
+    )));
+    run(
+        &tree,
+        &mut owners,
+        &mut hw,
+        &cfg,
+        &mut readings,
+        &history,
+        4,
+    );
+    assert_eq!(readings.gpu_usage_history, [71]);
+    assert_eq!(readings.gpu_dec_history, [23]);
+    history.history_deadline = Some(HistoryDeadline::new(SchedulerTime::from_duration(
+        Duration::from_secs(4),
+    )));
+    run(
+        &tree,
+        &mut owners,
+        &mut hw,
+        &cfg,
+        &mut readings,
+        &history,
+        5,
+    );
+    assert_eq!(readings.gpu_usage_history, [71, 71]);
+    assert_eq!(readings.gpu_dec_history, [23, 64]);
+    hw.amd_gpu.as_mut().expect("AMD").codec_usage_path = None;
+    history.history_deadline = None;
+    run(
+        &tree,
+        &mut owners,
+        &mut hw,
+        &cfg,
+        &mut readings,
+        &history,
+        6,
+    );
+    assert_eq!(readings.gpu_dec_history, [23, 64]);
+    assert_eq!(owners.gpu_history.latest_decoder, None);
+}
+
+#[test]
+fn amd_alert_evaluation_uses_fresh_temperature_candidates_only() {
+    use crate::domain::state::NotificationState;
+    use crate::test_support::FakeNotificationFacade;
+    let tree = TempTree::new();
+    let mut hw = fixture(&tree);
+    let mut owners = TestOwners::default();
+    let mut cfg = amd_config();
+    cfg.notifications.gpu_amd_temp = true;
+    cfg.notify_thresholds.gpu_amd_temp = 60;
+    cfg.notify_thresholds.temp_sustain_seconds = 1;
+    let mut readings = DisplaySnapshot::default();
+    let mut state = NotificationState::default();
+    let mut facade = FakeNotificationFacade::new();
+    let slow = ticket(JobKind::AmdSlow, crate::sensors::gpu_amd::SLOW_METRICS);
+    let power = ticket(JobKind::AmdSlow, &[Metric::GpuAmdPower]);
+    for (at, job, temp, power_value, expected) in [
+        (1, &slow, "63000", "42000000", 0),
+        (2, &slow, "broken", "42000000", 0),
+        (3, &power, "65000", "42000000", 0),
+        (4, &slow, "65000", "broken", 1),
+    ] {
+        tree.write("sys/amd/temp", temp);
+        tree.write("sys/amd/power", power_value);
+        let result = run(&tree, &mut owners, &mut hw, &cfg, &mut readings, job, at);
+        let _ = crate::notify::check_and_notify(
+            &result.notifications,
+            &cfg,
+            &mut state,
+            &hw,
+            Duration::from_secs(at),
+            &mut facade,
+        );
+        assert_eq!(facade.calls().len(), expected, "at {at}");
+    }
+    assert_eq!(facade.calls()[0].body, "AMD GPU temperature 65C");
+}

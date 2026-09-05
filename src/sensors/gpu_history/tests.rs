@@ -302,3 +302,73 @@ fn decoder_history_carries_failure_then_stops_after_confirmed_absence() {
     );
     assert_eq!(state.decoder, vec![7, 7]);
 }
+
+#[test]
+fn amd_history_resets_on_device_and_vendor_changes_and_retains_failed_codec() {
+    use crate::domain::readings::AmdGpuSource;
+    let mut cfg = Config::default();
+    cfg.pages.order = vec![String::from("graphs")];
+    let mut hw = HardwareInventory {
+        amd_gpu: Some(AmdGpuSource {
+            pci_identity: String::from("0000:c3:00.0"),
+            ..AmdGpuSource::default()
+        }),
+        intel_gpu_pci: Some(String::from("0000:00:02.0")),
+        ..HardwareInventory::default()
+    };
+    let readings = DisplaySnapshot {
+        gpu_usage: Some(90),
+        gpu_amd_usage: Some(60),
+        gpu_intel_usage: Some(10),
+        ..DisplaySnapshot::default()
+    };
+    let mut state = GpuHistoryState::default();
+    for (at, outcome) in [
+        (1, DecoderOutcome::Value(23)),
+        (2, DecoderOutcome::TransientFailure),
+    ] {
+        let _ = state.sample(&cfg, &hw, &readings, outcome, clock(at), true);
+    }
+    assert_eq!(state.source.as_deref(), Some("amd:0000:c3:00.0"));
+    assert_eq!(state.usage, [60, 60]);
+    assert_eq!(state.decoder, [23, 23]);
+    hw.amd_gpu = Some(AmdGpuSource {
+        pci_identity: String::from("0000:01:00.0"),
+        ..AmdGpuSource::default()
+    });
+    let _ = state.sample(
+        &cfg,
+        &hw,
+        &readings,
+        DecoderOutcome::Unmeasured,
+        clock(3),
+        true,
+    );
+    assert_eq!(state.source.as_deref(), Some("amd:0000:01:00.0"));
+    assert_eq!(state.usage, [60]);
+    assert!(state.decoder.is_empty());
+    hw.has_nvidia = true;
+    let _ = state.sample(
+        &cfg,
+        &hw,
+        &readings,
+        DecoderOutcome::Value(7),
+        clock(4),
+        true,
+    );
+    assert_eq!(state.usage, [90]);
+    assert_eq!(state.decoder, [7]);
+    hw.has_nvidia = false;
+    hw.amd_gpu = None;
+    let _ = state.sample(
+        &cfg,
+        &hw,
+        &readings,
+        DecoderOutcome::Value(3),
+        clock(5),
+        true,
+    );
+    assert_eq!(state.source.as_deref(), Some("intel:0000:00:02.0"));
+    assert_eq!(state.usage, [10]);
+    assert_eq!(state.decoder, [3]);
+}

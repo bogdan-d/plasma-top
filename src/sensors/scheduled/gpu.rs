@@ -90,12 +90,12 @@ pub(super) fn execute(
                     .gpu_history
                     .sample(cfg, hw, &history_readings, decoder, captured_at, true);
             if let Some(result) = result {
-                if let Some(history) = result.usage {
-                    readings.gpu_usage_history = history.value;
-                }
-                if let Some(history) = result.decoder {
-                    readings.gpu_dec_history = history.value;
-                }
+                readings.gpu_usage_history =
+                    result.usage.map(|sample| sample.value).unwrap_or_default();
+                readings.gpu_dec_history = result
+                    .decoder
+                    .map(|sample| sample.value)
+                    .unwrap_or_default();
                 CompletionKind::Captured
             } else {
                 CompletionKind::ConfirmedAbsent
@@ -132,10 +132,17 @@ fn gpu_values_at_history_deadline(
     deadline: Option<HistoryDeadline>,
 ) -> (DisplaySnapshot, DecoderOutcome) {
     let Some(deadline) = deadline else {
-        let decoder = readings
-            .gpu_dec
-            .or(readings.gpu_intel_dec_usage)
-            .map_or(DecoderOutcome::Unmeasured, DecoderOutcome::Value);
+        let decoder = match &job.source {
+            SourceIdentity::Device(source) if source == "nvidia" => readings.gpu_dec,
+            SourceIdentity::Device(source) if source.starts_with("amd:") => {
+                return (readings.clone(), owners.amd_gpu.codec_outcome());
+            }
+            SourceIdentity::Device(source) if source.starts_with("intel:") => {
+                readings.gpu_intel_dec_usage
+            }
+            _ => None,
+        }
+        .map_or(DecoderOutcome::Unmeasured, DecoderOutcome::Value);
         return (readings.clone(), decoder);
     };
     let mut eligible = readings.clone();
@@ -156,6 +163,25 @@ fn gpu_values_at_history_deadline(
                 eligible.gpu_dec = None;
                 (eligible, DecoderOutcome::Unmeasured)
             }
+        }
+        SourceIdentity::Device(source) if source.starts_with("amd:") => {
+            let samples = owners.amd_gpu.samples();
+            eligible.gpu_amd_usage = sample_at_history_deadline(&samples.usage, Some(deadline))
+                .map(|sample| sample.value);
+            eligible.gpu_amd_codec_usage =
+                sample_at_history_deadline(&samples.codec_usage, Some(deadline))
+                    .map(|sample| sample.value);
+            let codec = eligible.gpu_amd_codec_usage.map_or_else(
+                || {
+                    if owners.amd_gpu.codec_outcome() == DecoderOutcome::ConfirmedAbsent {
+                        DecoderOutcome::ConfirmedAbsent
+                    } else {
+                        DecoderOutcome::Unmeasured
+                    }
+                },
+                DecoderOutcome::Value,
+            );
+            (eligible, codec)
         }
         SourceIdentity::Device(source) if source.starts_with("intel:") => {
             if let Some(sample) =

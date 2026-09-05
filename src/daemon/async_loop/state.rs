@@ -237,6 +237,9 @@ impl RuntimeState {
     }
 
     pub(super) fn invalidate_decoder(&mut self, job: &crate::scheduler::JobId) {
+        if job.kind == crate::scheduler::JobKind::AmdSlow {
+            return;
+        }
         match job.owner {
             OwnerId::Nvidia => self.nvidia_decoder_outcome = None,
             OwnerId::IntelGpu => self.intel_decoder_outcome = None,
@@ -260,7 +263,9 @@ impl RuntimeState {
                         "nvidia",
                     )));
             }
-            crate::scheduler::SourceIdentity::Device(source) if source.starts_with("intel:") => {
+            crate::scheduler::SourceIdentity::Device(source)
+                if source.starts_with("intel:") || source.starts_with("amd:") =>
+            {
                 self.gpu_history_samples.remove(&job.source);
             }
             _ => {}
@@ -386,6 +391,9 @@ impl RuntimeState {
             Kind::NvidiaNvml | Kind::NvidiaFallback => {
                 self.readings.gpu_usage.is_some() || self.readings.gpu_dec.is_some()
             }
+            Kind::AmdFast => {
+                self.readings.gpu_amd_usage.is_some() || self.readings.gpu_amd_codec_usage.is_some()
+            }
             Kind::IntelUsage => {
                 self.readings.gpu_intel_usage.is_some()
                     || self.readings.gpu_intel_dec_usage.is_some()
@@ -425,7 +433,10 @@ impl RuntimeState {
                 self.readings.gpu_usage != readings.gpu_usage
                     || self.readings.gpu_dec != readings.gpu_dec
             }
-            OwnerId::AmdGpu => false,
+            OwnerId::AmdGpu => {
+                self.readings.gpu_amd_usage != readings.gpu_amd_usage
+                    || self.readings.gpu_amd_codec_usage != readings.gpu_amd_codec_usage
+            }
             OwnerId::IntelGpu => {
                 self.readings.gpu_intel_usage != readings.gpu_intel_usage
                     || self.readings.gpu_intel_dec_usage != readings.gpu_intel_dec_usage
@@ -437,6 +448,9 @@ impl RuntimeState {
             OwnerId::Discovery => match completion.ticket.job.source {
                 crate::scheduler::SourceIdentity::Inventory(InventoryFamily::Nvidia) => {
                     self.hw.has_nvidia != completion.hw.has_nvidia
+                }
+                crate::scheduler::SourceIdentity::Inventory(InventoryFamily::Amd) => {
+                    self.hw.amd_gpu != completion.hw.amd_gpu
                 }
                 crate::scheduler::SourceIdentity::Inventory(InventoryFamily::Intel) => {
                     self.hw.intel_gpu_pci != completion.hw.intel_gpu_pci
