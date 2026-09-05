@@ -86,3 +86,27 @@ fn action_priority(action: &SchedulerAction) -> u8 {
 pub(super) fn sort_actions(actions: &mut [SchedulerAction]) {
     actions.sort_by_key(action_priority);
 }
+
+pub(super) fn skipped_intervals(
+    deadline: SchedulerTime,
+    cadence: Duration,
+    now: SchedulerTime,
+) -> u64 {
+    if cadence.is_zero() || now <= deadline {
+        return 0;
+    }
+    u64::try_from(
+        now.duration()
+            .saturating_sub(deadline.duration())
+            .as_nanos()
+            / cadence.as_nanos(),
+    )
+    .unwrap_or(u64::MAX)
+}
+
+pub(super) fn due_intervals(deadline: SchedulerTime, cadence: Duration, now: SchedulerTime) -> u64 {
+    if cadence.is_zero() || now < deadline {
+        return 0;
+    }
+    skipped_intervals(deadline, cadence, now).saturating_add(1)
+}

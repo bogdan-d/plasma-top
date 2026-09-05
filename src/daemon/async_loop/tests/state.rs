@@ -107,6 +107,7 @@ fn completion_merges_only_inventory_owned_by_its_job() {
     hw.net_device = Some(String::from("wlan0"));
     let completion = worker::JobCompletion {
         ticket: JobTicket {
+            metrics: Default::default(),
             run_id: RunId(1),
             job: JobId::singleton(OwnerId::Network, JobKind::NetworkIdentity),
             config_generation: ConfigGeneration(1),
@@ -147,6 +148,7 @@ fn intel_frequency_completion_cannot_replace_decoder_outcome() {
     ));
     let completion = worker::JobCompletion {
         ticket: JobTicket {
+            metrics: Default::default(),
             run_id: RunId(1),
             job: JobId::singleton(OwnerId::IntelGpu, JobKind::IntelFrequency),
             config_generation: ConfigGeneration(1),
@@ -213,6 +215,7 @@ fn intel_usage_completion_feeds_matching_history_source() {
     let pci = String::from("0000:00:02.0");
     let completion = worker::JobCompletion {
         ticket: JobTicket {
+            metrics: Default::default(),
             run_id: RunId(1),
             job: JobId::with_source(
                 OwnerId::IntelGpu,
@@ -293,6 +296,7 @@ fn gpu_history_selects_sample_at_or_before_nominal_deadline() {
         .gpu_history_samples
         .insert(source.clone(), samples);
     let mut ticket = JobTicket {
+        metrics: Default::default(),
         run_id: RunId(1),
         job: JobId::with_source(OwnerId::GpuHistory, JobKind::GpuHistory, source),
         config_generation: ConfigGeneration(1),

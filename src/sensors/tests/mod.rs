@@ -54,6 +54,7 @@ struct TestOwners {
     network: TestNetworkState,
     disk: disk::DiskState,
     process: process::ProcessState,
+    amd_gpu: crate::sensors::gpu_amd::AmdGpuState,
     intel_gpu: gpu_intel::IntelGpuState,
     power: PowerState,
     nvidia: TestNvidiaState,
@@ -69,6 +70,7 @@ impl TestOwners {
             network: &mut self.network,
             disk: &mut self.disk,
             process: &mut self.process,
+            amd_gpu: &mut self.amd_gpu,
             intel_gpu: &mut self.intel_gpu,
             power: &mut self.power,
             nvidia: &mut self.nvidia,
@@ -389,6 +391,7 @@ fn run_collect_output<'a>(
 // ── timed_section ────────────────────────────────────────────────────────────
 
 mod accelerators_power;
+mod amd_scheduled;
 mod capability_calls;
 mod coordination;
 mod core_collection;

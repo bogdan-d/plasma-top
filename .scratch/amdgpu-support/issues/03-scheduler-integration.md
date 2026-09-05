@@ -1,7 +1,7 @@
 # Integrate AMDGPU scheduling and lifecycle
 
 Type: task
-Status: ready-for-agent
+Status: resolved
 Blocked by: 02
 
 ## Objective
@@ -31,3 +31,13 @@ Connect AMDGPU inventory, demand, fast/slow jobs, collection, invalidation, and 
 ## Done when
 
 Production startup, reload, reconciliation, collection, and publication can populate all supported AMD readings without increasing any handwritten file beyond 1,000 lines or leaving touched warning-size files unsplit.
+
+## Completion evidence
+
+Implemented demand-gated AMD inventory reconciliation, one fast and one 30-second slow job sharing the AMD owner, and serial/async display publication for all seven readings. Job tickets carry the effective field demand, so hidden work excludes tooltip-only fields; tooltip activation refreshes newly demanded fields even when the group was already running. Job definitions include selected source paths and demand, with `amd:<PCI identity>` job identity, generation rejection, and group-specific invalidation on replacement or removal. Failed reads retain valid samples, successful siblings still publish, and only freshly captured temperature produces a notification candidate. Profiling uses retained capture times for the ticket's demanded fields.
+
+Extracted GPU catalog and scheduled execution before adding AMD behavior; the unchanged sensor suite passed 323 tests after extraction. Split the other touched warning-size files by state, dispatch/publication, attempts, and test responsibility. Every changed Rust file is below 800 lines.
+
+Eight new tests cover per-item capability/demand/cadence, hidden and tooltip field subsets, owner serialization, activation refresh, graph and notification demand, backoff and obsolete generations, partial failures, notification freshness, source/config removal and re-addition, and production async discovery through publication of all seven fixture readings. Existing NVIDIA and Intel tests pass. Graph history publication and temperature-alert evaluation remain ticket 04; live Strix Halo comparison and profiling evidence remain ticket 05.
+
+Validation passed with Rust 1.97.1: locked dependency fetch, unchanged Cargo.lock, fmt, all-target/all-feature check and Clippy with warnings denied, all-target/all-feature tests, rustdoc, repository gate, diff whitespace check, shell syntax checks, disposable user-install checks, and native package-layout/upgrade/uninstall checks. The full suite passed 870 tests, comprising 839 unit and 31 integration tests. Full tests ran outside the sandbox for SIGTERM shutdown; the package gate ran outside the sandbox for dependency downloads. No render, CSS, or QML files changed.

@@ -16,16 +16,19 @@ use crate::scheduler::{
 use super::attempts::{
     AttemptResult, AttemptStatus, Timings, attempt_bolt_peripheral, attempt_cpu, attempt_cpu_cores,
     attempt_disk_io, attempt_disk_temperature, attempt_disk_usage, attempt_external,
-    attempt_fan_speed, attempt_intel_frequency, attempt_intel_usage, attempt_memory,
-    attempt_network_info, attempt_network_speed, attempt_nvidia_fallback, attempt_nvml_nvidia,
+    attempt_fan_speed, attempt_memory, attempt_network_info, attempt_network_speed,
     attempt_process, attempt_smart, attempt_system_battery, attempt_upower_peripheral,
-    nvidia_result,
 };
 use super::coordinator::{CollectCtx, OwnerRefs};
-use super::gpu_history::DecoderOutcome;
+
 use super::process::ProcessPageStatus;
 use super::{cpu, memory, network};
 
+#[path = "scheduled/gpu.rs"]
+mod gpu;
+#[path = "scheduled/power.rs"]
+mod power;
+use power::execute_peripheral;
 #[path = "scheduled/invalidation.rs"]
 mod invalidation;
 #[path = "scheduled/profiling.rs"]
@@ -44,6 +47,10 @@ pub(crate) trait ScheduledExecutionIdentity {
     fn job(&self) -> &JobId;
 
     fn history_deadline(&self) -> Option<HistoryDeadline>;
+
+    fn metrics(&self) -> Option<&BTreeSet<crate::domain::Metric>> {
+        None
+    }
 }
 
 impl ScheduledExecutionIdentity for JobId {
@@ -57,6 +64,9 @@ impl ScheduledExecutionIdentity for JobId {
 }
 
 impl ScheduledExecutionIdentity for JobTicket {
+    fn metrics(&self) -> Option<&BTreeSet<crate::domain::Metric>> {
+        Some(&self.metrics)
+    }
     fn job(&self) -> &JobId {
         &self.job
     }
@@ -495,94 +505,31 @@ pub(crate) fn execute_scheduled_job(
             &mut notifications,
             &mut timings,
         ),
-        JobKind::NvidiaNvml => {
-            let status = if let Some(nvml) = ctx.nvml.as_deref_mut() {
-                attempt_nvml_nvidia(owners.nvidia, nvml, (ctx.clock)().monotonic)
-            } else {
-                AttemptStatus::Absent
-            };
-            merge_nvidia(owners.nvidia, status, readings, &mut notifications)
-        }
-        JobKind::NvidiaFallback => {
-            let fallback_needed = ctx.nvml.is_none()
-                || owners.nvidia.cache.nvml_init_failed
-                || owners.nvidia.cache.nvml_latest_attempt_failed;
-            let decision_at = (ctx.clock)().monotonic;
-            let fallback_due = owners
-                .nvidia
-                .cache
-                .fallback_attempted_at
-                .is_none_or(|attempted| {
-                    decision_at.saturating_sub(attempted) >= super::gpu_nvidia::GPU_CACHE_TTL
-                });
-            if fallback_needed && fallback_due {
-                let status = attempt_nvidia_fallback(owners.nvidia, ctx.commands, decision_at);
-                merge_nvidia(owners.nvidia, status, readings, &mut notifications)
-            } else if fallback_needed {
-                merge_nvidia(
-                    owners.nvidia,
-                    AttemptStatus::Cached,
-                    readings,
-                    &mut notifications,
-                )
-            } else {
-                CompletionKind::ConfirmedAbsent
-            }
-        }
-        JobKind::IntelFrequency => {
-            let SourceIdentity::Path(path) = &job.source else {
-                return absent(notifications);
-            };
-            let result =
-                attempt_intel_frequency(owners.intel_gpu, path, (ctx.clock)(), &mut timings);
-            let completion = completion(result.reading.status);
-            readings.gpu_intel_freq = sample_value(result.reading);
-            completion
-        }
-        JobKind::IntelUsage => {
-            let Some(pci) = source_device(job) else {
-                return absent(notifications);
-            };
-            let result = attempt_intel_usage(
-                owners.intel_gpu,
-                ctx.proc_root,
-                pci,
-                (ctx.clock)(),
-                &mut timings,
-            );
-            let completion = completion(result.reading.status);
-            if let Some(sample) = result.reading.sample {
-                readings.gpu_intel_usage = sample.value.get("render").copied();
-                readings.gpu_intel_dec_usage = sample.value.get("video").copied();
-            }
-            completion
-        }
-        JobKind::GpuHistory => {
-            let (history_readings, decoder) =
-                gpu_values_at_history_deadline(job, &owners, readings, history_deadline);
-            let captured_at = history_deadline.map_or_else(
-                || (ctx.clock)(),
-                |deadline| ClockSnapshot {
-                    monotonic: deadline.at().duration(),
-                    ..ClockSnapshot::default()
-                },
-            );
-            let result =
-                owners
-                    .gpu_history
-                    .sample(cfg, hw, &history_readings, decoder, captured_at, true);
-            if let Some(result) = result {
-                if let Some(history) = result.usage {
-                    readings.gpu_usage_history = history.value;
-                }
-                if let Some(history) = result.decoder {
-                    readings.gpu_dec_history = history.value;
-                }
-                CompletionKind::Captured
-            } else {
-                CompletionKind::ConfirmedAbsent
-            }
-        }
+        JobKind::AmdFast | JobKind::AmdSlow => gpu::execute_amd(
+            job,
+            execution.metrics(),
+            owners.amd_gpu,
+            hw,
+            cfg,
+            ctx,
+            readings,
+            &mut notifications,
+        ),
+        JobKind::NvidiaNvml
+        | JobKind::NvidiaFallback
+        | JobKind::IntelFrequency
+        | JobKind::IntelUsage
+        | JobKind::GpuHistory => gpu::execute(
+            job,
+            owners.reborrow(),
+            hw,
+            cfg,
+            ctx,
+            readings,
+            &mut notifications,
+            &mut timings,
+            history_deadline,
+        ),
         JobKind::PanelProcesses => {
             let result = attempt_process(owners.process, ctx.proc_root, (ctx.clock)());
             let completion = completion(result.reading.status);
@@ -687,6 +634,8 @@ pub(crate) fn reset_counter_baseline(job: &JobId, owners: OwnerRefs<'_>) {
         | JobKind::FanSpeed
         | JobKind::SystemBattery
         | JobKind::PeripheralBattery
+        | JobKind::AmdFast
+        | JobKind::AmdSlow
         | JobKind::NvidiaNvml
         | JobKind::NvidiaFallback
         | JobKind::IntelFrequency
@@ -724,6 +673,7 @@ fn reconcile(
     owners
         .nvidia
         .reconcile_source(caps.contains(&Capability::GpuNvidia) && hw.has_nvidia);
+    gpu::reconcile_amd(owners.amd_gpu, hw, caps);
     owners.intel_gpu.reconcile_sources(
         hw.intel_gpu_pci.as_deref(),
         hw.intel_gpu_freq_path.as_ref(),
@@ -737,76 +687,6 @@ fn reconcile(
         caps.contains(&Capability::ServerCheck),
         caps.contains(&Capability::ScreenBrightness),
     );
-}
-
-fn execute_peripheral(
-    job: &JobId,
-    state: &mut super::power::PowerState,
-    cfg: &Config,
-    ctx: &mut CollectCtx<'_, '_>,
-    readings: &mut DisplaySnapshot,
-    notifications: &mut DisplaySnapshot,
-    timings: &mut Option<&mut Timings>,
-) -> CompletionKind {
-    let SourceIdentity::Peripheral { role, source } = &job.source else {
-        return CompletionKind::ConfirmedAbsent;
-    };
-    let (cache, name, key) = match role {
-        PeripheralRole::Mouse => (
-            &mut state.battery_mouse_cache,
-            cfg.battery.mouse_name.as_deref(),
-            "battery_mouse",
-        ),
-        PeripheralRole::Keyboard => (
-            &mut state.battery_kbd_cache,
-            cfg.battery.kbd_name.as_deref(),
-            "battery_kbd",
-        ),
-    };
-    let result = match source {
-        PeripheralSource::Upower(id) => {
-            attempt_upower_peripheral(cache, ctx.dbus, id, name, (ctx.clock)(), key, timings)
-        }
-        PeripheralSource::Bolt(index) => {
-            let Some(bolt) = ctx.bolt.as_deref_mut() else {
-                return CompletionKind::ConfirmedAbsent;
-            };
-            attempt_bolt_peripheral(cache, bolt, *index, name, (ctx.clock)(), key, timings)
-        }
-    };
-    let completion = completion(result.reading.status);
-    let value = result.reading.sample.map(|sample| sample.value);
-    if result.reading.status == AttemptStatus::Captured {
-        match role {
-            PeripheralRole::Mouse => notifications.battery_mouse.clone_from(&value),
-            PeripheralRole::Keyboard => notifications.battery_kbd.clone_from(&value),
-        }
-    }
-    match role {
-        PeripheralRole::Mouse => readings.battery_mouse = value,
-        PeripheralRole::Keyboard => readings.battery_kbd = value,
-    }
-    completion
-}
-
-fn merge_nvidia(
-    state: &super::gpu_nvidia::NvidiaState,
-    status: AttemptStatus,
-    readings: &mut DisplaySnapshot,
-    notifications: &mut DisplaySnapshot,
-) -> CompletionKind {
-    let result = nvidia_result(state, status);
-    if let Some(sample) = result.reading.sample {
-        if status == AttemptStatus::Captured {
-            notifications.gpu_temp = sample.value.temp_celsius;
-        }
-        readings.gpu_temp = sample.value.temp_celsius;
-        readings.gpu_usage = sample.value.usage_percent;
-        readings.gpu_mem = sample.value.memory_percent;
-        readings.gpu_dec = sample.value.decoder_percent;
-        readings.gpu_fan = sample.value.fan_percent;
-    }
-    completion(status)
 }
 
 fn sample_at_history_deadline<T>(
@@ -826,58 +706,6 @@ fn history_capture_time(
         || (ctx.clock)().monotonic,
         |deadline| deadline.at().duration(),
     )
-}
-
-fn gpu_values_at_history_deadline(
-    job: &JobId,
-    owners: &OwnerRefs<'_>,
-    readings: &DisplaySnapshot,
-    deadline: Option<HistoryDeadline>,
-) -> (DisplaySnapshot, DecoderOutcome) {
-    let Some(deadline) = deadline else {
-        let decoder = readings
-            .gpu_dec
-            .or(readings.gpu_intel_dec_usage)
-            .map_or(DecoderOutcome::Unmeasured, DecoderOutcome::Value);
-        return (readings.clone(), decoder);
-    };
-    let mut eligible = readings.clone();
-    match &job.source {
-        SourceIdentity::Device(source) if source == "nvidia" => {
-            let cache = &owners.nvidia.cache;
-            if let Some(sample) = sample_at_history_deadline(&cache.history_samples, Some(deadline))
-            {
-                eligible.gpu_usage = sample.value.usage_percent;
-                eligible.gpu_dec = sample.value.decoder_percent;
-                let decoder = sample
-                    .value
-                    .decoder_percent
-                    .map_or(DecoderOutcome::Unmeasured, DecoderOutcome::Value);
-                (eligible, decoder)
-            } else {
-                eligible.gpu_usage = None;
-                eligible.gpu_dec = None;
-                (eligible, DecoderOutcome::Unmeasured)
-            }
-        }
-        SourceIdentity::Device(source) if source.starts_with("intel:") => {
-            if let Some(sample) =
-                sample_at_history_deadline(&owners.intel_gpu.usage, Some(deadline))
-            {
-                eligible.gpu_intel_usage = sample.value.get("render").copied();
-                eligible.gpu_intel_dec_usage = sample.value.get("video").copied();
-                let decoder = eligible
-                    .gpu_intel_dec_usage
-                    .map_or(DecoderOutcome::Unmeasured, DecoderOutcome::Value);
-                (eligible, decoder)
-            } else {
-                eligible.gpu_intel_usage = None;
-                eligible.gpu_intel_dec_usage = None;
-                (eligible, DecoderOutcome::Unmeasured)
-            }
-        }
-        _ => (eligible, DecoderOutcome::Unmeasured),
-    }
 }
 
 fn current_value<T>(result: &AttemptResult<T>) -> Option<&T> {
@@ -933,5 +761,6 @@ fn has_notification_sample(readings: &DisplaySnapshot) -> bool {
         || readings.battery_mouse.is_some()
         || readings.battery_kbd.is_some()
         || readings.gpu_temp.is_some()
+        || readings.gpu_amd_temp.is_some()
         || readings.server_ok.is_some()
 }

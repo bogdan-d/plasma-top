@@ -497,6 +497,7 @@ fn is_slow_startup_job(job: &JobId) -> bool {
             | JobKind::PeripheralBattery
             | JobKind::NvidiaNvml
             | JobKind::NvidiaFallback
+            | JobKind::AmdSlow
             | JobKind::IntelUsage
             | JobKind::PanelProcesses
             | JobKind::PageProcesses

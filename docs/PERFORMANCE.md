@@ -75,6 +75,8 @@ Metric-sample capture times and attempt times use monotonic `Duration` values. `
 | fan speed | 30 s |
 | NVIDIA NVML | every requested poll |
 | `nvidia-smi` fallback | 3 s |
+| AMDGPU usage, codec, VRAM, graphics clock | every requested poll |
+| AMDGPU temperature, power, fan RPM | 30 s |
 | Intel GPU usage | 30 s |
 | system battery | 30 s |
 | UPower peripheral battery | 30 s |

@@ -297,6 +297,7 @@ fn execute_history_job(
     readings: &mut DisplaySnapshot,
 ) -> crate::scheduler::CompletionKind {
     let ticket = crate::scheduler::JobTicket {
+        metrics: Default::default(),
         run_id: crate::scheduler::RunId(run_id),
         job,
         config_generation: crate::scheduler::ConfigGeneration(1),

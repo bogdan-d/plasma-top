@@ -496,6 +496,7 @@ fn failed_carried_temperature_and_load_do_not_complete_sustained_alerts() {
     let mut network_owner = network::NetworkState::default();
     let mut disk_owner = disk::DiskState::default();
     let mut process_owner = ProcessState::default();
+    let mut amd_gpu_owner = crate::sensors::gpu_amd::AmdGpuState::default();
     let mut intel_gpu_owner = gpu_intel::IntelGpuState::default();
     let mut power_owner = power::PowerState::default();
     let mut nvidia_owner = gpu_nvidia::NvidiaState::default();
@@ -518,6 +519,7 @@ fn failed_carried_temperature_and_load_do_not_complete_sustained_alerts() {
             network: &mut network_owner,
             disk: &mut disk_owner,
             process: &mut process_owner,
+            amd_gpu: &mut amd_gpu_owner,
             intel_gpu: &mut intel_gpu_owner,
             power: &mut power_owner,
             nvidia: &mut nvidia_owner,
@@ -554,6 +556,7 @@ fn failed_carried_temperature_and_load_do_not_complete_sustained_alerts() {
             network: &mut network_owner,
             disk: &mut disk_owner,
             process: &mut process_owner,
+            amd_gpu: &mut amd_gpu_owner,
             intel_gpu: &mut intel_gpu_owner,
             power: &mut power_owner,
             nvidia: &mut nvidia_owner,

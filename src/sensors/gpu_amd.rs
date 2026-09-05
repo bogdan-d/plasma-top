@@ -356,3 +356,76 @@ fn labeled_input(hwmon: &Path, prefix: &str, label: &str) -> io::Result<Option<P
 
 #[cfg(test)]
 mod tests;
+
+pub(crate) const FAST_METRICS: &[Metric] = &[
+    Metric::GpuAmdUsage,
+    Metric::GpuAmdCodecUsage,
+    Metric::GpuAmdMemUsage,
+    Metric::GpuAmdFreq,
+];
+pub(crate) const SLOW_METRICS: &[Metric] = &[
+    Metric::GpuAmdTemp,
+    Metric::GpuAmdPower,
+    Metric::GpuAmdFanSpeed,
+];
+
+pub(crate) fn supported_metrics(source: &AmdGpuSource) -> BTreeSet<Metric> {
+    [
+        (Metric::GpuAmdUsage, source.usage_path.is_some()),
+        (Metric::GpuAmdCodecUsage, source.codec_usage_path.is_some()),
+        (Metric::GpuAmdMemUsage, source.memory_paths.is_some()),
+        (Metric::GpuAmdFreq, source.freq_path.is_some()),
+        (Metric::GpuAmdTemp, source.temp_path.is_some()),
+        (Metric::GpuAmdPower, source.power_path.is_some()),
+        (Metric::GpuAmdFanSpeed, source.fan_speed_path.is_some()),
+    ]
+    .into_iter()
+    .filter_map(|(metric, present)| present.then_some(metric))
+    .collect()
+}
+
+pub(crate) fn source_for_metrics(
+    source: &AmdGpuSource,
+    metrics: &BTreeSet<Metric>,
+) -> AmdGpuSource {
+    let mut source = source.clone();
+    if !metrics.contains(&Metric::GpuAmdUsage) {
+        source.usage_path = None;
+    }
+    if !metrics.contains(&Metric::GpuAmdCodecUsage) {
+        source.codec_usage_path = None;
+    }
+    if !metrics.contains(&Metric::GpuAmdMemUsage) {
+        source.memory_paths = None;
+    }
+    if !metrics.contains(&Metric::GpuAmdFreq) {
+        source.freq_path = None;
+    }
+    if !metrics.contains(&Metric::GpuAmdTemp) {
+        source.temp_path = None;
+    }
+    if !metrics.contains(&Metric::GpuAmdPower) {
+        source.power_path = None;
+    }
+    if !metrics.contains(&Metric::GpuAmdFanSpeed) {
+        source.fan_speed_path = None;
+    }
+    source
+}
+
+impl AmdGpuState {
+    pub(crate) fn invalidate(&mut self, metrics: &[Metric]) {
+        for metric in metrics {
+            match metric {
+                Metric::GpuAmdUsage => self.samples.usage.invalidate(),
+                Metric::GpuAmdCodecUsage => self.samples.codec_usage.invalidate(),
+                Metric::GpuAmdMemUsage => self.samples.memory.invalidate(),
+                Metric::GpuAmdFreq => self.samples.frequency.invalidate(),
+                Metric::GpuAmdTemp => self.samples.temperature.invalidate(),
+                Metric::GpuAmdPower => self.samples.power.invalidate(),
+                Metric::GpuAmdFanSpeed => self.samples.fan_speed.invalidate(),
+                _ => {}
+            }
+        }
+    }
+}

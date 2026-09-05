@@ -333,6 +333,10 @@ pub(crate) fn reconcile_inventory_family(
             &mut hw.has_nvidia,
             DiscoveryOutcome::from_result(gpu_nvidia::detect_nvidia_outcome(sys_root)),
         ),
+        InventoryFamily::Amd => apply(
+            &mut hw.amd_gpu,
+            DiscoveryOutcome::from_result(gpu_amd::detect_amd_gpu(sys_root)),
+        ),
         InventoryFamily::Intel => match gpu_intel::detect_intel_gpu_outcome(sys_root) {
             Ok(paths) => {
                 hw.intel_gpu_freq_path = paths.freq_path;

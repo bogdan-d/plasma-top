@@ -82,6 +82,7 @@ pub(crate) enum OwnerId {
     Disk,
     Power,
     Nvidia,
+    AmdGpu,
     IntelGpu,
     GpuHistory,
     External,
@@ -186,6 +187,8 @@ pub(crate) enum JobKind {
     PeripheralBattery,
     NvidiaNvml,
     NvidiaFallback,
+    AmdFast,
+    AmdSlow,
     IntelFrequency,
     IntelUsage,
     GpuHistory,
@@ -235,6 +238,7 @@ pub(crate) enum TimingClass {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct JobSpec {
+    pub(crate) amd: Option<Box<AmdJob>>,
     pub(crate) id: JobId,
     pub(crate) timing: TimingClass,
     pub(crate) freshness: Duration,
@@ -250,6 +254,7 @@ impl JobSpec {
             id,
             timing: TimingClass::Periodic,
             freshness,
+            amd: None,
             history_source: None,
             startup_panel: false,
             counter: false,
@@ -262,6 +267,7 @@ impl JobSpec {
             id,
             timing: TimingClass::FastDisplay,
             freshness,
+            amd: None,
             history_source: None,
             startup_panel: false,
             counter: false,
@@ -274,6 +280,7 @@ impl JobSpec {
             id,
             timing: TimingClass::History,
             freshness: cadence,
+            amd: None,
             history_source: Some(source),
             startup_panel: false,
             counter: false,
@@ -286,6 +293,7 @@ impl JobSpec {
             id,
             timing: TimingClass::History,
             freshness: cadence,
+            amd: None,
             history_source: None,
             startup_panel: false,
             counter: false,
@@ -298,6 +306,7 @@ impl JobSpec {
             id,
             timing: TimingClass::Triggered,
             freshness: retry_budget,
+            amd: None,
             history_source: None,
             startup_panel: false,
             counter: false,
@@ -344,6 +353,7 @@ pub(crate) struct InventoryUpdate {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct JobTicket {
+    pub(crate) metrics: BTreeSet<crate::domain::Metric>,
     pub(crate) run_id: RunId,
     pub(crate) job: JobId,
     pub(crate) config_generation: ConfigGeneration,
@@ -559,5 +569,22 @@ impl Transition {
             disposition,
             actions: Vec::new(),
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct AmdJob {
+    pub(crate) source: crate::domain::readings::AmdGpuSource,
+    pub(crate) hidden: BTreeSet<crate::domain::Metric>,
+    pub(crate) tooltip: BTreeSet<crate::domain::Metric>,
+}
+
+impl AmdJob {
+    pub(crate) fn metrics(&self, presented: bool) -> BTreeSet<crate::domain::Metric> {
+        let mut metrics = self.hidden.clone();
+        if presented {
+            metrics.extend(&self.tooltip);
+        }
+        metrics
     }
 }

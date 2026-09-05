@@ -130,6 +130,23 @@ pub(crate) fn invalidate_scheduled_job(
             readings.gpu_dec = None;
             readings.gpu_fan = None;
         }
+        JobKind::AmdFast => {
+            owners
+                .amd_gpu
+                .invalidate(crate::sensors::gpu_amd::FAST_METRICS);
+            readings.gpu_amd_usage = None;
+            readings.gpu_amd_codec_usage = None;
+            readings.gpu_amd_mem_usage = None;
+            readings.gpu_amd_freq = None;
+        }
+        JobKind::AmdSlow => {
+            owners
+                .amd_gpu
+                .invalidate(crate::sensors::gpu_amd::SLOW_METRICS);
+            readings.gpu_amd_temp = None;
+            readings.gpu_amd_power = None;
+            readings.gpu_amd_fan_speed = None;
+        }
         JobKind::IntelFrequency => {
             owners.intel_gpu.frequency.invalidate();
             readings.gpu_intel_freq = None;

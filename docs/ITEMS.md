@@ -61,7 +61,7 @@ A token is **bare** when the metric has one intrinsic rendering. Generic forms u
 | `gpu_intel_dec_usage` | panel · tooltip | Intel iGPU video-decoder utilization, %. | `Igpu decoder:  0%` |
 | `screen_brightness` | panel · tooltip | Backlight level, %. | `Brightness:  70%` |
 
-AMDGPU rows require the selected device to expose the corresponding capability and a valid reading. Missing capabilities omit only their own rows. Startup discovery and the sensor readers are implemented; scheduled collection and display publication remain [ticket 03](../.scratch/amdgpu-support/issues/03-scheduler-integration.md).
+AMDGPU rows require the selected device to expose the corresponding capability and a valid reading. Missing capabilities omit only their own rows. Usage, codec, VRAM, and graphics-clock readings follow `display.poll_interval`; temperature, power, and fan readings have a 30-second freshness budget. Each group reads only demanded fields. Failed reads retain prior valid values; confirmed capability or device removal clears them. AMD graph history and temperature-alert evaluation remain [ticket 04](../.scratch/amdgpu-support/issues/04-graphs-and-notifications.md).
 
 On unified-memory AMD APUs, VRAM allocation counters describe the driver's allocation domain, not dedicated physical VRAM or all GPU-accessible system memory. GTT is not added. Codec activity does not distinguish decoding from encoding. Temperature never substitutes hotspot, junction, or memory sensors, and RPM never substitutes PWM duty.
 

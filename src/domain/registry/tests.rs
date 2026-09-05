@@ -439,7 +439,7 @@ fn separator_set_matches_render_model_keys() {
 }
 
 #[test]
-fn notification_capability_map_covers_python_notify_caps() {
+fn notification_capability_map_covers_configured_flags() {
     let map = notification_capability_map();
     let keys: Vec<&str> = map.iter().map(|(key, _)| *key).collect();
     assert_eq!(
@@ -447,6 +447,7 @@ fn notification_capability_map_covers_python_notify_caps() {
         [
             "cpu_temp",
             "gpu_nvidia_temp",
+            "gpu_amd_temp",
             "disk_usage",
             "disk_smart",
             "hd_temp",

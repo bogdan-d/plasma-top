@@ -296,6 +296,7 @@ pub(crate) enum InventoryFamily {
     SystemBattery,
     Smart,
     Nvidia,
+    Amd,
     Intel,
     Backlight,
     Network,

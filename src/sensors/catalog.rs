@@ -13,7 +13,9 @@ use crate::scheduler::{
     PeripheralSource, SchedulerConfig, SourceIdentity, TimingClass,
 };
 
-use super::{disk, gpu_intel, gpu_nvidia, network, power, process};
+use super::{disk, network, power, process};
+
+mod gpu;
 
 pub(super) fn configured_capabilities(cfg: &Config) -> BTreeSet<Capability> {
     let items = cfg
@@ -35,6 +37,7 @@ fn notification_flags(cfg: &Config) -> Vec<&'static str> {
     [
         (n.cpu_temp, "cpu_temp"),
         (n.gpu_nvidia_temp, "gpu_nvidia_temp"),
+        (n.gpu_amd_temp, "gpu_amd_temp"),
         (n.disk_usage, "disk_usage"),
         (n.disk_smart, "disk_smart"),
         (n.hd_temp, "hd_temp"),
@@ -81,6 +84,7 @@ pub(crate) fn scheduler_config(
     if graphs_enabled {
         hidden_inventory.extend([
             InventoryFamily::Nvidia,
+            InventoryFamily::Amd,
             InventoryFamily::Intel,
             InventoryFamily::Network,
         ]);
@@ -139,6 +143,7 @@ pub(crate) fn scheduler_config(
         }
     }
 
+    catalog.finish_amd_jobs();
     SchedulerConfig {
         generation,
         display_interval: cfg.display.poll_interval.duration(),
@@ -240,7 +245,7 @@ impl<'a> Catalog<'a> {
             | Metric::GpuAmdFreq
             | Metric::GpuAmdTemp
             | Metric::GpuAmdPower
-            | Metric::GpuAmdFanSpeed => None,
+            | Metric::GpuAmdFanSpeed => Some(InventoryFamily::Amd),
             Metric::ScreenBrightness => Some(InventoryFamily::Backlight),
             Metric::BatterySystem => Some(InventoryFamily::SystemBattery),
             Metric::BatteryMouse
@@ -286,6 +291,7 @@ impl<'a> Catalog<'a> {
             | InventoryFamily::Thermal
             | InventoryFamily::Smart
             | InventoryFamily::Nvidia
+            | InventoryFamily::Amd
             | InventoryFamily::Intel
             | InventoryFamily::Backlight
             | InventoryFamily::Network
@@ -317,14 +323,13 @@ impl<'a> Catalog<'a> {
             | Metric::GpuNvidiaMemUsage
             | Metric::GpuNvidiaDecoderUsage
             | Metric::GpuNvidiaFanSpeed => self.nvidia_jobs(),
-            // AMDGPU collection is connected by the scheduler integration ticket.
             Metric::GpuAmdUsage
             | Metric::GpuAmdCodecUsage
             | Metric::GpuAmdMemUsage
             | Metric::GpuAmdFreq
             | Metric::GpuAmdTemp
             | Metric::GpuAmdPower
-            | Metric::GpuAmdFanSpeed => Vec::new(),
+            | Metric::GpuAmdFanSpeed => self.amd_jobs(metric),
             Metric::GpuIntelFreq => self.intel_frequency_jobs(),
             Metric::GpuIntelUsage | Metric::GpuIntelDecoderUsage => self.intel_usage_jobs(),
             Metric::ScreenBrightness => self.brightness_jobs(),
@@ -371,6 +376,7 @@ impl<'a> Catalog<'a> {
         let capabilities = [
             (notifications.cpu_temp, Capability::CpuTemperature),
             (notifications.gpu_nvidia_temp, Capability::GpuNvidia),
+            (notifications.gpu_amd_temp, Capability::GpuAmdTemperature),
             (notifications.disk_usage, Capability::DiskUsage),
             (notifications.disk_smart, Capability::DiskSmart),
             (notifications.hd_temp, Capability::DiskTemperature),
@@ -399,14 +405,13 @@ impl<'a> Catalog<'a> {
             Capability::DiskUsage => self.disk_usage_jobs(),
             Capability::DiskSmart => self.smart_jobs(),
             Capability::GpuNvidia => self.nvidia_jobs(),
-            // AMDGPU collection is connected by the scheduler integration ticket.
-            Capability::GpuAmdUsage
-            | Capability::GpuAmdCodec
-            | Capability::GpuAmdMemory
-            | Capability::GpuAmdFrequency
-            | Capability::GpuAmdTemperature
-            | Capability::GpuAmdPower
-            | Capability::GpuAmdFanSpeed => Vec::new(),
+            Capability::GpuAmdUsage => self.amd_jobs(Metric::GpuAmdUsage),
+            Capability::GpuAmdCodec => self.amd_jobs(Metric::GpuAmdCodecUsage),
+            Capability::GpuAmdMemory => self.amd_jobs(Metric::GpuAmdMemUsage),
+            Capability::GpuAmdFrequency => self.amd_jobs(Metric::GpuAmdFreq),
+            Capability::GpuAmdTemperature => self.amd_jobs(Metric::GpuAmdTemp),
+            Capability::GpuAmdPower => self.amd_jobs(Metric::GpuAmdPower),
+            Capability::GpuAmdFanSpeed => self.amd_jobs(Metric::GpuAmdFanSpeed),
             Capability::GpuIntelFrequency => self.intel_frequency_jobs(),
             Capability::GpuIntelUsage | Capability::GpuIntelDecoder => self.intel_usage_jobs(),
             Capability::ScreenBrightness => self.brightness_jobs(),
@@ -436,48 +441,6 @@ impl<'a> Catalog<'a> {
                 self.external_file_job(JobKind::ServerFile, &self.cfg.server_check.file)
             }
         }
-    }
-
-    fn graph_jobs(&mut self) -> BTreeSet<JobId> {
-        let cpu = self.cpu_job();
-        let memory = self.memory_job();
-        let mut jobs = BTreeSet::from([
-            cpu.clone(),
-            self.cpu_history(cpu),
-            memory.clone(),
-            self.memory_history(memory),
-        ]);
-        if let Some(network) = self.network_rate_job() {
-            jobs.insert(network.clone());
-            jobs.insert(self.network_history(network));
-        }
-        let gpu_sources = if self.hw.has_nvidia {
-            self.nvidia_jobs()
-        } else {
-            self.intel_usage_jobs()
-        };
-        jobs.extend(gpu_sources);
-        let gpu_source = self
-            .hw
-            .has_nvidia
-            .then(|| String::from("nvidia"))
-            .or_else(|| {
-                self.hw
-                    .intel_gpu_pci
-                    .as_ref()
-                    .map(|pci| format!("intel:{pci}"))
-            });
-        if let Some(source) = gpu_source {
-            jobs.insert(self.insert(JobSpec::source_history(
-                JobId::with_source(
-                    OwnerId::GpuHistory,
-                    JobKind::GpuHistory,
-                    SourceIdentity::Device(source),
-                ),
-                self.cfg.display.history_interval.duration(),
-            )));
-        }
-        jobs
     }
 
     fn brightness_jobs(&mut self) -> Vec<JobId> {
@@ -705,46 +668,6 @@ impl<'a> Catalog<'a> {
             SourceIdentity::Peripheral { role, source },
         );
         vec![self.insert(JobSpec::periodic(id, freshness))]
-    }
-
-    fn nvidia_jobs(&mut self) -> Vec<JobId> {
-        if !self.hw.has_nvidia {
-            return Vec::new();
-        }
-        vec![
-            self.fast_singleton(OwnerId::Nvidia, JobKind::NvidiaNvml),
-            self.periodic_singleton(
-                OwnerId::Nvidia,
-                JobKind::NvidiaFallback,
-                gpu_nvidia::GPU_CACHE_TTL,
-            ),
-        ]
-    }
-
-    fn intel_frequency_jobs(&mut self) -> Vec<JobId> {
-        let Some(path) = self.hw.intel_gpu_freq_path.clone() else {
-            return Vec::new();
-        };
-        let id = JobId::with_source(
-            OwnerId::IntelGpu,
-            JobKind::IntelFrequency,
-            SourceIdentity::Path(path),
-        );
-        vec![self.insert(JobSpec::fast(id, self.cfg.display.poll_interval.duration()))]
-    }
-
-    fn intel_usage_jobs(&mut self) -> Vec<JobId> {
-        let Some(pci) = self.hw.intel_gpu_pci.clone() else {
-            return Vec::new();
-        };
-        let id = JobId::with_source(
-            OwnerId::IntelGpu,
-            JobKind::IntelUsage,
-            SourceIdentity::Device(pci),
-        );
-        let mut spec = JobSpec::periodic(id, gpu_intel::INTEL_GPU_USAGE_TTL);
-        spec.counter = true;
-        vec![self.insert(spec)]
     }
 
     fn external_file_job(&mut self, kind: JobKind, path: &str) -> Vec<JobId> {

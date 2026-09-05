@@ -30,6 +30,7 @@ pub const SEPARATOR_ITEMS: &[&str] = &["separator_small", "separator_big"];
 pub const NOTIFY_CAPABILITY_MAP: &[(&str, Capability)] = &[
     ("cpu_temp", Capability::CpuTemperature),
     ("gpu_nvidia_temp", Capability::GpuNvidia),
+    ("gpu_amd_temp", Capability::GpuAmdTemperature),
     ("disk_usage", Capability::DiskUsage),
     ("disk_smart", Capability::DiskSmart),
     ("hd_temp", Capability::DiskTemperature),
@@ -43,12 +44,14 @@ pub const NOTIFY_CAPABILITY_MAP: &[(&str, Capability)] = &[
 /// Capabilities added when the `graphs` page is enabled.
 ///
 /// Mirrors the special case in `registry.needed_capabilities` in
-/// `src/registry.py`: the graphs page charts NVIDIA/Intel GPU and network
+/// `src/registry.py`: the graphs page requests GPU and network
 /// history even when no such item lives on a surface, so its capabilities are
 /// requested unconditionally. The hardware gate in the collector narrows this
 /// to the GPU/interface actually present.
 pub const GRAPHS_PAGE_CAPABILITIES: &[Capability] = &[
     Capability::GpuNvidia,
+    Capability::GpuAmdUsage,
+    Capability::GpuAmdCodec,
     Capability::GpuIntelUsage,
     Capability::GpuIntelDecoder,
     Capability::NetworkSpeed,

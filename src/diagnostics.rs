@@ -85,6 +85,7 @@ fn collect_one_shot(
     let mut network_owner = network::NetworkState::default();
     let mut disk_owner = disk::DiskState::default();
     let mut process_owner = ProcessState::default();
+    let mut amd_gpu_owner = crate::sensors::gpu_amd::AmdGpuState::default();
     let mut intel_gpu_owner = gpu_intel::IntelGpuState::default();
     let mut power_owner = power::PowerState::default();
     let mut nvidia_owner = gpu_nvidia::NvidiaState::default();
@@ -110,6 +111,7 @@ fn collect_one_shot(
                     network: &mut network_owner,
                     disk: &mut disk_owner,
                     process: &mut process_owner,
+                    amd_gpu: &mut amd_gpu_owner,
                     intel_gpu: &mut intel_gpu_owner,
                     power: &mut power_owner,
                     nvidia: &mut nvidia_owner,
@@ -417,6 +419,7 @@ fn run_one_shot_profiling(config_path: Option<&Path>) -> Result<()> {
     let mut network_owner = network::NetworkState::default();
     let mut disk_owner = disk::DiskState::default();
     let mut process_owner = ProcessState::default();
+    let mut amd_gpu_owner = crate::sensors::gpu_amd::AmdGpuState::default();
     let mut intel_gpu_owner = gpu_intel::IntelGpuState::default();
     let mut power_owner = power::PowerState::default();
     let mut nvidia_owner = gpu_nvidia::NvidiaState::default();
@@ -441,6 +444,7 @@ fn run_one_shot_profiling(config_path: Option<&Path>) -> Result<()> {
                 network: &mut network_owner,
                 disk: &mut disk_owner,
                 process: &mut process_owner,
+                amd_gpu: &mut amd_gpu_owner,
                 intel_gpu: &mut intel_gpu_owner,
                 power: &mut power_owner,
                 nvidia: &mut nvidia_owner,

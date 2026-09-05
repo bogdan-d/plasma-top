@@ -61,6 +61,21 @@ impl Scheduler {
                 self.activate_jobs(&before, &after, true);
             }
             if !was_presented {
+                for (id, runtime) in &mut self.jobs {
+                    if runtime
+                        .spec
+                        .amd
+                        .as_ref()
+                        .is_some_and(|amd| !amd.tooltip.is_subset(&amd.hidden))
+                    {
+                        runtime.mark_pending(self.now);
+                        self.activation_waiting.insert(id.clone());
+                    }
+                }
+                if !self.activation_waiting.is_empty() {
+                    self.activation_deadline =
+                        Some(self.now.saturating_add(ACTIVATION_REFRESH_TIMEOUT));
+                }
                 self.issue_publish(
                     PublishReason::TooltipActivated,
                     None,

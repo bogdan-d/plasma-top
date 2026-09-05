@@ -1,11 +1,15 @@
 use std::time::Duration;
 
 use crate::domain::readings::RetainedMetricSample;
-use crate::scheduler::{JobId, JobKind, PeripheralRole, SourceIdentity};
+use crate::scheduler::{JobKind, PeripheralRole, SourceIdentity};
 
 use super::super::{OwnerRefs, network};
 
-pub(crate) fn capture_time(job: &JobId, owners: OwnerRefs<'_>) -> Option<Duration> {
+pub(crate) fn capture_time(
+    execution: &impl super::ScheduledExecutionIdentity,
+    owners: OwnerRefs<'_>,
+) -> Option<Duration> {
+    let job = execution.job();
     match (&job.kind, &job.source) {
         (JobKind::Cpu, _) => oldest([
             retained(&owners.cpu.usage),
@@ -56,6 +60,20 @@ pub(crate) fn capture_time(job: &JobId, owners: OwnerRefs<'_>) -> Option<Duratio
             retained(&owners.nvidia.cache.decoder),
             retained(&owners.nvidia.cache.fan),
         ]),
+        (JobKind::AmdFast | JobKind::AmdSlow, _) => {
+            let metrics = execution
+                .metrics()
+                .map(|metrics| metrics.iter().copied().collect::<Vec<_>>());
+            let group = if job.kind == JobKind::AmdFast {
+                crate::sensors::gpu_amd::FAST_METRICS
+            } else {
+                crate::sensors::gpu_amd::SLOW_METRICS
+            };
+            crate::sensors::attempts::amd_capture_time(
+                owners.amd_gpu.samples(),
+                metrics.as_deref().unwrap_or(group),
+            )
+        }
         (JobKind::IntelFrequency, _) => retained(&owners.intel_gpu.frequency),
         (JobKind::IntelUsage, _) => retained(&owners.intel_gpu.usage),
         (JobKind::GpuHistory, _) => oldest([

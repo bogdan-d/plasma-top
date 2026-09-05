@@ -281,6 +281,7 @@ fn distinct_owner_controls_cannot_exceed_pending_capacity() {
 fn progressive_slow_discovery_dispatches_during_first_paint_window() {
     let owner = OwnerId::Discovery;
     let ticket = JobTicket {
+        metrics: Default::default(),
         run_id: RunId(1),
         job: JobId::with_source(
             owner,
@@ -712,6 +713,7 @@ fn runtime_shutdown_timeout_abandons_blocking_work_within_budget() {
 
 fn test_ticket(run_id: RunId) -> JobTicket {
     JobTicket {
+        metrics: Default::default(),
         run_id,
         job: JobId::singleton(OwnerId::Cpu, JobKind::Cpu),
         config_generation: ConfigGeneration(1),
