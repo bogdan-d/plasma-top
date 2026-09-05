@@ -34,7 +34,7 @@ Page, control, and config latency starts immediately after the external-protocol
 
 Shutdown timing starts when the profile deadline is observed, immediately before both the scheduler shutdown event and shell/service shutdown request. It ends only after daemon owner/notification orchestration has terminated, command and D-Bus services have completed their shutdown, and the owned runtime thread has joined or exhausted the same shared 500 ms budget. The report gives the isolated duration and count over 500 ms; total process wall time is not used.
 
-These reports are instrumentation, not benchmark evidence. The retained development-host report predates explicit stimulus opt-in, so its timed scenarios contain mixed stimulus work and are not steady-scenario evidence. Corrected A/B runs have not been captured, and no SLO or power conclusion should be inferred from the command examples.
+These reports are instrumentation, not benchmark evidence. The retained development-host report predates explicit stimulus opt-in, so its timed scenarios contain mixed stimulus work and are not steady-scenario evidence. A later [AMDGPU release comparison](../.scratch/amdgpu-support/validation.md) records separate steady and stimulus runs against the pre-AMDGPU commit. It is a single development-host pass, not an SLO or power guarantee.
 
 Production command, system-D-Bus, and notification handles contain no profiling field or per-call profiling branch; timed mode wraps them in profiling-only counting facades. Owner timing and in-memory publication suppression still use one optional session check at orchestration boundaries. Those checks do not take clocks or allocate when profiling is absent. Splitting the complete owner/publication loop into duplicate production and profiling implementations would remove those branches at disproportionate maintenance and correctness cost, so the truthful claim is no production profiling collection or hot boundary-adapter branch, not literal zero instructions everywhere.
 
@@ -89,6 +89,10 @@ Metric-sample capture times and attempt times use monotonic `Duration` values. `
 | automatic mount reconciliation | `display.poll_interval` |
 
 SMART intervals remain configurable by drive class. Histories use `display.history_interval` and trim to the largest enabled consumer.
+
+AMDGPU uses one fast and one slow job on a serialized owner. Jobs read only demanded supported fields; configured graphs keep usage and codec history active while the tooltip is hidden, without demanding temperature, power, fan, clock, or VRAM. Each field retains its own successful sample and capture time across failures. Confirmed capability loss clears only the affected field; confirmed device replacement clears all AMD samples and resets the selected GPU history. Discovery uses direct DRM/PCI/hwmon inspection and introduces no subprocess.
+
+The 2026-09-05 Strix Halo comparison recorded 44 AMD fast captures, 43 GPU history captures, two AMD inventory passes, and no AMD slow job in a 65-second hidden run. Subprocess counts matched the unchanged baseline in hidden, main, and graphs scenarios. Both revisions reported no skipped display deadlines or publications over 50 ms. See the [report](../.scratch/amdgpu-support/validation.md) for configuration, latency distributions, workload response, and measurement limits. Newly restored AMD config demand took about one poll to reappear in a separate live-daemon check.
 
 During the first 90 seconds, `src/daemon.rs` logs when demanded slow metric samples first become available. The boot watch then disables itself, keeping steady-state observability cost negligible.
 

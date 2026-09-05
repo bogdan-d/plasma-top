@@ -1,7 +1,7 @@
 # Validate the Strix Halo and repository
 
 Type: task
-Status: ready-for-agent
+Status: resolved
 Blocked by: 04
 
 ## Objective
@@ -34,3 +34,15 @@ Run the exact current commands from `docs/DEVELOPMENT.md` if they differ when im
 ## Done when
 
 All gates pass, Qt and live Strix Halo evidence is recorded, readings match their direct sources and units, unsupported metrics remain absent, and no claim is made for untested legacy `radeon` hardware.
+
+## Comments
+
+2026-09-05: Completed host/sysfs and `amdgpu_top` comparison, bounded Vulkan and VA-API workloads, release baseline comparison, disposable daemon restart/config demand checks, all 880 tests and required repository/package gates, Qt visual review, and application-form QML smoke. Fixed the probe output omission for AMD source paths and all seven readings. Details, reproduction commands, timings, and limits are in [the validation report](../validation.md).
+
+2026-09-05 follow-up: Bogdan ran `./install.sh` and supplied a screenshot of the installed widget. Visual review confirms all six supported AMD rows, correct units and VRAM threshold color, clean fan absence, and tooltip geometry without clipping. Installation approval is no longer pending. The ticket remains `ready-for-human` while installed-widget hover/pinning, wheel paging to AMD graphs, and light/dark theme switching await confirmation. See the installed-widget evidence in [the report](../validation.md).
+
+2026-09-05 acceptance: In response to the installed-widget interaction checks, Bogdan confirmed that everything seems to work fine.
+
+## Answer
+
+Validated AMDGPU telemetry on Strix Halo against direct sysfs readings and a bounded `amdgpu_top` snapshot, with graphics/codec workload response and clean fan absence. The release baseline comparison showed no added subprocesses or missed display deadlines. All 880 tests, required gates, Qt visual checks, and disposable QML/lifecycle checks passed. Bogdan installed the candidate, supplied live-tooltip evidence, and confirmed normal operation. Fixed the diagnostic omission of AMD source paths and readings; documented results and measurement limits in [the validation report](../validation.md), `docs/METRICS_INVENTORY.md`, and `docs/PERFORMANCE.md`.

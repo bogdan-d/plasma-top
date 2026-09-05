@@ -92,12 +92,23 @@ Relevant code: `src/sensors/power.rs`, `src/sensors/hid.rs`, and `src/adapters.r
 | NVIDIA temperature, utilization, memory, decoder, fan | NVIDIA Management Library | Optional `nvml-wrapper` feature; library loaded at runtime | Every requested poll; a locally discovered configured panel source is a real startup blocker |
 | NVIDIA fallback metrics | `nvidia-smi --query-gpu=... --format=csv,noheader,nounits` | External `nvidia-smi` process | Used when NVML is unavailable or a read fails; 3-second freshness budget and 5-second timeout |
 | NVIDIA history | Current NVIDIA sample | In-memory vectors | Sampled at `display.history_interval` when required |
+| AMDGPU device and codec usage | `gpu_busy_percent` and `vcn_busy_percent` under the selected PCI device | Independent direct sysfs percentage reads | Every requested poll |
+| AMDGPU VRAM usage | `mem_info_vram_used` and `mem_info_vram_total` | Direct byte-counter pair; reject zero total or used above total | Every requested poll; driver VRAM allocation domain, including on UMA, without GTT |
+| AMDGPU graphics clock | AMDGPU hwmon `freq*_input` labeled `sclk` | Direct Hz read, integer division by 1,000,000 to MHz | Every requested poll |
+| AMDGPU temperature | AMDGPU hwmon `temp*_input` labeled `edge` | Direct millidegree read, integer division by 1,000 to Celsius | 30-second freshness budget; no junction/hotspot substitution |
+| AMDGPU average power | AMDGPU hwmon `power1_average` | Direct microwatt read, integer division by 1,000,000 to watts | 30-second freshness budget; no instantaneous-power substitution |
+| AMDGPU fan | AMDGPU hwmon `fan1_input` | Direct RPM read; zero renders as `off` | 30-second freshness budget; missing tachometer omits the row |
+| Selected GPU history | Retained NVIDIA, AMDGPU, or Intel samples, in that priority order | In-memory usage and secondary-utilization vectors; AMD secondary is codec usage | Sampled at `display.history_interval`; selected vendor or PCI identity change resets history |
 | Intel GPU frequency | Discovered DRM/sysfs frequency file | Direct Rust file read | Every requested poll |
 | Intel GPU render/decoder utilization | `/proc/[pid]/fd/*/fdinfo` DRM engine counters associated with the Intel PCI device | Direct procfs scan and consecutive counter diff | 30-second freshness budget; a locally discovered configured panel source is a real startup blocker |
 
 The default Cargo feature set does not enable NVML. Packaging must build with the `nvml` feature to use `nvml-wrapper`; otherwise NVIDIA always uses the `nvidia-smi` fallback.
 
-Relevant code: `src/sensors/gpu_nvidia.rs`, `src/sensors/gpu_intel.rs`, and the `nvml` feature in `Cargo.toml`.
+AMDGPU discovery inspects numeric DRM cards, requires AMD vendor ID, display PCI class, and the `amdgpu` driver, then selects the lowest canonical PCI identity. Source paths are rediscovered every 60 seconds while AMD items, notification temperature, or configured graphs demand them. The fast and slow jobs share one serialized owner and read only demanded fields. Each field retains its last successful value after a read failure; confirmed capability loss clears that field, and confirmed device removal clears the owner. Incomplete discovery retains the previous inventory. Temperature alerts consume fresh successful temperature captures only.
+
+AMDGPU sampling and discovery start no subprocess and do not use binary `gpu_metrics`, DPM controls, fdinfo, or `amdgpu_top`. Live Strix Halo evidence and its limits are recorded in the [AMDGPU validation report](../.scratch/amdgpu-support/validation.md). Legacy `radeon` hardware is outside this implementation.
+
+Relevant code: `src/sensors/gpu_nvidia.rs`, `src/sensors/gpu_amd.rs`, `src/sensors/gpu_intel.rs`, `src/sensors/gpu_history.rs`, and the `nvml` feature in `Cargo.toml`.
 
 ### Other panel and tooltip readings
 

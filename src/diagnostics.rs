@@ -310,6 +310,7 @@ pub fn run_probe(config_path: Option<&Path>) -> Result<()> {
         one.hw.intel_gpu_pci.as_deref().unwrap_or("(not found)")
     );
     println!("has_nvidia:      {}\n", one.hw.has_nvidia);
+    println!("amd_gpu:         {:?}\n", one.hw.amd_gpu);
     println!("── Readings ────────────────────────────────────────────────");
     print_readings(&one.readings);
     println!();
@@ -362,6 +363,13 @@ fn print_readings(r: &DisplaySnapshot) {
     reading!(r, gpu_mem);
     reading!(r, gpu_dec);
     reading!(r, gpu_fan);
+    reading!(r, gpu_amd_usage);
+    reading!(r, gpu_amd_codec_usage);
+    reading!(r, gpu_amd_mem_usage);
+    reading!(r, gpu_amd_freq);
+    reading!(r, gpu_amd_temp);
+    reading!(r, gpu_amd_power);
+    reading!(r, gpu_amd_fan_speed);
     reading!(r, gpu_intel_freq);
     reading!(r, gpu_intel_usage);
     reading!(r, gpu_intel_dec_usage);
