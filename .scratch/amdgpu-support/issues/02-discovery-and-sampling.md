@@ -1,7 +1,7 @@
 # Discover and sample AMDGPU sources
 
 Type: task
-Status: ready-for-agent
+Status: resolved
 Blocked by: 01
 
 ## Objective
@@ -31,3 +31,13 @@ Implement a cadence-free AMDGPU sensor owner that discovers one stable source an
 ## Done when
 
 Initial production discovery can populate the selected AMDGPU inventory, the module can be exercised entirely through fixtures, it exposes no cadence or command dependency, and its focused tests pass.
+
+## Completion evidence
+
+Implemented on 2026-09-05 in `src/sensors/gpu_amd.rs`, with fixture tests in `src/sensors/gpu_amd/tests.rs`. Startup/local discovery merges AMDGPU outcomes through the existing confirmed-versus-failed contract. Selection inspects all qualifying cards, chooses the lowest canonical PCI identity, and resolves hwmon paths dynamically. Optional capabilities remain independent, including paired VRAM allocation counters and exact case-insensitive edge/sclk labels.
+
+`AmdGpuState::reconcile_source` invalidates samples for replaced devices or changed capability paths. `sample` attempts only the supplied metric set and reuses `RetainedMetricSample` for independent successful values, failure retention, confirmed absence, and attempt times. Integer MHz, watts, and Celsius truncate fractional units toward zero. Temperature rejects values below absolute zero or outside the bounded display range. VRAM percentage calculation retains exact byte counters and uses the existing overflow-safe domain conversion. No command, dependency, control-file write, timer, or freshness policy was added.
+
+Direct interface units were checked against the [kernel AMDGPU hwmon documentation](https://docs.kernel.org/gpu/amdgpu/thermal.html). Validation passed with Rust 1.97.1: all 12 focused AMDGPU tests, `cargo fetch --locked`, unchanged `Cargo.lock`, `cargo fmt -- --check`, `cargo check --all-targets --all-features`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test --all-targets --all-features` with 831 unit and 31 integration tests, `cargo doc --no-deps`, and `tools/repository_gate.sh`. The full test suite ran outside the sandbox for the daemon signal integration test. No render or QML behavior changed.
+
+Next: ticket 03, scheduler integration and publication. These checks establish fixture behavior and startup discovery integration; live Strix Halo display validation remains ticket 05.

@@ -9,6 +9,7 @@
 pub mod cpu;
 pub mod disk;
 pub mod external;
+pub mod gpu_amd;
 pub mod gpu_history;
 pub mod gpu_intel;
 pub mod gpu_nvidia;
