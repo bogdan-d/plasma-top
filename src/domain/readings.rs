@@ -69,6 +69,13 @@ impl<T> RetainedMetricSample<T> {
             })
     }
 
+    // Update retained composite values without changing their capture or failure times.
+    pub(crate) fn update_values(&mut self, mut update: impl FnMut(&mut T)) {
+        for sample in self.latest.iter_mut().chain(self.previous.iter_mut()) {
+            update(&mut sample.value);
+        }
+    }
+
     /// Records a successful attempt that produced no comparable value.
     pub fn record_baseline(&mut self, attempted_at: Duration) {
         self.attempted_at = Some(attempted_at);
@@ -257,6 +264,33 @@ pub struct AmdGpuSource {
     pub fan_speed_path: Option<PathBuf>,
     /// VRAM allocation counters are available only as a used/total pair.
     pub memory_paths: Option<AmdGpuMemoryPaths>,
+}
+
+impl AmdGpuSource {
+    pub(crate) fn changed_metrics(&self, other: &Self) -> BTreeSet<Metric> {
+        let replaced = self.pci_identity != other.pci_identity;
+        [
+            (Metric::GpuAmdUsage, self.usage_path != other.usage_path),
+            (
+                Metric::GpuAmdCodecUsage,
+                self.codec_usage_path != other.codec_usage_path,
+            ),
+            (
+                Metric::GpuAmdMemUsage,
+                self.memory_paths != other.memory_paths,
+            ),
+            (Metric::GpuAmdFreq, self.freq_path != other.freq_path),
+            (Metric::GpuAmdTemp, self.temp_path != other.temp_path),
+            (Metric::GpuAmdPower, self.power_path != other.power_path),
+            (
+                Metric::GpuAmdFanSpeed,
+                self.fan_speed_path != other.fan_speed_path,
+            ),
+        ]
+        .into_iter()
+        .filter_map(|(metric, changed)| (replaced || changed).then_some(metric))
+        .collect()
+    }
 }
 
 /// Paired driver VRAM allocation counters.

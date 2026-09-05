@@ -70,7 +70,12 @@ impl GpuHistoryState {
         match decoder_outcome {
             DecoderOutcome::Value(value) => self.latest_decoder = Some(value),
             DecoderOutcome::ConfirmedAbsent => self.latest_decoder = None,
-            DecoderOutcome::TransientFailure | DecoderOutcome::Unmeasured => {}
+            DecoderOutcome::TransientFailure | DecoderOutcome::Unmeasured => {
+                // AMD supplies retained, deadline-eligible codec values as Value; no value must not revive an invalidated source.
+                if !hw.has_nvidia && hw.amd_gpu.is_some() {
+                    self.latest_decoder = None;
+                }
+            }
         }
 
         if append {

@@ -94,32 +94,8 @@ impl AmdGpuState {
         if self.source.as_ref() == source {
             return;
         }
-        if let (Some(old), Some(new)) = (&self.source, source)
-            && old.pci_identity == new.pci_identity
-        {
-            invalidate_changed(&mut self.samples.usage, &old.usage_path, &new.usage_path);
-            invalidate_changed(
-                &mut self.samples.codec_usage,
-                &old.codec_usage_path,
-                &new.codec_usage_path,
-            );
-            invalidate_changed(
-                &mut self.samples.memory,
-                &old.memory_paths,
-                &new.memory_paths,
-            );
-            invalidate_changed(&mut self.samples.frequency, &old.freq_path, &new.freq_path);
-            invalidate_changed(
-                &mut self.samples.temperature,
-                &old.temp_path,
-                &new.temp_path,
-            );
-            invalidate_changed(&mut self.samples.power, &old.power_path, &new.power_path);
-            invalidate_changed(
-                &mut self.samples.fan_speed,
-                &old.fan_speed_path,
-                &new.fan_speed_path,
-            );
+        if let (Some(old), Some(new)) = (&self.source, source) {
+            self.invalidate(old.changed_metrics(new));
         } else {
             self.samples = AmdGpuSamples::default();
         }
@@ -181,12 +157,6 @@ impl AmdGpuState {
     }
 }
 
-fn invalidate_changed<T, P: PartialEq>(sample: &mut RetainedMetricSample<T>, old: &P, new: &P) {
-    if old != new {
-        sample.invalidate();
-    }
-}
-
 fn sample_path<T, P: ?Sized>(
     sample: &mut RetainedMetricSample<T>,
     path: Option<&P>,
@@ -238,13 +208,6 @@ pub fn detect_amd_gpu(sys_root: &Path) -> io::Result<Option<AmdGpuSource>> {
     let mut selected: Option<AmdGpuSource> = None;
     for card in numbered_entries(&sys_root.join("class/drm"), "card")? {
         let device = fs::canonicalize(card.join("device"))?;
-        let vendor = read_pci_value(&device.join("vendor"), 0xffff)?;
-        if vendor != 0x1002 {
-            continue;
-        }
-        if read_pci_value(&device.join("class"), 0xffffff)? >> 16 != 0x03 {
-            continue;
-        }
         let driver = device.join("driver");
         if !entry_exists(&driver)? {
             continue;
@@ -254,6 +217,13 @@ pub fn detect_amd_gpu(sys_root: &Path) -> io::Result<Option<AmdGpuSource>> {
             .and_then(|name| name.to_str())
             != Some("amdgpu")
         {
+            continue;
+        }
+        let vendor = read_pci_value(&device.join("vendor"), 0xffff)?;
+        if vendor != 0x1002 {
+            continue;
+        }
+        if read_pci_value(&device.join("class"), 0xffffff)? >> 16 != 0x03 {
             continue;
         }
         let pci_identity = pci_identity(&device)?;
@@ -457,7 +427,7 @@ pub(crate) fn source_for_metrics(
 }
 
 impl AmdGpuState {
-    pub(crate) fn invalidate(&mut self, metrics: &[Metric]) {
+    pub(crate) fn invalidate(&mut self, metrics: impl IntoIterator<Item = Metric>) {
         for metric in metrics {
             match metric {
                 Metric::GpuAmdUsage => self.samples.usage.invalidate(),

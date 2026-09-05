@@ -196,8 +196,13 @@ impl SerialSchedule {
                 SchedulerAction::ResetCounterBaseline { job } => {
                     reset_counter_baseline(&job, owners.reborrow());
                 }
-                SchedulerAction::InvalidateJob { job, .. } => {
-                    invalidate_scheduled_job(&job, owners.reborrow(), &mut self.readings);
+                SchedulerAction::InvalidateJob { job, metrics, .. } => {
+                    invalidate_scheduled_job(
+                        &job,
+                        owners.reborrow(),
+                        &mut self.readings,
+                        metrics.as_ref(),
+                    );
                 }
                 SchedulerAction::CancelJob { ticket, .. } => {
                     self.pending.extend(

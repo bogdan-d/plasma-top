@@ -138,3 +138,58 @@ fn amd_history_worker_does_not_leak_future_values_into_first_deadline() {
     assert!(result.readings.gpu_usage_history.is_empty());
     assert!(result.readings.gpu_dec_history.is_empty());
 }
+
+#[test]
+fn amd_codec_replacement_does_not_repeat_invalidated_history() {
+    let root = std::env::temp_dir().join(format!(
+        "plasma-amd-codec-replacement-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&root).expect("fixture root");
+    let codec = root.join("codec");
+    let replacement = root.join("replacement");
+    std::fs::write(&codec, "23").expect("codec fixture");
+    std::fs::write(&replacement, "broken").expect("replacement fixture");
+    let mut hw = HardwareInventory {
+        amd_gpu: Some(AmdGpuSource {
+            pci_identity: String::from("0000:c3:00.0"),
+            codec_usage_path: Some(codec.clone()),
+            ..AmdGpuSource::default()
+        }),
+        ..HardwareInventory::default()
+    };
+    let clock = ProductionClock::default();
+    let roots = FilesystemRoots::default();
+    let mut sensor = WorkerState::new(OwnerId::AmdGpu, FakeCommandRunner::new(), FakeDbus::new());
+    let mut history = WorkerState::new(
+        OwnerId::GpuHistory,
+        FakeCommandRunner::new(),
+        FakeDbus::new(),
+    );
+    for (step, expected) in [
+        (0, vec![23]),
+        (1, vec![23, 23]),
+        (2, vec![23, 23]),
+        (3, vec![23, 23, 64]),
+    ] {
+        if step == 1 {
+            std::fs::write(&codec, "broken").expect("transient codec failure");
+        } else if step == 2 {
+            hw.amd_gpu.as_mut().expect("AMD").codec_usage_path = Some(replacement.clone());
+        } else if step == 3 {
+            std::fs::write(&replacement, "64").expect("replacement recovers");
+        }
+        let completion = sensor.execute(input(JobKind::AmdFast, &hw), &roots, &clock);
+        let mut sample = input(JobKind::GpuHistory, &hw);
+        sample.gpu_history_point = completion.gpu_history_point.map(|(_, point)| point);
+        let result = history.execute(sample, &roots, &clock);
+        assert_eq!(result.readings.gpu_dec_history, expected, "step {step}");
+    }
+    let result = history.execute(input(JobKind::GpuHistory, &hw), &roots, &clock);
+    assert_eq!(
+        result.readings.gpu_dec_history,
+        [23, 23, 64],
+        "no eligible point must not repeat a cached future codec"
+    );
+    std::fs::remove_dir_all(root).expect("fixture cleanup");
+}

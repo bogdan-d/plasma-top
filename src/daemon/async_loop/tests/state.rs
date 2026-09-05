@@ -1,4 +1,5 @@
 use super::*;
+use std::collections::BTreeSet;
 
 #[test]
 fn profiling_selection_changes_only_after_the_watcher_observes_the_page_file() {
@@ -587,18 +588,47 @@ fn amd_history_commit_keeps_deadlines_and_slow_invalidation_independent() {
             .1,
         Some(23)
     );
-    state.invalidate_decoder(&JobId::with_source(
-        OwnerId::AmdGpu,
-        JobKind::AmdSlow,
-        source,
-    ));
+    state.invalidate_decoder(
+        &JobId::with_source(OwnerId::AmdGpu, JobKind::AmdSlow, source),
+        None,
+    );
     assert!(state.gpu_history_point_for(&history).is_some());
+    let clock_only = BTreeSet::from([crate::domain::Metric::GpuAmdFreq]);
+    state.invalidate_decoder(&fast, Some(&clock_only));
+    state.invalidate_job_readings(&fast, Some(&clock_only));
+    assert_eq!(state.render_generation, generation + 2);
+    assert_eq!(
+        state
+            .gpu_history_point_for(&history)
+            .expect("retained codec")
+            .value
+            .1,
+        Some(23)
+    );
+    let usage_only = BTreeSet::from([crate::domain::Metric::GpuAmdUsage]);
+    state.invalidate_decoder(&fast, Some(&usage_only));
+    state.invalidate_job_readings(&fast, Some(&usage_only));
+    assert_eq!(state.readings.gpu_amd_usage, None);
+    assert_eq!(state.readings.gpu_amd_codec_usage, Some(64));
+    for (cutoff, at, codec) in [(2, 1, 23), (4, 3, 64)] {
+        history.history_deadline = Some(HistoryDeadline::new(SchedulerTime::from_duration(
+            Duration::from_secs(cutoff),
+        )));
+        let point = state
+            .gpu_history_point_for(&history)
+            .expect("retained sibling");
+        assert_eq!(point.captured_at, Duration::from_secs(at));
+        assert_eq!(
+            point.value,
+            (None, Some(codec), DecoderOutcome::Value(codec))
+        );
+    }
     history.job.source = SourceIdentity::Device(String::from("amd:0000:01:00.0"));
     assert!(state.gpu_history_point_for(&history).is_none());
-    state.invalidate_decoder(&fast);
-    state.invalidate_job_readings(&fast);
+    state.invalidate_decoder(&fast, None);
+    state.invalidate_job_readings(&fast, None);
     assert!(state.gpu_history_samples.is_empty());
     assert_eq!(state.readings.gpu_amd_usage, None);
-    assert_eq!(state.render_generation, generation + 3);
+    assert_eq!(state.render_generation, generation + 4);
     let _ = fs::remove_dir_all(root);
 }

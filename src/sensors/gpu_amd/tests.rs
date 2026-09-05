@@ -117,6 +117,21 @@ fn selection_uses_pci_identity_and_excludes_other_cards() {
 }
 
 #[test]
+fn unrelated_platform_drm_device_does_not_require_pci_attributes() {
+    let fixture = Fixture::new();
+    let (_, expected) = fixture.full();
+    let device = fixture.0.join("devices/platform/simple-framebuffer.0");
+    let driver = fixture.0.join("bus/platform/drivers/simple-framebuffer");
+    let card = fixture.0.join("class/drm/card0");
+    for directory in [&device, &driver, &card] {
+        fs::create_dir_all(directory).unwrap();
+    }
+    symlink(&device, card.join("device")).unwrap();
+    symlink(driver, device.join("driver")).unwrap();
+    assert_eq!(detect_amd_gpu(&fixture.0).unwrap(), Some(expected));
+}
+
+#[test]
 fn only_complete_enumeration_can_confirm_absence() {
     let fixture = Fixture::new();
     assert_eq!(detect_amd_gpu(&fixture.0).unwrap(), None);

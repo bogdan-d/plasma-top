@@ -197,7 +197,7 @@ fn full_owner_channel_retains_correctness_message_until_capacity_returns() {
         .try_send(OwnerMessage::Reset(reset.clone()))
         .expect("fill channel");
     let senders = OwnerSenders::single(owner, sender);
-    let mut pending = VecDeque::from([(owner, OwnerMessage::Invalidate(reset))]);
+    let mut pending = VecDeque::from([(owner, OwnerMessage::Invalidate(reset, None))]);
 
     assert_eq!(flush_owner_messages(&mut pending, &senders), None);
     assert_eq!(pending.len(), 1, "full channel dropped correctness work");
@@ -206,7 +206,7 @@ fn full_owner_channel_retains_correctness_message_until_capacity_returns() {
     assert!(pending.is_empty());
     assert!(matches!(
         receiver.try_recv(),
-        Ok(OwnerMessage::Invalidate(_))
+        Ok(OwnerMessage::Invalidate(..))
     ));
 }
 
@@ -744,4 +744,41 @@ fn test_paths(label: &str) -> (PathBuf, DaemonPaths) {
             kdeglobals: root.join("kdeglobals"),
         },
     )
+}
+
+#[test]
+fn queued_partial_invalidations_accumulate_and_full_invalidation_wins() {
+    use crate::domain::Metric;
+    let job = JobId::with_source(
+        OwnerId::AmdGpu,
+        JobKind::AmdFast,
+        SourceIdentity::Device("amd:0000:c3:00.0".into()),
+    );
+    let mut pending = VecDeque::new();
+    for metric in [Metric::GpuAmdUsage, Metric::GpuAmdCodecUsage] {
+        assert!(queue_owner_message(
+            &mut pending,
+            (
+                job.owner,
+                OwnerMessage::Invalidate(job.clone(), Some([metric].into()))
+            )
+        ));
+    }
+    assert_eq!(pending.len(), 1);
+    assert!(
+        matches!(&pending[0].1, OwnerMessage::Invalidate(_, Some(metrics)) if *metrics == [Metric::GpuAmdUsage, Metric::GpuAmdCodecUsage].into())
+    );
+    assert!(queue_owner_message(
+        &mut pending,
+        (job.owner, OwnerMessage::Invalidate(job.clone(), None))
+    ));
+    assert!(queue_owner_message(
+        &mut pending,
+        (
+            job.owner,
+            OwnerMessage::Invalidate(job.clone(), Some([Metric::GpuAmdFreq].into()))
+        )
+    ));
+    assert_eq!(pending.len(), 1);
+    assert!(matches!(&pending[0].1, OwnerMessage::Invalidate(_, None)));
 }

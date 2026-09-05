@@ -55,7 +55,11 @@ impl Owners {
     }
 }
 
-pub(super) fn invalidate_readings(job: &JobId, readings: &mut DisplaySnapshot) {
+pub(super) fn invalidate_readings(
+    job: &JobId,
+    readings: &mut DisplaySnapshot,
+    metrics: Option<&std::collections::BTreeSet<crate::domain::Metric>>,
+) {
     let mut owners = Owners::new();
-    invalidate_scheduled_job(job, owners.refs(), readings);
+    invalidate_scheduled_job(job, owners.refs(), readings, metrics);
 }

@@ -197,8 +197,13 @@ pub(super) fn execute_transition(
                     },
                 }));
             }
-            QueuedAction::Scheduler(SchedulerAction::InvalidateJob { job, .. }) => {
-                invalidate_scheduled_job(&job, state.owners.refs(), &mut state.readings);
+            QueuedAction::Scheduler(SchedulerAction::InvalidateJob { job, metrics, .. }) => {
+                invalidate_scheduled_job(
+                    &job,
+                    state.owners.refs(),
+                    &mut state.readings,
+                    metrics.as_ref(),
+                );
             }
             QueuedAction::Scheduler(SchedulerAction::CancelJob { ticket, .. }) => {
                 state.notification_samples.remove(&ticket.run_id);

@@ -249,6 +249,7 @@ fn invalidated_cpu_graph_inputs_become_requestable_but_unrelated_input_does_not(
         (JobId::singleton(OwnerId::Cpu, JobKind::CpuHistory), 3),
     ] {
         let mut actions = VecDeque::from([SchedulerAction::InvalidateJob {
+            metrics: None,
             job,
             reason: crate::scheduler::CancelReason::SourceReplaced,
         }]);
@@ -279,6 +280,7 @@ fn invalidated_cpu_graph_inputs_become_requestable_but_unrelated_input_does_not(
 
     state.readings.screen_brightness = Some(75);
     let mut actions = VecDeque::from([SchedulerAction::InvalidateJob {
+        metrics: None,
         job: JobId::singleton(OwnerId::External, JobKind::Brightness),
         reason: crate::scheduler::CancelReason::SourceReplaced,
     }]);

@@ -89,7 +89,7 @@ pub(super) struct RescanInput {
 pub(super) enum OwnerMessage {
     Run(Box<JobInput>),
     Reset(JobId),
-    Invalidate(JobId),
+    Invalidate(JobId, Option<BTreeSet<crate::domain::Metric>>),
     PagesChanged(Vec<Page>),
     Rescan(Box<RescanInput>),
     ReconcileTheme {
@@ -103,7 +103,7 @@ impl OwnerMessage {
         match self {
             Self::Run(input) => Some(&input.ticket),
             Self::Reset(_)
-            | Self::Invalidate(_)
+            | Self::Invalidate(..)
             | Self::PagesChanged(_)
             | Self::Rescan(_)
             | Self::ReconcileTheme { .. } => None,
@@ -368,11 +368,12 @@ where
                 }
             }
             OwnerMessage::Reset(job) => reset_counter_baseline(&job, worker.owners.refs()),
-            OwnerMessage::Invalidate(job) => {
+            OwnerMessage::Invalidate(job, metrics) => {
                 invalidate_scheduled_job(
                     &job,
                     worker.owners.refs(),
                     &mut DisplaySnapshot::default(),
+                    metrics.as_ref(),
                 );
             }
             OwnerMessage::PagesChanged(pages) => worker.pages_changed(&pages),
@@ -625,6 +626,10 @@ pub(super) fn uses_blocking_lane(job: &JobId) -> bool {
     )
 }
 
-pub(super) fn invalidate_readings(job: &JobId, readings: &mut DisplaySnapshot) {
-    owners::invalidate_readings(job, readings);
+pub(super) fn invalidate_readings(
+    job: &JobId,
+    readings: &mut DisplaySnapshot,
+    metrics: Option<&BTreeSet<crate::domain::Metric>>,
+) {
+    owners::invalidate_readings(job, readings, metrics);
 }

@@ -1,13 +1,88 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::scheduler::{
-    CancelReason, DemandPlan, InventoryUpdate, JobId, PublishReason, SchedulerAction, TimingClass,
+    CancelReason, DemandPlan, InventoryUpdate, JobId, JobSpec, PublishReason, SchedulerAction,
+    TimingClass,
 };
 
 use super::policy::is_cancelled_page_work;
-use super::{ACTIVATION_REFRESH_TIMEOUT, DEACTIVATION_GRACE, Scheduler};
+use super::{ACTIVATION_REFRESH_TIMEOUT, DEACTIVATION_GRACE, JobRuntime, Scheduler};
 
 impl Scheduler {
+    pub(super) fn replace_jobs(
+        &mut self,
+        specs: Vec<JobSpec>,
+        reason: CancelReason,
+        actions: &mut Vec<SchedulerAction>,
+    ) {
+        self.cancel_all(reason, actions);
+        let display_deadline = self
+            .next_display
+            .unwrap_or_else(|| self.now.saturating_add(self.display_interval));
+        let mut old = std::mem::take(&mut self.jobs);
+        let mut replacement = BTreeMap::new();
+        for spec in specs {
+            let id = spec.id.clone();
+            let (runtime, source_changed, metrics) = if let Some(previous) = old.remove(&id) {
+                let source_changed = previous.spec.history_source != spec.history_source
+                    || previous.spec.amd != spec.amd;
+                let metrics = previous
+                    .spec
+                    .amd
+                    .as_ref()
+                    .zip(spec.amd.as_ref())
+                    .map(|(old, new)| old.source.changed_metrics(&new.source));
+                if previous.spec == spec {
+                    (JobRuntime { spec, ..previous }, false, metrics)
+                } else {
+                    let mut runtime = JobRuntime::new(spec, self.now, display_deadline);
+                    runtime.has_sample = previous.has_sample && !source_changed;
+                    (runtime, source_changed, metrics)
+                }
+            } else {
+                (
+                    JobRuntime::new(spec, self.now, display_deadline),
+                    false,
+                    None,
+                )
+            };
+            if source_changed {
+                actions.push(SchedulerAction::InvalidateJob {
+                    job: id.clone(),
+                    reason,
+                    metrics,
+                });
+            }
+            replacement.insert(id, runtime);
+        }
+        for (id, _) in old {
+            actions.push(SchedulerAction::InvalidateJob {
+                job: id,
+                reason,
+                metrics: None,
+            });
+        }
+        self.jobs = replacement;
+        if self.first_paint_issued {
+            self.first_paint_waiting.clear();
+        } else {
+            self.first_paint_waiting.clear();
+            let demanded = self.current_demand();
+            for (id, runtime) in &mut self.jobs {
+                if demanded.contains(id)
+                    && runtime.spec.startup_panel
+                    && runtime.spec.timing != TimingClass::History
+                    && !runtime.has_sample
+                {
+                    runtime.mark_pending(self.now);
+                    self.first_paint_waiting.insert(id.clone());
+                }
+            }
+        }
+        self.activation_waiting
+            .retain(|job| self.jobs.contains_key(job));
+    }
+
     pub(super) fn change_inventory(
         &mut self,
         update: InventoryUpdate,

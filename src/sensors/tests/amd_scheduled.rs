@@ -168,7 +168,7 @@ fn lifecycle_clears_removed_fields_and_groups_without_erasing_siblings() {
     let slow = ticket(JobKind::AmdSlow, crate::sensors::gpu_amd::SLOW_METRICS);
     run(&tree, &mut owners, &mut hw, &cfg, &mut readings, &fast, 1);
     run(&tree, &mut owners, &mut hw, &cfg, &mut readings, &slow, 1);
-    crate::sensors::invalidate_scheduled_job(&fast.job, owners.refs(), &mut readings);
+    crate::sensors::invalidate_scheduled_job(&fast.job, owners.refs(), &mut readings, None);
     assert_eq!(readings.gpu_amd_usage, None);
     assert_eq!(readings.gpu_amd_temp, Some(63));
     assert_eq!(
@@ -193,7 +193,7 @@ fn lifecycle_clears_removed_fields_and_groups_without_erasing_siblings() {
     assert_eq!(readings.gpu_amd_temp, None);
     cfg = amd_config();
     let old_source = hw.amd_gpu.take().expect("source");
-    crate::sensors::invalidate_scheduled_job(&slow.job, owners.refs(), &mut readings);
+    crate::sensors::invalidate_scheduled_job(&slow.job, owners.refs(), &mut readings, None);
     run(&tree, &mut owners, &mut hw, &cfg, &mut readings, &slow, 4);
     hw.amd_gpu = Some(old_source);
     run(&tree, &mut owners, &mut hw, &cfg, &mut readings, &slow, 5);
@@ -311,4 +311,105 @@ fn amd_alert_evaluation_uses_fresh_temperature_candidates_only() {
         assert_eq!(facade.calls().len(), expected, "at {at}");
     }
     assert_eq!(facade.calls()[0].body, "AMD GPU temperature 65C");
+}
+
+#[test]
+fn inventory_change_retains_failed_siblings_through_scheduler_invalidation() {
+    use crate::scheduler::{
+        InventoryUpdate, Scheduler, SchedulerAction, SchedulerEvent, SchedulerTime,
+    };
+    for (kind, fields) in [
+        (
+            JobKind::AmdFast,
+            [Metric::GpuAmdUsage, Metric::GpuAmdCodecUsage],
+        ),
+        (JobKind::AmdSlow, [Metric::GpuAmdTemp, Metric::GpuAmdPower]),
+    ] {
+        let tree = TempTree::new();
+        let mut hw = fixture(&tree);
+        let cfg = cfg_panel(&fields.map(Metric::as_str));
+        let mut owners = TestOwners::default();
+        let mut readings = DisplaySnapshot::default();
+        let mut scheduler = Scheduler::new();
+        let config = crate::sensors::scheduler_config(&cfg, &hw, &[], ConfigGeneration(1));
+        let initial = scheduler.handle(SchedulerEvent::Startup {
+            at: SchedulerTime::ZERO,
+            config,
+            inventory_generation: InventoryGeneration(1),
+        });
+        let ticket = initial
+            .actions
+            .iter()
+            .find_map(|action| match action {
+                SchedulerAction::StartJob { ticket } if ticket.job.kind == kind => {
+                    Some(ticket.clone())
+                }
+                _ => None,
+            })
+            .expect("AMD start");
+        let result = run(&tree, &mut owners, &mut hw, &cfg, &mut readings, &ticket, 0);
+        scheduler.handle(SchedulerEvent::JobFinished {
+            at: SchedulerTime::ZERO,
+            ticket: ticket.clone(),
+            completion: result.completion,
+            notification_ready: false,
+        });
+        let before = owners.amd_gpu.samples().clone();
+        let source = hw.amd_gpu.as_mut().expect("AMD");
+        if kind == JobKind::AmdFast {
+            tree.write("sys/amd/usage", "broken");
+            source.codec_usage_path = None;
+        } else {
+            tree.write("sys/amd/temp", "broken");
+            source.power_path = None;
+        }
+        let config = crate::sensors::scheduler_config(&cfg, &hw, &[], ConfigGeneration(1));
+        let changed = scheduler.handle(SchedulerEvent::InventoryChanged {
+            at: SchedulerTime::from_duration(Duration::from_secs(1)),
+            update: InventoryUpdate {
+                generation: InventoryGeneration(2),
+                jobs: config.jobs,
+                demand: config.demand,
+                resume_acknowledgement: None,
+            },
+        });
+        let mut invalidated = false;
+        for action in changed.actions {
+            if let SchedulerAction::InvalidateJob { job, metrics, .. } = action {
+                assert_eq!(metrics, Some(BTreeSet::from([fields[1]])));
+                crate::sensors::invalidate_scheduled_job(
+                    &job,
+                    owners.refs(),
+                    &mut readings,
+                    metrics.as_ref(),
+                );
+                invalidated = true;
+            }
+        }
+        assert!(invalidated);
+        if kind == JobKind::AmdFast {
+            assert_eq!(readings.gpu_amd_usage, Some(71));
+            assert_eq!(readings.gpu_amd_codec_usage, None);
+            assert_eq!(owners.amd_gpu.samples().usage, before.usage);
+        } else {
+            assert_eq!(readings.gpu_amd_temp, Some(63));
+            assert_eq!(readings.gpu_amd_power, None);
+            assert_eq!(owners.amd_gpu.samples().temperature, before.temperature);
+        }
+        let result = run(&tree, &mut owners, &mut hw, &cfg, &mut readings, &ticket, 1);
+        assert_eq!(result.completion, CompletionKind::Failed);
+        assert!(!result.notification_ready);
+        if kind == JobKind::AmdFast {
+            assert_eq!(readings.gpu_amd_usage, Some(71));
+            assert_eq!(readings.gpu_amd_codec_usage, None);
+            assert_eq!(owners.amd_gpu.samples().usage.latest, before.usage.latest);
+        } else {
+            assert_eq!(readings.gpu_amd_temp, Some(63));
+            assert_eq!(readings.gpu_amd_power, None);
+            assert_eq!(
+                owners.amd_gpu.samples().temperature.latest,
+                before.temperature.latest
+            );
+        }
+    }
 }

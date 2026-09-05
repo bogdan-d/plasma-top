@@ -325,7 +325,8 @@ fn amd_history_resets_on_device_and_vendor_changes_and_retains_failed_codec() {
     let mut state = GpuHistoryState::default();
     for (at, outcome) in [
         (1, DecoderOutcome::Value(23)),
-        (2, DecoderOutcome::TransientFailure),
+        // AMD's sensor owner reports its retained value after a failed read.
+        (2, DecoderOutcome::Value(23)),
     ] {
         let _ = state.sample(&cfg, &hw, &readings, outcome, clock(at), true);
     }

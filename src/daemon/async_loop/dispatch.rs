@@ -79,16 +79,18 @@ pub(super) fn drain_actions(
                     );
                 }
             }
-            SchedulerAction::InvalidateJob { job, .. } => {
+            SchedulerAction::InvalidateJob { job, metrics, .. } => {
                 if let Some(profile) = &state.profile {
                     profile.invalidate_capture(&job);
                 }
-                state.invalidate_job_readings(&job);
-                state.invalidate_decoder(&job);
+                state.invalidate_job_readings(&job, metrics.as_ref());
+                state.invalidate_decoder(&job, metrics.as_ref());
                 state.completed_jobs.remove(&job);
                 state.deferred_first_paint_jobs.remove(&job);
-                if !queue_owner_message(owner_messages, (job.owner, OwnerMessage::Invalidate(job)))
-                {
+                if !queue_owner_message(
+                    owner_messages,
+                    (job.owner, OwnerMessage::Invalidate(job, metrics)),
+                ) {
                     return Err(Error::Runtime(
                         "bounded owner pending queue is full".to_owned(),
                     ));
@@ -217,7 +219,22 @@ pub(super) fn queue_owner_message(
     pending: &mut VecDeque<(OwnerId, OwnerMessage)>,
     queued: (OwnerId, OwnerMessage),
 ) -> bool {
-    let (owner, message) = queued;
+    let (owner, mut message) = queued;
+    // Coalesced partial invalidations must retain every changed field, including remove/re-add bursts.
+    if let OwnerMessage::Invalidate(job, metrics) = &mut message {
+        for (candidate_owner, candidate) in pending.iter() {
+            if *candidate_owner == owner
+                && let OwnerMessage::Invalidate(candidate, previous) = candidate
+                && candidate == job
+            {
+                if let (Some(metrics), Some(previous)) = (metrics.as_mut(), previous.as_ref()) {
+                    metrics.extend(previous);
+                } else {
+                    *metrics = None;
+                }
+            }
+        }
+    }
     pending.retain(|(candidate_owner, candidate)| {
         if *candidate_owner != owner {
             return true;
@@ -229,7 +246,7 @@ pub(super) fn queue_owner_message(
                 input.kind != candidate.kind
             }
             (OwnerMessage::Reset(job), OwnerMessage::Reset(candidate))
-            | (OwnerMessage::Invalidate(job), OwnerMessage::Invalidate(candidate)) => {
+            | (OwnerMessage::Invalidate(job, _), OwnerMessage::Invalidate(candidate, _)) => {
                 job != candidate
             }
             (OwnerMessage::Run(input), OwnerMessage::Run(candidate)) => {

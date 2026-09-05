@@ -512,6 +512,8 @@ pub(crate) enum SchedulerAction {
     InvalidateJob {
         job: JobId,
         reason: CancelReason,
+        /// None clears the whole job; AMD source changes clear only these fields.
+        metrics: Option<BTreeSet<crate::domain::Metric>>,
     },
     ResetCounterBaseline {
         job: JobId,

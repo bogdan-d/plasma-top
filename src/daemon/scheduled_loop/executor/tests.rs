@@ -87,6 +87,7 @@ fn newly_emitted_correctness_trace_precedes_retained_start() {
 
     queue.extend(transition(vec![
         SchedulerAction::InvalidateJob {
+            metrics: None,
             job: retained.job.clone(),
             reason: CancelReason::SourceReplaced,
         },

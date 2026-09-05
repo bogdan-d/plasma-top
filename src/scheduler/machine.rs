@@ -441,65 +441,6 @@ impl Scheduler {
         }
     }
 
-    fn replace_jobs(
-        &mut self,
-        specs: Vec<JobSpec>,
-        reason: CancelReason,
-        actions: &mut Vec<SchedulerAction>,
-    ) {
-        self.cancel_all(reason, actions);
-        let display_deadline = self
-            .next_display
-            .unwrap_or_else(|| self.now.saturating_add(self.display_interval));
-        let mut old = std::mem::take(&mut self.jobs);
-        let mut replacement = BTreeMap::new();
-        for spec in specs {
-            let id = spec.id.clone();
-            let (runtime, source_changed) = if let Some(previous) = old.remove(&id) {
-                let source_changed = previous.spec.history_source != spec.history_source
-                    || previous.spec.amd != spec.amd;
-                if previous.spec == spec {
-                    (JobRuntime { spec, ..previous }, false)
-                } else {
-                    let mut runtime = JobRuntime::new(spec, self.now, display_deadline);
-                    runtime.has_sample = previous.has_sample && !source_changed;
-                    (runtime, source_changed)
-                }
-            } else {
-                (JobRuntime::new(spec, self.now, display_deadline), false)
-            };
-            if source_changed {
-                actions.push(SchedulerAction::InvalidateJob {
-                    job: id.clone(),
-                    reason,
-                });
-            }
-            replacement.insert(id, runtime);
-        }
-        for (id, _) in old {
-            actions.push(SchedulerAction::InvalidateJob { job: id, reason });
-        }
-        self.jobs = replacement;
-        if self.first_paint_issued {
-            self.first_paint_waiting.clear();
-        } else {
-            self.first_paint_waiting.clear();
-            let demanded = self.current_demand();
-            for (id, runtime) in &mut self.jobs {
-                if demanded.contains(id)
-                    && runtime.spec.startup_panel
-                    && runtime.spec.timing != TimingClass::History
-                    && !runtime.has_sample
-                {
-                    runtime.mark_pending(self.now);
-                    self.first_paint_waiting.insert(id.clone());
-                }
-            }
-        }
-        self.activation_waiting
-            .retain(|job| self.jobs.contains_key(job));
-    }
-
     fn process_time(&mut self, actions: &mut Vec<SchedulerAction>) {
         if self
             .deactivation_deadline
@@ -680,6 +621,7 @@ impl Scheduler {
                 SchedulerAction::InvalidateJob {
                     job,
                     reason: CancelReason::SourceReplaced,
+                    metrics: None,
                 }
             }));
         }

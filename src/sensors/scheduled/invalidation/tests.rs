@@ -106,7 +106,7 @@ fn keyed_source_invalidation_clears_only_the_confirmed_source() {
             SourceIdentity::Path(PathBuf::from("/tmp/updates")),
         ),
     ] {
-        invalidate_scheduled_job(&job, owners.refs(), &mut readings);
+        invalidate_scheduled_job(&job, owners.refs(), &mut readings, None);
     }
 
     assert_eq!(readings.battery_sys.len(), 1);
@@ -139,7 +139,7 @@ fn aggregate_cpu_source_replacement_invalidates_the_composite_sample() {
         },
     );
 
-    invalidate_scheduled_job(&job, owners.refs(), &mut readings);
+    invalidate_scheduled_job(&job, owners.refs(), &mut readings, None);
 
     assert_eq!(readings.cpu_usage, None);
     assert_eq!(readings.cpu_temp, None);
@@ -177,6 +177,7 @@ fn brightness_removal_invalidates_only_brightness_external_data() {
         &JobId::singleton(OwnerId::External, JobKind::Brightness),
         owners.refs(),
         &mut readings,
+        None,
     );
 
     assert!(owners.external.brightness.latest.is_none());

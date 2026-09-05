@@ -7,7 +7,26 @@ pub(crate) fn invalidate_scheduled_job(
     job: &JobId,
     owners: OwnerRefs<'_>,
     readings: &mut DisplaySnapshot,
+    metrics: Option<&std::collections::BTreeSet<crate::domain::Metric>>,
 ) {
+    if let Some(metrics) = metrics {
+        use crate::domain::Metric;
+        debug_assert_eq!(job.owner, crate::scheduler::OwnerId::AmdGpu);
+        owners.amd_gpu.invalidate(metrics.iter().copied());
+        for metric in metrics {
+            match metric {
+                Metric::GpuAmdUsage => readings.gpu_amd_usage = None,
+                Metric::GpuAmdCodecUsage => readings.gpu_amd_codec_usage = None,
+                Metric::GpuAmdMemUsage => readings.gpu_amd_mem_usage = None,
+                Metric::GpuAmdFreq => readings.gpu_amd_freq = None,
+                Metric::GpuAmdTemp => readings.gpu_amd_temp = None,
+                Metric::GpuAmdPower => readings.gpu_amd_power = None,
+                Metric::GpuAmdFanSpeed => readings.gpu_amd_fan_speed = None,
+                _ => unreachable!("partial invalidation requires AMD metrics"),
+            }
+        }
+        return;
+    }
     match job.kind {
         JobKind::Cpu => {
             owners.cpu.usage.invalidate();
@@ -133,7 +152,7 @@ pub(crate) fn invalidate_scheduled_job(
         JobKind::AmdFast => {
             owners
                 .amd_gpu
-                .invalidate(crate::sensors::gpu_amd::FAST_METRICS);
+                .invalidate(crate::sensors::gpu_amd::FAST_METRICS.iter().copied());
             readings.gpu_amd_usage = None;
             readings.gpu_amd_codec_usage = None;
             readings.gpu_amd_mem_usage = None;
@@ -142,7 +161,7 @@ pub(crate) fn invalidate_scheduled_job(
         JobKind::AmdSlow => {
             owners
                 .amd_gpu
-                .invalidate(crate::sensors::gpu_amd::SLOW_METRICS);
+                .invalidate(crate::sensors::gpu_amd::SLOW_METRICS.iter().copied());
             readings.gpu_amd_temp = None;
             readings.gpu_amd_power = None;
             readings.gpu_amd_fan_speed = None;

@@ -236,7 +236,26 @@ impl RuntimeState {
         )
     }
 
-    pub(super) fn invalidate_decoder(&mut self, job: &crate::scheduler::JobId) {
+    pub(super) fn invalidate_decoder(
+        &mut self,
+        job: &crate::scheduler::JobId,
+        metrics: Option<&BTreeSet<crate::domain::Metric>>,
+    ) {
+        if let Some(metrics) = metrics {
+            use crate::domain::Metric;
+            if let Some(samples) = self.gpu_history_samples.get_mut(&job.source) {
+                samples.update_values(|point| {
+                    if metrics.contains(&Metric::GpuAmdUsage) {
+                        point.0 = None;
+                    }
+                    if metrics.contains(&Metric::GpuAmdCodecUsage) {
+                        point.1 = None;
+                        point.2 = crate::sensors::gpu_history::DecoderOutcome::Unmeasured;
+                    }
+                });
+            }
+            return;
+        }
         if job.kind == crate::scheduler::JobKind::AmdSlow {
             return;
         }
@@ -373,7 +392,11 @@ impl RuntimeState {
         inventory_changed
     }
 
-    pub(super) fn invalidate_job_readings(&mut self, job: &crate::scheduler::JobId) {
+    pub(super) fn invalidate_job_readings(
+        &mut self,
+        job: &crate::scheduler::JobId,
+        metrics: Option<&BTreeSet<crate::domain::Metric>>,
+    ) {
         use crate::scheduler::JobKind as Kind;
 
         let graph_input_changed = match job.kind {
@@ -392,7 +415,14 @@ impl RuntimeState {
                 self.readings.gpu_usage.is_some() || self.readings.gpu_dec.is_some()
             }
             Kind::AmdFast => {
-                self.readings.gpu_amd_usage.is_some() || self.readings.gpu_amd_codec_usage.is_some()
+                (self.readings.gpu_amd_usage.is_some()
+                    && metrics.is_none_or(|metrics| {
+                        metrics.contains(&crate::domain::Metric::GpuAmdUsage)
+                    }))
+                    || (self.readings.gpu_amd_codec_usage.is_some()
+                        && metrics.is_none_or(|metrics| {
+                            metrics.contains(&crate::domain::Metric::GpuAmdCodecUsage)
+                        }))
             }
             Kind::IntelUsage => {
                 self.readings.gpu_intel_usage.is_some()
@@ -404,7 +434,7 @@ impl RuntimeState {
             }
             _ => false,
         };
-        super::worker::invalidate_readings(job, &mut self.readings);
+        super::worker::invalidate_readings(job, &mut self.readings, metrics);
         if graph_input_changed {
             self.render_generation = self.render_generation.wrapping_add(1);
         }
