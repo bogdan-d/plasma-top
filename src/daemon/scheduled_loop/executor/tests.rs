@@ -424,6 +424,7 @@ fn runtime_state(root: &Path) -> RuntimeState {
         disk_smart: false,
         cpu_temp: false,
         gpu_nvidia_temp: false,
+        gpu_amd_temp: false,
         hd_temp: false,
         battery_sys: false,
         battery_mouse: false,

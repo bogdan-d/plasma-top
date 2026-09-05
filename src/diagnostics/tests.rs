@@ -56,6 +56,7 @@ fn render_command_page_after_cold_and_warm(
         disk_smart: false,
         cpu_temp: false,
         gpu_nvidia_temp: false,
+        gpu_amd_temp: false,
         hd_temp: false,
         battery_sys: false,
         battery_mouse: false,

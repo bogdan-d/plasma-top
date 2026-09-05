@@ -1,5 +1,6 @@
 //! Main panel/tooltip formatter and item dispatch.
 
+mod amd;
 mod battery;
 mod connectivity;
 mod metrics;
@@ -257,6 +258,15 @@ impl<'a> PanelFormatter<'a> {
             ),
             Metric::GpuNvidiaFanSpeed => {
                 self.render_gpu_fan_row(resolved.form_token, readings, tooltip)
+            }
+            Metric::GpuAmdUsage
+            | Metric::GpuAmdCodecUsage
+            | Metric::GpuAmdMemUsage
+            | Metric::GpuAmdFreq
+            | Metric::GpuAmdTemp
+            | Metric::GpuAmdPower
+            | Metric::GpuAmdFanSpeed => {
+                self.render_amd(metric, resolved.form_token, readings, tooltip)
             }
             Metric::GpuIntelFreq => self.render_freq_row(
                 metric.as_str(),

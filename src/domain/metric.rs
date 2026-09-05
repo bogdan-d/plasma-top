@@ -46,7 +46,7 @@ const CAP_TOP_PROCESS: &[Capability] = &[Capability::TopProcess];
 const CAP_SYSTEM_UPDATES: &[Capability] = &[Capability::SystemUpdates];
 const CAP_SERVER_CHECK: &[Capability] = &[Capability::ServerCheck];
 
-const ALL_METRICS: [Metric; 35] = [
+const ALL_METRICS: [Metric; 42] = [
     Metric::CpuUsage,
     Metric::MemUsage,
     Metric::SwapUsage,
@@ -61,6 +61,13 @@ const ALL_METRICS: [Metric; 35] = [
     Metric::GpuNvidiaMemUsage,
     Metric::GpuNvidiaDecoderUsage,
     Metric::GpuNvidiaFanSpeed,
+    Metric::GpuAmdUsage,
+    Metric::GpuAmdCodecUsage,
+    Metric::GpuAmdMemUsage,
+    Metric::GpuAmdFreq,
+    Metric::GpuAmdTemp,
+    Metric::GpuAmdPower,
+    Metric::GpuAmdFanSpeed,
     Metric::GpuIntelFreq,
     Metric::GpuIntelUsage,
     Metric::GpuIntelDecoderUsage,
@@ -115,6 +122,20 @@ pub enum Metric {
     GpuNvidiaDecoderUsage,
     /// NVIDIA GPU fan speed.
     GpuNvidiaFanSpeed,
+    /// AMDGPU usage.
+    GpuAmdUsage,
+    /// AMDGPU codec usage.
+    GpuAmdCodecUsage,
+    /// AMDGPU mem usage.
+    GpuAmdMemUsage,
+    /// AMDGPU freq.
+    GpuAmdFreq,
+    /// AMDGPU temp.
+    GpuAmdTemp,
+    /// AMDGPU power.
+    GpuAmdPower,
+    /// AMDGPU fan speed.
+    GpuAmdFanSpeed,
     /// Intel GPU frequency.
     GpuIntelFreq,
     /// Intel GPU usage.
@@ -178,6 +199,20 @@ pub enum Capability {
     DiskSmart,
     /// NVIDIA GPU support.
     GpuNvidia,
+    /// AMDGPU usage support.
+    GpuAmdUsage,
+    /// AMDGPU codec usage support.
+    GpuAmdCodec,
+    /// AMDGPU mem usage support.
+    GpuAmdMemory,
+    /// AMDGPU freq support.
+    GpuAmdFrequency,
+    /// AMDGPU temp support.
+    GpuAmdTemperature,
+    /// AMDGPU power support.
+    GpuAmdPower,
+    /// AMDGPU fan speed support.
+    GpuAmdFanSpeed,
     /// Intel GPU frequency support.
     GpuIntelFrequency,
     /// Intel GPU usage support.
@@ -252,6 +287,13 @@ impl Metric {
             Self::GpuNvidiaMemUsage => "gpu_nvidia_mem_usage",
             Self::GpuNvidiaDecoderUsage => "gpu_nvidia_dec_usage",
             Self::GpuNvidiaFanSpeed => "gpu_nvidia_fan_speed",
+            Self::GpuAmdUsage => "gpu_amd_usage",
+            Self::GpuAmdCodecUsage => "gpu_amd_codec_usage",
+            Self::GpuAmdMemUsage => "gpu_amd_mem_usage",
+            Self::GpuAmdFreq => "gpu_amd_freq",
+            Self::GpuAmdTemp => "gpu_amd_temp",
+            Self::GpuAmdPower => "gpu_amd_power",
+            Self::GpuAmdFanSpeed => "gpu_amd_fan_speed",
             Self::GpuIntelFreq => "gpu_intel_freq",
             Self::GpuIntelUsage => "gpu_intel_usage",
             Self::GpuIntelDecoderUsage => "gpu_intel_dec_usage",
@@ -374,6 +416,55 @@ impl Metric {
             Self::GpuNvidiaFanSpeed => MetricSpec {
                 metric: self,
                 capabilities: CAP_GPU_NVIDIA,
+                generic_forms: VALUE_ONLY_FORMS,
+                surfaces: SurfaceSet::ALL,
+                intrinsic_shape: None,
+            },
+            Self::GpuAmdUsage => MetricSpec {
+                metric: self,
+                capabilities: &[Capability::GpuAmdUsage],
+                generic_forms: VALUE_ONLY_FORMS,
+                surfaces: SurfaceSet::ALL,
+                intrinsic_shape: None,
+            },
+            Self::GpuAmdCodecUsage => MetricSpec {
+                metric: self,
+                capabilities: &[Capability::GpuAmdCodec],
+                generic_forms: VALUE_ONLY_FORMS,
+                surfaces: SurfaceSet::ALL,
+                intrinsic_shape: None,
+            },
+            Self::GpuAmdMemUsage => MetricSpec {
+                metric: self,
+                capabilities: &[Capability::GpuAmdMemory],
+                generic_forms: VALUE_ONLY_FORMS,
+                surfaces: SurfaceSet::ALL,
+                intrinsic_shape: None,
+            },
+            Self::GpuAmdFreq => MetricSpec {
+                metric: self,
+                capabilities: &[Capability::GpuAmdFrequency],
+                generic_forms: VALUE_ONLY_FORMS,
+                surfaces: SurfaceSet::ALL,
+                intrinsic_shape: None,
+            },
+            Self::GpuAmdTemp => MetricSpec {
+                metric: self,
+                capabilities: &[Capability::GpuAmdTemperature],
+                generic_forms: VALUE_ONLY_FORMS,
+                surfaces: SurfaceSet::ALL,
+                intrinsic_shape: None,
+            },
+            Self::GpuAmdPower => MetricSpec {
+                metric: self,
+                capabilities: &[Capability::GpuAmdPower],
+                generic_forms: VALUE_ONLY_FORMS,
+                surfaces: SurfaceSet::ALL,
+                intrinsic_shape: None,
+            },
+            Self::GpuAmdFanSpeed => MetricSpec {
+                metric: self,
+                capabilities: &[Capability::GpuAmdFanSpeed],
                 generic_forms: VALUE_ONLY_FORMS,
                 surfaces: SurfaceSet::ALL,
                 intrinsic_shape: None,
@@ -570,6 +661,13 @@ impl Display for Capability {
             Self::DiskUsage => "disk_usage",
             Self::DiskSmart => "disk_smart",
             Self::GpuNvidia => "gpu_nvidia",
+            Self::GpuAmdUsage => "gpu_amd_usage",
+            Self::GpuAmdCodec => "gpu_amd_codec_usage",
+            Self::GpuAmdMemory => "gpu_amd_mem_usage",
+            Self::GpuAmdFrequency => "gpu_amd_freq",
+            Self::GpuAmdTemperature => "gpu_amd_temp",
+            Self::GpuAmdPower => "gpu_amd_power",
+            Self::GpuAmdFanSpeed => "gpu_amd_fan_speed",
             Self::GpuIntelFrequency => "gpu_intel_freq",
             Self::GpuIntelUsage => "gpu_intel_usage",
             Self::GpuIntelDecoder => "gpu_intel_dec",
@@ -611,6 +709,13 @@ impl FromStr for Metric {
             "gpu_nvidia_mem_usage" => Ok(Self::GpuNvidiaMemUsage),
             "gpu_nvidia_dec_usage" => Ok(Self::GpuNvidiaDecoderUsage),
             "gpu_nvidia_fan_speed" => Ok(Self::GpuNvidiaFanSpeed),
+            "gpu_amd_usage" => Ok(Self::GpuAmdUsage),
+            "gpu_amd_codec_usage" => Ok(Self::GpuAmdCodecUsage),
+            "gpu_amd_mem_usage" => Ok(Self::GpuAmdMemUsage),
+            "gpu_amd_freq" => Ok(Self::GpuAmdFreq),
+            "gpu_amd_temp" => Ok(Self::GpuAmdTemp),
+            "gpu_amd_power" => Ok(Self::GpuAmdPower),
+            "gpu_amd_fan_speed" => Ok(Self::GpuAmdFanSpeed),
             "gpu_intel_freq" => Ok(Self::GpuIntelFreq),
             "gpu_intel_usage" => Ok(Self::GpuIntelUsage),
             "gpu_intel_dec_usage" => Ok(Self::GpuIntelDecoderUsage),

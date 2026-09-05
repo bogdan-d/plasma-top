@@ -57,6 +57,34 @@ pub(crate) fn item_gate(
         | Metric::GpuNvidiaMemUsage
         | Metric::GpuNvidiaDecoderUsage
         | Metric::GpuNvidiaFanSpeed => hw.has_nvidia,
+        Metric::GpuAmdUsage => hw
+            .amd_gpu
+            .as_ref()
+            .is_some_and(|source| source.usage_path.is_some()),
+        Metric::GpuAmdCodecUsage => hw
+            .amd_gpu
+            .as_ref()
+            .is_some_and(|source| source.codec_usage_path.is_some()),
+        Metric::GpuAmdMemUsage => hw
+            .amd_gpu
+            .as_ref()
+            .is_some_and(|source| source.memory_paths.is_some()),
+        Metric::GpuAmdFreq => hw
+            .amd_gpu
+            .as_ref()
+            .is_some_and(|source| source.freq_path.is_some()),
+        Metric::GpuAmdTemp => hw
+            .amd_gpu
+            .as_ref()
+            .is_some_and(|source| source.temp_path.is_some()),
+        Metric::GpuAmdPower => hw
+            .amd_gpu
+            .as_ref()
+            .is_some_and(|source| source.power_path.is_some()),
+        Metric::GpuAmdFanSpeed => hw
+            .amd_gpu
+            .as_ref()
+            .is_some_and(|source| source.fan_speed_path.is_some()),
         Metric::GpuIntelFreq => hw.intel_gpu_freq_path.is_some(),
         Metric::GpuIntelUsage | Metric::GpuIntelDecoderUsage => hw.intel_gpu_pci.is_some(),
         Metric::BatterySystem => !hw.battery_sys_ids.is_empty(),

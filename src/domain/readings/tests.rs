@@ -78,3 +78,23 @@ fn retained_metric_sample_rejects_late_first_value() {
 
     assert_eq!(sample.sample_at_or_before(Duration::from_secs(1)), None);
 }
+
+#[test]
+fn amd_memory_percentage_validates_counters_without_overflow() {
+    for (used_bytes, total_bytes, expected) in [
+        (0, 0, None),
+        (2, 1, None),
+        (0, 1, Some(0)),
+        (1, 4, Some(25)),
+        (u64::MAX, u64::MAX, Some(100)),
+    ] {
+        assert_eq!(
+            AmdGpuMemoryReading {
+                used_bytes,
+                total_bytes
+            }
+            .percent(),
+            expected
+        );
+    }
+}

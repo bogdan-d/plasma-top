@@ -31,3 +31,38 @@ fn parses_known_metric_tokens() {
     assert_eq!("cpu_usage".parse::<Metric>(), Ok(Metric::CpuUsage));
     assert_eq!("server_check".parse::<Metric>(), Ok(Metric::ServerCheck));
 }
+
+#[test]
+fn amd_tokens_have_independent_value_only_capabilities() -> Result<(), Box<dyn std::error::Error>> {
+    use crate::domain::{ItemToken, list_items, needed_capabilities};
+    let pairs = [
+        ("gpu_amd_usage", Capability::GpuAmdUsage),
+        ("gpu_amd_codec_usage", Capability::GpuAmdCodec),
+        ("gpu_amd_mem_usage", Capability::GpuAmdMemory),
+        ("gpu_amd_freq", Capability::GpuAmdFrequency),
+        ("gpu_amd_temp", Capability::GpuAmdTemperature),
+        ("gpu_amd_power", Capability::GpuAmdPower),
+        ("gpu_amd_fan_speed", Capability::GpuAmdFanSpeed),
+    ];
+    for (name, capability) in pairs {
+        let metric = name.parse::<Metric>()?;
+        assert_eq!(metric.to_string(), name);
+        assert_eq!(metric.capabilities(), &[capability]);
+        assert_eq!(metric.spec().generic_forms, &[Form::Value]);
+        assert_eq!(metric.surfaces(), SurfaceSet::ALL);
+        assert!(name.parse::<ItemToken>().is_ok());
+        for form in ["bar", "spark", "braille", "pair"] {
+            assert!(format!("{name}:{form}").parse::<ItemToken>().is_err());
+        }
+        assert!(list_items().contains(&(String::from(name), "panel + tooltip")));
+        assert!(
+            needed_capabilities(
+                std::iter::once(name.parse::<ItemToken>()?),
+                std::iter::empty(),
+                std::iter::empty()
+            )
+            .contains(&capability)
+        );
+    }
+    Ok(())
+}

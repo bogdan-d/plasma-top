@@ -69,6 +69,7 @@ items = ["disk_usage", "disk_smart:pair"]
 [tooltip.gpu]
 title = "GPU"
 items = ["gpu_nvidia_usage", "gpu_nvidia_mem_usage", "gpu_nvidia_dec_usage",
+         "gpu_amd_usage", "gpu_amd_codec_usage", "gpu_amd_mem_usage", "gpu_amd_freq", "gpu_amd_temp", "gpu_amd_power", "gpu_amd_fan_speed",
          "gpu_intel_usage", "gpu_intel_freq", "gpu_intel_dec_usage", "screen_brightness"]
 
 [tooltip.thermal]
@@ -150,6 +151,9 @@ hd_temp              = [50, 55]
 gpu_nvidia_usage     = [50, 70]
 gpu_nvidia_mem_usage = [50, 70]
 gpu_nvidia_temp      = [50, 70]
+gpu_amd_usage = [50, 70]
+gpu_amd_mem_usage = [50, 70]
+gpu_amd_temp = [50, 70]
 gpu_intel_usage      = [50, 70]
 battery_sys          = [20, 80]
 battery_mouse        = [20, 80]
@@ -158,6 +162,7 @@ wifi_signal          = [30, 60]
 
 # Single-value binary threshold: v > threshold -> green (active), otherwise no color.
 gpu_nvidia_dec_usage = 1
+gpu_amd_codec_usage = 1
 gpu_intel_dec_usage  = 1
 
 # Load avg: thresholds as a fraction of cores (value / core count), so they hold
@@ -175,6 +180,7 @@ disk_usage      = 80
 cpu_temp        = 80
 hd_temp         = 60
 gpu_nvidia_temp = 80
+gpu_amd_temp = 80
 battery_sys     = 10
 battery_mouse   = 20
 battery_kbd     = 20
@@ -206,6 +212,7 @@ disk_smart      = true
 cpu_temp        = false
 hd_temp         = true
 gpu_nvidia_temp = false
+gpu_amd_temp = false
 battery_sys     = true
 battery_mouse   = true
 battery_kbd     = true

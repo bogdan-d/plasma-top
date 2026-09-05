@@ -186,10 +186,16 @@ pub struct ThresholdConfig {
     pub cpu_temp: Vec<i32>,
     /// gpu_nvidia_temp thresholds.
     pub gpu_nvidia_temp: Vec<i32>,
+    /// AMDGPU color thresholds.
+    pub gpu_amd_temp: [i32; 2],
     /// gpu_nvidia_usage thresholds.
     pub gpu_nvidia_usage: Vec<i32>,
+    /// AMDGPU color thresholds.
+    pub gpu_amd_usage: [i32; 2],
     /// gpu_nvidia_mem_usage thresholds.
     pub gpu_nvidia_mem_usage: Vec<i32>,
+    /// AMDGPU color thresholds.
+    pub gpu_amd_mem_usage: [i32; 2],
     /// gpu_intel_usage thresholds.
     pub gpu_intel_usage: Vec<i32>,
     /// hd_temp thresholds.
@@ -204,6 +210,8 @@ pub struct ThresholdConfig {
     pub wifi_signal: Vec<i32>,
     /// gpu_nvidia_dec_usage single-value binary threshold.
     pub gpu_nvidia_dec_usage: i32,
+    /// Combined AMDGPU codec activity threshold.
+    pub gpu_amd_codec_usage: i32,
     /// gpu_intel_dec_usage single-value binary threshold.
     pub gpu_intel_dec_usage: i32,
     /// load_avg_1 thresholds as a fraction of cores.
@@ -227,8 +235,11 @@ impl Default for ThresholdConfig {
             disk_usage: vec![50, 80],
             cpu_temp: vec![50, 70],
             gpu_nvidia_temp: vec![50, 70],
+            gpu_amd_temp: [50, 70],
             gpu_nvidia_usage: vec![50, 70],
+            gpu_amd_usage: [50, 70],
             gpu_nvidia_mem_usage: vec![50, 70],
+            gpu_amd_mem_usage: [50, 70],
             gpu_intel_usage: vec![50, 70],
             hd_temp: vec![50, 55],
             battery_sys: vec![20, 80],
@@ -236,6 +247,7 @@ impl Default for ThresholdConfig {
             battery_kbd: vec![20, 80],
             wifi_signal: vec![30, 60],
             gpu_nvidia_dec_usage: 1,
+            gpu_amd_codec_usage: 1,
             gpu_intel_dec_usage: 1,
             load_avg_1: vec![0.7, 1.0],
             load_avg_5: vec![0.6, 0.9],
@@ -255,6 +267,8 @@ pub struct NotifyThresholds {
     pub cpu_temp: i32,
     /// gpu_nvidia_temp notify threshold.
     pub gpu_nvidia_temp: i32,
+    /// AMDGPU edge-temperature notification threshold.
+    pub gpu_amd_temp: i32,
     /// hd_temp notify threshold.
     pub hd_temp: i32,
     /// battery_sys notify threshold.
@@ -279,6 +293,7 @@ impl Default for NotifyThresholds {
             disk_usage: 80,
             cpu_temp: 80,
             gpu_nvidia_temp: 80,
+            gpu_amd_temp: 80,
             hd_temp: 60,
             battery_sys: 10,
             battery_mouse: 20,
@@ -303,6 +318,8 @@ pub struct NotificationConfig {
     pub cpu_temp: bool,
     /// gpu_nvidia_temp notification enabled.
     pub gpu_nvidia_temp: bool,
+    /// AMDGPU edge-temperature notification enabled.
+    pub gpu_amd_temp: bool,
     /// hd_temp notification enabled.
     pub hd_temp: bool,
     /// battery_sys notification enabled.
@@ -324,6 +341,7 @@ impl Default for NotificationConfig {
             disk_smart: true,
             cpu_temp: false,
             gpu_nvidia_temp: false,
+            gpu_amd_temp: false,
             hd_temp: true,
             battery_sys: true,
             battery_mouse: true,

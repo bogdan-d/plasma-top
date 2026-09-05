@@ -17,6 +17,8 @@ use super::super::model::{Entry, group_rows_into_blocks};
 use super::super::mono::global_width_of;
 use super::PanelFormatter;
 
+mod amd;
+
 fn bare_hw() -> HardwareInventory {
     HardwareInventory {
         net_device: Some(String::from("enp0s3")),
@@ -40,6 +42,7 @@ fn full_hw() -> HardwareInventory {
         ]),
         battery_sys_ids: vec![String::from("/BAT0")],
         has_nvidia: true,
+        amd_gpu: Some(amd::source()),
         intel_gpu_freq_path: Some(PathBuf::from("/x")),
         intel_gpu_pci: Some(String::from("0000:00:02.0")),
         net_device: Some(String::from("wlan0")),
@@ -153,6 +156,16 @@ fn full_readings() -> DisplaySnapshot {
             name: String::from("Logi Kbd"),
             charge_percent: 85,
         }),
+        gpu_amd_usage: Some(73),
+        gpu_amd_codec_usage: Some(25),
+        gpu_amd_mem_usage: Some(crate::domain::readings::AmdGpuMemoryReading {
+            used_bytes: 4 << 30,
+            total_bytes: 16 << 30,
+        }),
+        gpu_amd_freq: Some(2800),
+        gpu_amd_temp: Some(65),
+        gpu_amd_power: Some(120),
+        gpu_amd_fan_speed: Some(1800),
         gpu_temp: Some(60),
         gpu_usage: Some(30),
         gpu_mem: Some(40),
@@ -347,7 +360,11 @@ fn available_sections_collapse_and_panel_omits_titles() {
 
 #[test]
 fn tooltip_and_panel_goldens_match_python_snapshots() {
-    let hw = full_hw();
+    // Historical snapshots describe an NVIDIA/Intel machine without AMDGPU.
+    let hw = HardwareInventory {
+        amd_gpu: None,
+        ..full_hw()
+    };
     let readings = full_readings();
     let cases = [
         ("panel_v", true, true),

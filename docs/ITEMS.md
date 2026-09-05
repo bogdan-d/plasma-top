@@ -49,10 +49,23 @@ A token is **bare** when the metric has one intrinsic rendering. Generic forms u
 | `gpu_nvidia_dec_usage` | panel · tooltip | NVIDIA video-decoder utilization, %. | `Gpu decoder usage:  0%` |
 | `gpu_nvidia_temp` | panel · tooltip | NVIDIA GPU temperature. | `Gpu temp:  52°C` |
 | `gpu_nvidia_fan_speed` | panel · tooltip | NVIDIA fan, %; `off` when idle at 0. | `Gpu fan speed:  off` |
+| `gpu_amd_usage` | panel · tooltip | Selected AMDGPU device utilization, %. | `AMD GPU usage: 73%` |
+| `gpu_amd_codec_usage` | panel · tooltip | Combined VCN codec activity, including decoding or encoding, %. | `AMD GPU codec: 25%` |
+| `gpu_amd_mem_usage` | panel · tooltip | Driver VRAM allocation usage, %. Tooltip also shows used/total MiB. | `AMD GPU memory: 4096 / 16384 MiB 25%` |
+| `gpu_amd_freq` | panel · tooltip | Current graphics-core clock in MHz. | `AMD GPU frequency: 2800 MHz` |
+| `gpu_amd_temp` | panel · tooltip | Edge temperature only. | `AMD GPU temperature: 65°C` |
+| `gpu_amd_power` | panel · tooltip | Average package/PPT power in watts. | `AMD GPU power: 120 W` |
+| `gpu_amd_fan_speed` | panel · tooltip | Measured fan tachometer speed in RPM; `off` at zero. | `AMD GPU fan: 1800 RPM` |
 | `gpu_intel_usage` | panel · tooltip | Intel iGPU utilization, %. | `Igpu usage:  0%` |
 | `gpu_intel_freq` | panel · tooltip | Intel iGPU clock frequency. | `Igpu freq:  300 MHz` |
 | `gpu_intel_dec_usage` | panel · tooltip | Intel iGPU video-decoder utilization, %. | `Igpu decoder:  0%` |
 | `screen_brightness` | panel · tooltip | Backlight level, %. | `Brightness:  70%` |
+
+AMDGPU rows require the selected device to expose the corresponding capability and a valid reading. Missing capabilities omit only their own rows. The item/config/render contract is available; live discovery and sampling are tracked in [the AMDGPU implementation plan](../.scratch/amdgpu-support/spec.md).
+
+On unified-memory AMD APUs, VRAM allocation counters describe the driver's allocation domain, not dedicated physical VRAM or all GPU-accessible system memory. GTT is not added. Codec activity does not distinguish decoding from encoding. Temperature never substitutes hotspot, junction, or memory sensors, and RPM never substitutes PWM duty.
+
+To bound tooltip width, AMD scalar values above 99,999 display as `99999+` with their unit, and allocation sizes above 999,999 MiB display as `999999+`. Allocation counters remain exact in the display snapshot and determine the percentage before formatting.
 
 ## Thermal & fans
 

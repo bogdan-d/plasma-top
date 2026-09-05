@@ -1,7 +1,7 @@
 # Add the public AMDGPU metric contract
 
 Type: task
-Status: ready-for-agent
+Status: resolved
 
 ## Objective
 
@@ -28,3 +28,13 @@ Add the complete vendor-specific AMD item/config/render vocabulary without chang
 ## Done when
 
 The public contract is exhaustive and testable with synthetic readings, existing vendor behavior is unchanged, and focused domain/config/render tests pass.
+
+## Completion evidence
+
+Implemented on 2026-09-05. All seven AMDGPU tokens now have independent capabilities, value-only panel/tooltip admission, typed source/readings contracts, hardware-gated formatting, labels/icons, shipped tooltip defaults, and item documentation. Memory preserves exact used/total allocation bytes and renders MiB plus percentage. AMD color threshold pairs require exactly two values. Notification configuration is present; notification evaluation remains ticket 04. Discovery and scheduler branches remain inactive until tickets 02–03.
+
+Validation passed with Rust 1.97.1: `cargo fmt -- --check`, `cargo check --all-targets --all-features`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test --all-targets --all-features` with 819 unit and 31 integration tests, `cargo doc --no-deps`, and `tools/repository_gate.sh`. The process-signal suite required execution outside the filesystem sandbox; its SIGTERM test timed out inside it. The shell's default Rust 1.98 triggered an unrelated pre-existing Clippy lint in `render/traces.rs`, so validation used the installed project toolchain without changing that code or weakening lints. `Cargo.lock` is unchanged.
+
+`tools/qt_render_matrix.sh --no-build` passed and its contact sheet was inspected. Additional synthetic AMDGPU panel/tooltip renders were inspected with `tools/qt_shot.py`, including dark/light colors, memory context, units, fan-off, and absent-fan cases. Local artifacts are under `.test-artifacts/plasma/amd/`; the light fixtures supply the ambient light-theme text color because the screenshot helper defaults to white. These are synthetic render checks, not live AMDGPU telemetry evidence.
+
+Next: ticket 02, discovery and sampling. The catalog is now 804 lines after exhaustive inactive AMD arms; retain ticket 03's planned GPU extraction before adding scheduler behavior.

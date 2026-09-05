@@ -238,6 +238,56 @@ pub struct SmartDisk {
     pub rotational: bool,
 }
 
+/// Direct text sources for one selected AMDGPU device.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct AmdGpuSource {
+    /// Canonical PCI identity, independent of DRM and hwmon numbering.
+    pub pci_identity: String,
+    /// Direct usage source.
+    pub usage_path: Option<PathBuf>,
+    /// Direct codec usage source.
+    pub codec_usage_path: Option<PathBuf>,
+    /// Direct freq source.
+    pub freq_path: Option<PathBuf>,
+    /// Direct temp source.
+    pub temp_path: Option<PathBuf>,
+    /// Direct power source.
+    pub power_path: Option<PathBuf>,
+    /// Direct fan speed source.
+    pub fan_speed_path: Option<PathBuf>,
+    /// VRAM allocation counters are available only as a used/total pair.
+    pub memory_paths: Option<AmdGpuMemoryPaths>,
+}
+
+/// Paired driver VRAM allocation counters.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AmdGpuMemoryPaths {
+    /// Used allocation bytes.
+    pub used: PathBuf,
+    /// Total allocation bytes.
+    pub total: PathBuf,
+}
+
+/// Driver VRAM allocation domain, including on unified-memory devices.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AmdGpuMemoryReading {
+    /// Used allocation bytes.
+    pub used_bytes: u64,
+    /// Total allocation bytes.
+    pub total_bytes: u64,
+}
+
+impl AmdGpuMemoryReading {
+    /// Returns a bounded percentage, rejecting inconsistent counters.
+    #[must_use]
+    pub fn percent(self) -> Option<i32> {
+        if self.total_bytes == 0 || self.used_bytes > self.total_bytes {
+            return None;
+        }
+        i32::try_from(u128::from(self.used_bytes) * 100 / u128::from(self.total_bytes)).ok()
+    }
+}
+
 /// Discoverable hardware family reconciled independently according to demand.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) enum InventoryFamily {
@@ -274,6 +324,8 @@ pub struct HardwareInventory {
     pub battery_sys_ids: Vec<String>,
     /// Whether an NVIDIA GPU is present.
     pub has_nvidia: bool,
+    /// Selected AMDGPU device and its independent capabilities.
+    pub amd_gpu: Option<AmdGpuSource>,
     /// Intel GPU active-frequency sysfs file.
     pub intel_gpu_freq_path: Option<PathBuf>,
     /// PCI address used to attribute Intel DRM fdinfo counters.
@@ -310,6 +362,7 @@ impl Default for HardwareInventory {
             fan_paths: BTreeMap::new(),
             battery_sys_ids: Vec::new(),
             has_nvidia: false,
+            amd_gpu: None,
             intel_gpu_freq_path: None,
             intel_gpu_pci: None,
             net_device: None,
@@ -404,6 +457,20 @@ pub struct DisplaySnapshot {
     pub gpu_dec: Option<i32>,
     /// NVIDIA GPU fan percentage.
     pub gpu_fan: Option<i32>,
+    /// AMDGPU device usage percentage.
+    pub gpu_amd_usage: Option<i32>,
+    /// AMDGPU combined codec usage percentage.
+    pub gpu_amd_codec_usage: Option<i32>,
+    /// AMDGPU VRAM allocation counters.
+    pub gpu_amd_mem_usage: Option<AmdGpuMemoryReading>,
+    /// AMDGPU graphics-core frequency in MHz.
+    pub gpu_amd_freq: Option<u32>,
+    /// AMDGPU edge temperature in Celsius.
+    pub gpu_amd_temp: Option<i32>,
+    /// AMDGPU average package power in watts.
+    pub gpu_amd_power: Option<u32>,
+    /// AMDGPU fan tachometer speed in RPM.
+    pub gpu_amd_fan_speed: Option<u32>,
     /// Intel GPU active frequency in MHz.
     pub gpu_intel_freq: Option<i32>,
     /// Intel GPU render usage percentage.

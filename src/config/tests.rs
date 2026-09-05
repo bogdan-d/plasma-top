@@ -647,3 +647,49 @@ fn config_error_displays_with_source() {
     let err = ConfigError::Toml(parse_err);
     assert!(format!("{err}").contains("config parse failure"));
 }
+
+#[test]
+fn amd_defaults_preserve_old_config_and_request_tooltip_items() {
+    let dir = temp_dir("amd-old-config");
+    let path = dir.join("config.toml");
+    std::fs::write(
+        &path,
+        "[notifications]\ngpu_nvidia_temp = true\n[notify_thresholds]\ngpu_nvidia_temp = 90\n",
+    )
+    .unwrap();
+    let cfg = load_config(Some(&path), Some(false)).unwrap();
+    assert!(cfg.notifications.gpu_nvidia_temp);
+    assert!(!cfg.notifications.gpu_amd_temp);
+    assert_eq!(cfg.notify_thresholds.gpu_nvidia_temp, 90);
+    assert_eq!(cfg.notify_thresholds.gpu_amd_temp, 80);
+    assert_eq!(cfg.thresholds.gpu_amd_usage, [50, 70]);
+    assert_eq!(cfg.thresholds.gpu_amd_mem_usage, [50, 70]);
+    assert_eq!(cfg.thresholds.gpu_amd_temp, [50, 70]);
+    assert_eq!(cfg.thresholds.gpu_amd_codec_usage, 1);
+    assert!(toml::from_str::<ThresholdConfig>("gpu_amd_usage = [50]").is_err());
+    let shipped = load_config(
+        Some(&Path::new(env!("CARGO_MANIFEST_DIR")).join("config/config.toml")),
+        Some(false),
+    )
+    .unwrap();
+    let tooltip: Vec<_> = shipped
+        .tooltip
+        .sections
+        .iter()
+        .flat_map(|section| section.items.iter().map(String::as_str))
+        .collect();
+    assert!(unknown_item_names(tooltip.iter().copied()).is_empty());
+    for metric in crate::domain::Metric::all()
+        .iter()
+        .filter(|metric| metric.as_str().starts_with("gpu_amd_"))
+    {
+        assert!(tooltip.contains(&metric.as_str()));
+        assert!(
+            !shipped
+                .panel
+                .sections
+                .iter()
+                .any(|section| section.items.iter().any(|item| item == metric.as_str()))
+        );
+    }
+}

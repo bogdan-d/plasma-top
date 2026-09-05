@@ -11,6 +11,16 @@ impl PanelFormatter<'_> {
         widened.mem_usage = Some(100);
         widened.swap_usage = Some(100);
         widened.cpu_temp = Some(100);
+        widened.gpu_amd_usage = Some(100);
+        widened.gpu_amd_codec_usage = Some(100);
+        widened.gpu_amd_temp = Some(-273);
+        widened.gpu_amd_freq = Some(u32::MAX);
+        widened.gpu_amd_power = Some(u32::MAX);
+        widened.gpu_amd_fan_speed = Some(u32::MAX);
+        widened.gpu_amd_mem_usage = Some(crate::domain::readings::AmdGpuMemoryReading {
+            used_bytes: u64::MAX,
+            total_bytes: u64::MAX,
+        });
         widened.gpu_temp = Some(100);
         widened.gpu_usage = Some(100);
         widened.gpu_mem = Some(100);

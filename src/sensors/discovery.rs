@@ -232,6 +232,7 @@ fn local_hardware_attempt(
         fan_paths: BTreeMap::new(),
         battery_sys_ids: Vec::new(),
         has_nvidia: false,
+        amd_gpu: None,
         intel_gpu_freq_path: None,
         intel_gpu_pci: None,
         net_device: None,

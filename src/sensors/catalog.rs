@@ -234,6 +234,13 @@ impl<'a> Catalog<'a> {
             Metric::GpuIntelFreq | Metric::GpuIntelUsage | Metric::GpuIntelDecoderUsage => {
                 Some(InventoryFamily::Intel)
             }
+            Metric::GpuAmdUsage
+            | Metric::GpuAmdCodecUsage
+            | Metric::GpuAmdMemUsage
+            | Metric::GpuAmdFreq
+            | Metric::GpuAmdTemp
+            | Metric::GpuAmdPower
+            | Metric::GpuAmdFanSpeed => None,
             Metric::ScreenBrightness => Some(InventoryFamily::Backlight),
             Metric::BatterySystem => Some(InventoryFamily::SystemBattery),
             Metric::BatteryMouse
@@ -310,6 +317,14 @@ impl<'a> Catalog<'a> {
             | Metric::GpuNvidiaMemUsage
             | Metric::GpuNvidiaDecoderUsage
             | Metric::GpuNvidiaFanSpeed => self.nvidia_jobs(),
+            // AMDGPU collection is connected by the scheduler integration ticket.
+            Metric::GpuAmdUsage
+            | Metric::GpuAmdCodecUsage
+            | Metric::GpuAmdMemUsage
+            | Metric::GpuAmdFreq
+            | Metric::GpuAmdTemp
+            | Metric::GpuAmdPower
+            | Metric::GpuAmdFanSpeed => Vec::new(),
             Metric::GpuIntelFreq => self.intel_frequency_jobs(),
             Metric::GpuIntelUsage | Metric::GpuIntelDecoderUsage => self.intel_usage_jobs(),
             Metric::ScreenBrightness => self.brightness_jobs(),
@@ -384,6 +399,14 @@ impl<'a> Catalog<'a> {
             Capability::DiskUsage => self.disk_usage_jobs(),
             Capability::DiskSmart => self.smart_jobs(),
             Capability::GpuNvidia => self.nvidia_jobs(),
+            // AMDGPU collection is connected by the scheduler integration ticket.
+            Capability::GpuAmdUsage
+            | Capability::GpuAmdCodec
+            | Capability::GpuAmdMemory
+            | Capability::GpuAmdFrequency
+            | Capability::GpuAmdTemperature
+            | Capability::GpuAmdPower
+            | Capability::GpuAmdFanSpeed => Vec::new(),
             Capability::GpuIntelFrequency => self.intel_frequency_jobs(),
             Capability::GpuIntelUsage | Capability::GpuIntelDecoder => self.intel_usage_jobs(),
             Capability::ScreenBrightness => self.brightness_jobs(),
