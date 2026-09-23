@@ -1,6 +1,6 @@
 [package]
 name = "plasma-top"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 rust-version = "1.98.1"
 license = "GPL-2.0-or-later"
@@ -58,7 +58,7 @@ miniz_oxide = "0.9"
 # default build remains portable; release packaging may enable `nvml` without a
 # link-time libnvidia-ml dependency.
 # License: MIT OR Apache-2.0. GPL-2.0-or-later compatible. See `DEPENDENCIES.md`.
-nvml-wrapper = { version = "0.12", optional = true, default-features = false }
+nvml-wrapper = { version = "0.13", optional = true, default-features = false }
 # Current-thread async runtime for bounded process, D-Bus, timer, channel, and
 # Unix signal services. `net` supplies Unix `AsyncFd` reactor registration;
 # Tokio filesystem and multithreaded runtime features remain disabled.
