@@ -246,7 +246,7 @@ else
     BINARY="$REPO_DIR/target/release/plasma-top"
     if [[ "$DRY_RUN" == false ]]; then
         command -v cargo >/dev/null || {
-            echo "[error] cargo not found — Rust 1.97.1 is required." >&2
+            echo "[error] cargo not found — Rust 1.98.1 is required." >&2
             exit 1
         }
         CARGO_TARGET_DIR="$REPO_DIR/target" \

@@ -304,9 +304,7 @@ pub fn braille_html(
     }
 
     let mut output = String::new();
-    for pair in padded.chunks_exact(2) {
-        let left = pair[0];
-        let right = pair[1];
+    for &[left, right] in padded.as_chunks::<2>().0 {
         if left.is_none() && right.is_none() {
             output.push('\u{2800}');
             continue;
