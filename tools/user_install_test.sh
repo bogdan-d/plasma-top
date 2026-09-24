@@ -12,7 +12,7 @@ export XDG_CACHE_HOME="$TMP/cache"
 export XDG_RUNTIME_DIR="$TMP/runtime"
 export PLASMA_TOP_BINARY="$REPO_DIR/target/release/plasma-top"
 export FAKE_LOG="$TMP/commands.log"
-export FAKE_APPLET="$TMP/installed-applet"
+export FAKE_APPLET="$XDG_DATA_HOME/plasma/plasmoids/com.github.bogdan-d.plasma-top"
 export FAKE_APPLET_STATE="$TMP/applet-installed"
 FAKE_BIN="$TMP/fake-bin"
 mkdir -p "$HOME" "$XDG_CONFIG_HOME/plasma-top" "$XDG_CACHE_HOME/plasma-top" \
@@ -33,11 +33,16 @@ case " $* " in
   *" --show "*) [[ -e "$FAKE_APPLET_STATE" ]] ;;
   *" --install "*|*" --upgrade "*)
     source_path="${!#}"
-    rm -rf "$FAKE_APPLET"
+    mkdir -p "$(dirname "$FAKE_APPLET")"
+    rm --preserve-root=all --one-file-system -r -f -- "$FAKE_APPLET"
     cp -a "$source_path" "$FAKE_APPLET"
-    : > "$FAKE_APPLET_STATE"
+    if [[ -z "${FAKE_SKIP_REGISTRATION:-}" ]]; then : > "$FAKE_APPLET_STATE"; fi
     ;;
-  *" --remove "*) rm -f "$FAKE_APPLET_STATE" ;;
+  *" --remove "*)
+    if [[ -n "${FAKE_REMOVE_FAILURE:-}" ]]; then exit 1; fi
+    rm --preserve-root=all --one-file-system -f -- "$FAKE_APPLET_STATE"
+    rm --preserve-root=all --one-file-system -r -f -- "$FAKE_APPLET"
+    ;;
 esac
 EOF
 for command in kbuildsycoca6 kstart killall; do
@@ -101,6 +106,13 @@ if FAIL_SERVICE=1 "$REPO_DIR/install.sh" >"$TMP/activation-failure.log" 2>&1; th
     exit 1
 fi
 grep -Fq 'journalctl --user -u plasma-top -n 100' "$TMP/activation-failure.log"
+"$REPO_DIR/uninstall.sh" >/dev/null
+
+# An apparently successful package command must leave a registered applet.
+if FAKE_SKIP_REGISTRATION=1 "$REPO_DIR/install.sh" >"$TMP/registration-failure.log" 2>&1; then
+    exit 1
+fi
+grep -Fq 'applet registration failed' "$TMP/registration-failure.log"
 "$REPO_DIR/uninstall.sh" >/dev/null
 
 "$REPO_DIR/install.sh"
@@ -170,6 +182,15 @@ if XDG_RUNTIME_DIR=/ "$REPO_DIR/uninstall.sh" >/dev/null 2>&1; then exit 1; fi
 
 "$LAUNCHER" list-items >/dev/null
 
+# A failed applet removal must leave the owned install available for retry.
+: >"$FAKE_LOG"
+if FAKE_REMOVE_FAILURE=1 "$REPO_DIR/uninstall.sh" >"$TMP/removal-failure.log" 2>&1; then
+    exit 1
+fi
+grep -Fq 'applet removal failed' "$TMP/removal-failure.log"
+[[ -x "$USER_ROOT/plasma-top" && -f "$USER_ROOT/.plasma-top-install" && -d "$FAKE_APPLET" ]]
+if grep -Fq 'systemctl --user disable --now plasma-top' "$FAKE_LOG"; then exit 1; fi
+
 "$REPO_DIR/uninstall.sh"
 "$REPO_DIR/uninstall.sh"
 [[ ! -e "$USER_ROOT" && ! -e "$LAUNCHER" && ! -e "$UNIT" ]]
@@ -184,5 +205,16 @@ rm --preserve-root=all --one-file-system -- "$XDG_CONFIG_HOME/plasma-top/config.
 cmp "$REPO_DIR/config/config.toml" "$XDG_CONFIG_HOME/plasma-top/config.toml"
 "$REPO_DIR/uninstall.sh" >/dev/null
 cmp "$REPO_DIR/config/config.toml" "$XDG_CONFIG_HOME/plasma-top/config.toml"
+
+# A registered applet without an owned daemon tree is a fresh service install.
+mkdir -p "$(dirname "$FAKE_APPLET")"
+cp -a "$REPO_DIR/plasmoid/package" "$FAKE_APPLET"
+: >"$FAKE_APPLET_STATE"
+: >"$FAKE_LOG"
+"$REPO_DIR/install.sh" >"$TMP/orphaned-applet.log"
+grep -Fq 'systemctl --user restart plasma-top' "$FAKE_LOG"
+grep -Fq 'systemctl --user is-active --quiet plasma-top' "$FAKE_LOG"
+grep -Fq 'Log out and back in' "$TMP/orphaned-applet.log"
+"$REPO_DIR/uninstall.sh" >/dev/null
 
 echo "User-local install, upgrade, and uninstall checks passed"

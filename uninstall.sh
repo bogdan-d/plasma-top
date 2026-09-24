@@ -118,10 +118,10 @@ print_user_dry_run() {
         return
     fi
     printf 'Runtime data: %s\nCache: %s\n' "$RUNTIME_REMOVE" "$CACHE_REMOVE"
-    printf '\n1. Stop service and remove applet\n'
-    print_command systemctl --user disable --now plasma-top
-    printf '  If kpackagetool6 is available:\n'
+    printf '\n1. Remove applet and stop service\n'
+    printf '  If the user applet is present:\n'
     print_command kpackagetool6 --type Plasma/Applet --remove "$APPLET_ID"
+    print_command systemctl --user disable --now plasma-top
     printf '\n2. Remove user-local files\n'
     print_command rm -f -- "$HOME/.local/bin/plasma-top"
     print_command rm -rf -- "$LIBDIR"
@@ -206,10 +206,16 @@ if [[ "$MODE" == user ]]; then
         exit 0
     fi
 
-    systemctl --user disable --now plasma-top 2>/dev/null || true
-    if command -v kpackagetool6 >/dev/null; then
-        kpackagetool6 --type Plasma/Applet --remove "$APPLET_ID" 2>/dev/null || true
+    APPLET_PATH="$DATA_HOME/plasma/plasmoids/$APPLET_ID"
+    if [[ -e "$APPLET_PATH" || -L "$APPLET_PATH" ]]; then
+        if ! command -v kpackagetool6 >/dev/null ||
+            ! kpackagetool6 --type Plasma/Applet --remove "$APPLET_ID" ||
+            [[ -e "$APPLET_PATH" || -L "$APPLET_PATH" ]]; then
+            echo "[error] applet removal failed; owned files were kept so ./uninstall.sh can be retried" >&2
+            exit 1
+        fi
     fi
+    systemctl --user disable --now plasma-top 2>/dev/null || true
     rm -f -- "$HOME/.local/bin/plasma-top"
     rm -rf -- "$LIBDIR"
     rm -f -- "$DATA_HOME/systemd/user/plasma-top.service"

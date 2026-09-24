@@ -361,10 +361,15 @@ if [[ "$MODE" == user ]]; then
         fi
         applet_upgraded=false
     fi
+    if [[ ! -f "$DATA_HOME/plasma/plasmoids/$APPLET_ID/metadata.json" ]] ||
+        ! kpackagetool6 --type Plasma/Applet --show "$APPLET_ID" >/dev/null 2>&1; then
+        echo "[error] files installed, but applet registration failed; retry ./install.sh" >&2
+        exit 1
+    fi
     command -v kbuildsycoca6 >/dev/null && kbuildsycoca6 >/dev/null 2>&1 || true
     systemctl --user daemon-reload
     systemctl --user enable plasma-top
-    if [[ "$owned_install" == true || "$applet_upgraded" == true ]]; then
+    if [[ "$owned_install" == true ]]; then
         echo "PlasmaTop upgraded for current user. The running daemon was left untouched."
         echo "Log out and back in before using the upgraded applet; daemon and applet versions must change together."
     else
@@ -375,7 +380,11 @@ if [[ "$MODE" == user ]]; then
             exit 1
         fi
         echo "PlasmaTop installed for current user. Service is active."
-        echo "Add the 'PlasmaTop' widget to a panel."
+        if [[ "$applet_upgraded" == true ]]; then
+            echo "Log out and back in before using the upgraded applet."
+        else
+            echo "Add the 'PlasmaTop' widget to a panel."
+        fi
     fi
     exit 0
 fi
