@@ -405,7 +405,7 @@ PlasmoidItem {
 		widget.runCommand()
 	}
 
-	Plasmoid.onActivated: widget.performClick()
+	Plasmoid.onActivated: widget.expanded = !widget.expanded
 
 	onPresentedChanged: {
 		if (widget.presented)
@@ -483,10 +483,8 @@ PlasmoidItem {
 	// pinText). In a panel the panel supplies the background regardless.
 	Plasmoid.backgroundHints: plasmoid.configuration.showBackground ? PlasmaCore.Types.DefaultBackground : PlasmaCore.Types.NoBackground
 
-	// The pinned popup (middle-click) is the only way this applet expands, and it
-	// is dismissed the same way — middle-click again. Keep it open when it loses
-	// focus (a click elsewhere) instead of Plasma's default auto-hide, so it can
-	// stay parked while you work in another window and watch the live pages.
+	// Left-click toggles the pinned popup, and a left-click inside it dismisses it.
+	// Keep the popup open when it loses focus so it can stay visible while you work in another window.
 	hideOnWindowDeactivate: false
 
 	compactRepresentation: Item {
@@ -560,12 +558,10 @@ PlasmoidItem {
 
 			cursorShape: output.hoveredLink ? Qt.PointingHandCursor : Qt.ArrowCursor
 
-			// Middle-click pins the tooltip: it toggles the full representation,
-			// a persistent popup showing the same tooltipText. Left-click still
-			// runs the configured click command; the wheel still pages.
+			// Left-click toggles the persistent tooltip popup; middle-click runs the configured command.
 			acceptedButtons: Qt.LeftButton | Qt.MiddleButton
 			onClicked: (mouse) => {
-				if (mouse.button === Qt.MiddleButton)
+				if (mouse.button === Qt.LeftButton)
 					widget.expanded = !widget.expanded
 				else
 					widget.performClick()
@@ -663,12 +659,9 @@ PlasmoidItem {
 
 	}
 
-	// plasma-top: the pinned tooltip. Middle-click on the panel toggles this
-	// popup; it renders the same tooltipText as the hover tooltip but persists
-	// (Plasma keeps a full representation up until you click away or toggle it),
-	// so you can watch the graphs live. Page it by scrolling the PANEL while it's
-	// up (the popup follows); scrolling the popup itself is intentionally inert.
-	activationTogglesExpanded: false   // left-click runs the click command, not expand
+	// The pinned popup shows the same tooltipText as the hover tooltip and stays open until left-clicked again.
+	// Page it by scrolling the panel; scrolling the popup itself is intentionally inert.
+	activationTogglesExpanded: false   // Plasmoid.onActivated toggles it for keyboard and accessibility activation.
 
 	fullRepresentation: Item {
 		id: pinItem
@@ -694,8 +687,13 @@ PlasmoidItem {
 
 		MouseArea {
 			anchors.fill: parent
-			acceptedButtons: Qt.MiddleButton
-			onClicked: widget.expanded = false   // middle-click again un-pins
+			acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+			onClicked: (mouse) => {
+				if (mouse.button === Qt.LeftButton)
+					widget.expanded = false
+				else
+					widget.performClick()
+			}
 			// Wheel paging is enabled ONLY on the desktop, where this full
 			// representation IS the widget and there's no panel to page from. In
 			// the pinned popup it stays inert: scrolling would resize the popup out

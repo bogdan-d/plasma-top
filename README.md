@@ -24,7 +24,7 @@ PlasmaTop renders CPU, memory, drives, GPU, temperatures, batteries, network and
 - **Panel** — compact live stats (usage bars/sparks, temperatures, battery, …), auto-fitted to the panel's size and orientation (horizontal or vertical).
 - **Tooltip** — the full stats view on hover, grouped into sections.
 - **Deep-dive pages** — scroll the mouse wheel over the widget to page through the tooltip: top processes, per-core CPU, listening connections, fastfetch system info, and history graphs (CPU / memory / GPU / network / CPU and GPU temperature). Enable them in the Daemon settings. The Graphs settings choose chart visibility, chart order, and history length.
-- **Pin** — middle-click keeps the tooltip open as a persistent popup, so you can watch the graphs live without holding the pointer over the widget.
+- **Pin** — left-click keeps the tooltip open as a persistent popup, so you can watch the graphs live without holding the pointer over the widget. By default, middle-click opens KDE System Monitor.
 - **Desktop mode** — drop the widget straight onto the desktop for an always-on, conky-style readout. Choose Plasma's background or keep it transparent on the wallpaper, pick the text and outline colors for legibility over any image, and scroll to page through the views. Set it in the widget's *Appearance* page (the Desktop options appear only when it's on the desktop).
 - **Auto light/dark** — follows the Plasma color scheme, hot-reloaded.
 - **Per-machine overrides** — sensor mappings and item tweaks auto-detected from the DMI board/product name, so one config works across all your machines.
@@ -64,7 +64,12 @@ Arch packaging metadata lives under `packaging/aur/`. It builds the locked nativ
 
 Then add the widget: **right-click a panel → Add Widgets → search "PlasmaTop"**.
 
-Re-run the same install command to upgrade, then log out and back in before using PlasmaTop. The daemon and loaded applet use a matched visibility protocol, so the installer leaves both current processes untouched during upgrade; restarting only `plasma-top` or only `plasmashell` can mix versions and is unsupported. First install still activates the daemon immediately. Remove a user install with `./uninstall.sh`, or a system install with `./uninstall.sh --system`. Configuration survives either command. Preview removals with `--dry-run` or its `--dry` alias. If an existing widget keeps stale action paths after switching install modes, remove and re-add that widget; the installer never rewrites Plasma's configuration database.
+Re-run the same install command to upgrade, then log out and back in before using PlasmaTop. The daemon and loaded applet use a matched visibility protocol, so the installer leaves both current processes untouched during upgrade; restarting only `plasma-top` or only `plasmashell` during a protocol-changing upgrade can mix versions and is unsupported. First install still activates the daemon immediately. Remove a user install with `./uninstall.sh`, or a system install with `./uninstall.sh --system`. Configuration survives either command. Preview removals with `--dry-run` or its `--dry` alias. If an existing widget keeps stale action paths after switching install modes, remove and re-add that widget; the installer never rewrites Plasma's configuration database.
+
+For a widget-only QML change, install the updated applet and reload Plasma Shell to pick it up without logging out. Use one of these commands (the panel briefly disappears and returns):
+
+- On a systemd-managed Plasma session: `systemctl --user restart plasma-plasmashell.service`
+- Otherwise, run `plasmashell --replace` from KRunner (`Alt+Space`).
 
 ## Configuration
 
