@@ -13,6 +13,7 @@ use super::traces::{TraceMetric, braille_html};
 
 const GRAPH_HEIGHT: usize = 84;
 const GRAPH_LEFT_PAD: usize = 18;
+const TEMPERATURE_GRID: &[f64] = &[0.0, 30.0, 60.0, 90.0, 120.0];
 
 #[derive(Clone, Copy)]
 struct ProcessLayout {
@@ -231,63 +232,75 @@ impl<'a> PageFormatter<'a> {
         pager_fn: Option<&dyn Fn(usize) -> String>,
     ) -> String {
         let width = self.cfg.pages.graph_width.max(0) as usize;
-        let cpu_png = area_chart_png(
-            &readings
-                .cpu_history
-                .iter()
-                .map(|value| f64::from(*value))
-                .collect::<Vec<_>>(),
-            width,
-            GRAPH_HEIGHT,
-            AreaChartOptions {
-                left_pad: GRAPH_LEFT_PAD,
-                line: BLUE_LINE,
-                fill: BLUE_FILL,
-                ..AreaChartOptions::default()
-            },
-        );
-        let mem_png = area_chart_png(
-            &readings
-                .mem_history
-                .iter()
-                .map(|value| f64::from(*value))
-                .collect::<Vec<_>>(),
-            width,
-            GRAPH_HEIGHT,
-            AreaChartOptions {
-                left_pad: GRAPH_LEFT_PAD,
-                line: PURPLE_LINE,
-                fill: PURPLE_FILL,
-                ..AreaChartOptions::default()
-            },
-        );
-
-        let mut blocks = vec![
-            png_img(&cpu_png, width)
-                + &legend(vec![(
-                    Some(BLUE_LINE),
-                    "CPU usage",
-                    graph_value_band(
-                        readings.cpu_usage,
-                        Some((
-                            self.cfg.thresholds.cpu_usage[0],
-                            self.cfg.thresholds.cpu_usage[1],
-                        )),
-                    ),
-                )]),
-            png_img(&mem_png, width)
-                + &legend(vec![(
-                    Some(PURPLE_LINE),
-                    "Memory usage",
-                    graph_value_band(
-                        readings.mem_usage,
-                        Some((
-                            self.cfg.thresholds.mem_usage[0],
-                            self.cfg.thresholds.mem_usage[1],
-                        )),
-                    ),
-                )]),
-        ];
+        let history_len = self.cfg.pages.graph_history_length.max(0) as usize;
+        let enabled = |chart: &str| self.cfg.pages.graph_order.iter().any(|name| name == chart);
+        let mut blocks = Vec::new();
+        if enabled("cpu") {
+            let history =
+                &readings.cpu_history[readings.cpu_history.len().saturating_sub(history_len)..];
+            let png = area_chart_png(
+                &history
+                    .iter()
+                    .map(|value| f64::from(*value))
+                    .collect::<Vec<_>>(),
+                width,
+                GRAPH_HEIGHT,
+                AreaChartOptions {
+                    left_pad: GRAPH_LEFT_PAD,
+                    line: BLUE_LINE,
+                    fill: BLUE_FILL,
+                    ..AreaChartOptions::default()
+                },
+            );
+            blocks.push((
+                "cpu",
+                png_img(&png, width)
+                    + &legend(vec![(
+                        Some(BLUE_LINE),
+                        "CPU usage",
+                        graph_value_band(
+                            readings.cpu_usage,
+                            Some((
+                                self.cfg.thresholds.cpu_usage[0],
+                                self.cfg.thresholds.cpu_usage[1],
+                            )),
+                        ),
+                    )]),
+            ));
+        }
+        if enabled("memory") {
+            let history =
+                &readings.mem_history[readings.mem_history.len().saturating_sub(history_len)..];
+            let png = area_chart_png(
+                &history
+                    .iter()
+                    .map(|value| f64::from(*value))
+                    .collect::<Vec<_>>(),
+                width,
+                GRAPH_HEIGHT,
+                AreaChartOptions {
+                    left_pad: GRAPH_LEFT_PAD,
+                    line: PURPLE_LINE,
+                    fill: PURPLE_FILL,
+                    ..AreaChartOptions::default()
+                },
+            );
+            blocks.push((
+                "memory",
+                png_img(&png, width)
+                    + &legend(vec![(
+                        Some(PURPLE_LINE),
+                        "Memory usage",
+                        graph_value_band(
+                            readings.mem_usage,
+                            Some((
+                                self.cfg.thresholds.mem_usage[0],
+                                self.cfg.thresholds.mem_usage[1],
+                            )),
+                        ),
+                    )]),
+            ));
+        }
 
         let gpu = if self.hw.has_nvidia {
             Some((
@@ -326,7 +339,7 @@ impl<'a> PageFormatter<'a> {
             usage_thresholds,
             secondary_threshold,
             secondary_label,
-        )) = gpu
+        )) = gpu.filter(|_| enabled("gpu"))
         {
             let usage = readings
                 .gpu_usage_history
@@ -351,7 +364,8 @@ impl<'a> PageFormatter<'a> {
                     ..AreaChartOptions::default()
                 },
             );
-            blocks.push(
+            blocks.push((
+                "gpu",
                 png_img(&png, width)
                     + &legend(vec![
                         (
@@ -368,10 +382,10 @@ impl<'a> PageFormatter<'a> {
                             graph_value_active(secondary_value, Some(secondary_threshold)),
                         ),
                     ]),
-            );
+            ));
         }
 
-        if self.hw.net_device.is_some() {
+        if enabled("network") && self.hw.net_device.is_some() {
             let down = readings.net_down_history.iter().copied().max().unwrap_or(0);
             let up = readings.net_up_history.iter().copied().max().unwrap_or(0);
             let peak = down.max(up).max(1) as f64;
@@ -401,7 +415,8 @@ impl<'a> PageFormatter<'a> {
                     ..AreaChartOptions::default()
                 },
             );
-            blocks.push(
+            blocks.push((
+                "network",
                 png_img(&png, width)
                     + &legend(vec![
                         (
@@ -421,9 +436,100 @@ impl<'a> PageFormatter<'a> {
                             ),
                         ),
                     ]),
-            );
+            ));
         }
 
+        let selected_gpu_temp = if self.hw.has_nvidia {
+            readings.gpu_temp
+        } else if self.hw.amd_gpu.is_some() {
+            readings.gpu_amd_temp
+        } else {
+            None
+        };
+        if enabled("temperature")
+            && (readings.cpu_temp.is_some()
+                || selected_gpu_temp.is_some()
+                || !readings.cpu_temp_history.is_empty()
+                || !readings.gpu_temp_history.is_empty())
+        {
+            let cpu_history = &readings.cpu_temp_history
+                [readings.cpu_temp_history.len().saturating_sub(history_len)..];
+            let gpu_history = &readings.gpu_temp_history
+                [readings.gpu_temp_history.len().saturating_sub(history_len)..];
+            let cpu = cpu_history
+                .iter()
+                .map(|value| f64::from(*value))
+                .collect::<Vec<_>>();
+            let gpu = gpu_history
+                .iter()
+                .map(|value| f64::from(*value))
+                .collect::<Vec<_>>();
+            let (gpu_temp, gpu_thresholds) = if self.hw.has_nvidia {
+                (
+                    selected_gpu_temp,
+                    Some((
+                        self.cfg.thresholds.gpu_nvidia_temp[0],
+                        self.cfg.thresholds.gpu_nvidia_temp[1],
+                    )),
+                )
+            } else if self.hw.amd_gpu.is_some() {
+                (
+                    selected_gpu_temp,
+                    Some((
+                        self.cfg.thresholds.gpu_amd_temp[0],
+                        self.cfg.thresholds.gpu_amd_temp[1],
+                    )),
+                )
+            } else {
+                (None, None)
+            };
+            let png = area_chart_png(
+                &cpu,
+                width,
+                GRAPH_HEIGHT,
+                AreaChartOptions {
+                    vmax: 120.0,
+                    left_pad: GRAPH_LEFT_PAD,
+                    grid_levels: TEMPERATURE_GRID,
+                    line: BLUE_LINE,
+                    fill: BLUE_FILL,
+                    overlay: Some(&gpu),
+                    overlay_line: ORANGE_LINE,
+                    ..AreaChartOptions::default()
+                },
+            );
+            blocks.push((
+                "temperature",
+                png_img(&png, width)
+                    + &legend(vec![
+                        (
+                            Some(BLUE_LINE),
+                            "CPU temp",
+                            graph_value_temperature(
+                                readings.cpu_temp,
+                                Some((
+                                    self.cfg.thresholds.cpu_temp[0],
+                                    self.cfg.thresholds.cpu_temp[1],
+                                )),
+                            ),
+                        ),
+                        (
+                            Some(ORANGE_LINE),
+                            "GPU temp",
+                            graph_value_temperature(gpu_temp, gpu_thresholds),
+                        ),
+                    ]),
+            ));
+        }
+
+        blocks.sort_by_key(|(name, _)| {
+            self.cfg
+                .pages
+                .graph_order
+                .iter()
+                .position(|selected| selected == name)
+                .unwrap_or(usize::MAX)
+        });
         let top_gap = r#"<div style="font-size:6px">&nbsp;</div>"#;
         let spacer = r#"<div style="font-size:16px">&nbsp;</div>"#;
         let columns = if self.cfg.display.tooltip_width > 0 {
@@ -432,12 +538,19 @@ impl<'a> PageFormatter<'a> {
             width / 9
         };
         let footer = pager_fn.map_or_else(String::new, |pager_fn| pager_fn(columns));
-        self.wrap_tooltip(
-            &format!("{top_gap}{}", blocks.join(spacer)),
-            css,
-            header,
-            &footer,
-        )
+        let body = if blocks.is_empty() {
+            String::from("<div class=\"page\">No graphs selected or available</div>")
+        } else {
+            format!(
+                "{top_gap}{}",
+                blocks
+                    .into_iter()
+                    .map(|(_, html)| html)
+                    .collect::<Vec<_>>()
+                    .join(spacer)
+            )
+        };
+        self.wrap_tooltip(&body, css, header, &footer)
     }
 
     fn wrap_tooltip(&self, body: &str, css: &str, header: &str, footer: &str) -> String {
@@ -496,6 +609,18 @@ fn graph_value_band(current: Option<i32>, thresholds: Option<(i32, i32)>) -> Str
                 )
             });
             format!(r#"<span class="val {class}">{current}%</span>"#)
+        }
+    }
+}
+
+fn graph_value_temperature(current: Option<i32>, thresholds: Option<(i32, i32)>) -> String {
+    match current {
+        None => format!(r#"<span class="val">{EMPTY_VALUE}</span>"#),
+        Some(current) => {
+            let class = thresholds.map_or("", |(warn, crit)| {
+                css_class_from_thresholds(f64::from(current), (f64::from(warn), f64::from(crit)))
+            });
+            format!(r#"<span class="val {class}">{current}°C</span>"#)
         }
     }
 }

@@ -19,4 +19,9 @@ ConfigModel {
 		icon: "view-list-details"
 		source: "config/ConfigTooltip.qml"
 	}
+	ConfigCategory {
+		name: i18n("Graphs")
+		icon: "view-statistics"
+		source: "config/ConfigGraphs.qml"
+	}
 }

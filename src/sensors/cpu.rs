@@ -13,7 +13,11 @@ use std::time::Duration;
 
 use crate::config::{BRAILLE_LENGTH_MULTIPLIER, Config, SensorOverrides};
 use crate::domain::boundary::ClockSnapshot;
-use crate::domain::readings::{LoadAverage, RetainedMetricSample};
+use crate::domain::readings::{
+    DisplaySnapshot, HardwareInventory, LoadAverage, RetainedMetricSample,
+};
+
+use super::gpu_history::selected_source;
 
 const CPU_TEMPERATURE_CHIPS: [&str; 3] = ["coretemp", "k10temp", "zenpower"];
 
@@ -49,6 +53,14 @@ pub struct CpuState {
     pub cpu_history: Vec<i32>,
     /// Monotonic timestamp of the last aggregate history sample.
     pub cpu_history_sample_at: Option<Duration>,
+    /// CPU temperature history, sampled on the CPU history deadline.
+    pub cpu_temp_history: Vec<i32>,
+    /// Selected GPU temperature history, sampled on the CPU history deadline.
+    pub gpu_temp_history: Vec<i32>,
+    /// CPU sensor path associated with the temperature history.
+    pub temp_cpu_source: Option<PathBuf>,
+    /// Selected GPU associated with the temperature history.
+    pub temp_gpu_source: Option<String>,
     /// Previous per-core `/proc/stat` counters.
     pub cpu_core_prev_times: Vec<Vec<u64>>,
     /// Per-core CPU history for the `cpu_cores` page.
@@ -191,6 +203,66 @@ pub(crate) fn append_cpu_history(
     state.cpu_history_sample_at = Some(captured_at);
     state.cpu_history.push(usage);
     trim_to_len(&mut state.cpu_history, aggregate_history_len(cfg));
+}
+
+/// Appends available CPU and selected GPU temperatures on a graph-history tick.
+pub(crate) fn append_graph_temperature_history(
+    state: &mut CpuState,
+    cfg: &Config,
+    hw: &HardwareInventory,
+    readings: &DisplaySnapshot,
+    captured_at: Duration,
+) -> bool {
+    let enabled = cfg.pages.order.iter().any(|page| page == "graphs")
+        && cfg
+            .pages
+            .graph_order
+            .iter()
+            .any(|chart| chart == "temperature");
+    if !enabled {
+        let changed = !state.cpu_temp_history.is_empty() || !state.gpu_temp_history.is_empty();
+        state.cpu_temp_history.clear();
+        state.gpu_temp_history.clear();
+        state.temp_cpu_source = None;
+        state.temp_gpu_source = None;
+        return changed;
+    }
+
+    let mut changed = false;
+    if state.temp_cpu_source != hw.cpu_temp_path {
+        changed |= !state.cpu_temp_history.is_empty();
+        state.cpu_temp_history.clear();
+        state.temp_cpu_source.clone_from(&hw.cpu_temp_path);
+    }
+    let gpu_source = selected_source(hw);
+    if state.temp_gpu_source != gpu_source {
+        changed |= !state.gpu_temp_history.is_empty();
+        state.gpu_temp_history.clear();
+        state.temp_gpu_source = gpu_source;
+    }
+
+    let max_len = cfg.pages.graph_history_length.max(0) as usize;
+    if state.temperature_source == hw.cpu_temp_path
+        && hw.cpu_temp_path.is_some()
+        && let Some(sample) = state.temperature.sample_at_or_before(captured_at)
+    {
+        state.cpu_temp_history.push(sample.value);
+        trim_to_len(&mut state.cpu_temp_history, max_len);
+        changed = true;
+    }
+    let gpu_temp = if hw.has_nvidia {
+        readings.gpu_temp
+    } else if hw.amd_gpu.is_some() {
+        readings.gpu_amd_temp
+    } else {
+        None
+    };
+    if let Some(value) = gpu_temp {
+        state.gpu_temp_history.push(value);
+        trim_to_len(&mut state.gpu_temp_history, max_len);
+        changed = true;
+    }
+    changed
 }
 
 /// Reads per-core CPU usage from `/proc/stat` and updates per-core histories.

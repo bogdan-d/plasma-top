@@ -5,13 +5,14 @@ set -euo pipefail
 
 usage() {
     cat <<'EOF'
-Usage: tools/qml_verify.sh [--smoke|--config-smoke|--tooltip-config-smoke] [--no-build]
+Usage: tools/qml_verify.sh [--smoke|--config-smoke|--tooltip-config-smoke|--graphs-config-smoke] [--no-build]
 
 Launch an isolated Plasma applet backed by the Rust daemon.
 
   --smoke     Run a short non-interactive load check, then exit.
   --config-smoke  Open the Daemon settings page in the isolated applet.
   --tooltip-config-smoke  Edit the Main tooltip page in the isolated applet.
+  --graphs-config-smoke  Edit the Graphs page in the isolated applet.
   --no-build  Reuse target/release/plasma-top.
 
 Without a smoke flag, close the plasmawindowed window to finish an Application-form inspection.
@@ -23,6 +24,7 @@ EOF
 smoke=false
 config_smoke=false
 tooltip_config_smoke=false
+graphs_config_smoke=false
 build=true
 for arg in "$@"; do
     case "$arg" in
@@ -34,6 +36,10 @@ for arg in "$@"; do
     --tooltip-config-smoke)
         smoke=true
         tooltip_config_smoke=true
+        ;;
+    --graphs-config-smoke)
+        smoke=true
+        graphs_config_smoke=true
         ;;
     --no-build) build=false ;;
     -h | --help)
@@ -64,7 +70,9 @@ cleanup() {
         kill -TERM "$daemon_pid" 2>/dev/null || true
         wait "$daemon_pid" 2>/dev/null || true
     fi
-    rm -rf "$test_root"
+    if [[ -n "$test_root" && "$test_root" == /tmp/plasma-top-qml-verify.* ]]; then
+        rm -r --preserve-root=all --one-file-system -- "$test_root"
+    fi
 }
 trap cleanup EXIT INT TERM
 
@@ -133,10 +141,11 @@ path.write_text(
 )
 PY
 
-if [[ "$config_smoke" == true || "$tooltip_config_smoke" == true ]]; then
+if [[ "$config_smoke" == true || "$tooltip_config_smoke" == true || "$graphs_config_smoke" == true ]]; then
     page_name=ConfigDaemon.qml
     if [[ "$tooltip_config_smoke" == true ]]; then page_name=ConfigTooltip.qml; fi
-    python3 - "$test_root/package/contents/config/config.qml" "$test_root/package/contents/ui/main.qml" "$test_root/package/contents/ui/config/$page_name" "$tooltip_config_smoke" <<'PY'
+    if [[ "$graphs_config_smoke" == true ]]; then page_name=ConfigGraphs.qml; fi
+    python3 - "$test_root/package/contents/config/config.qml" "$test_root/package/contents/ui/main.qml" "$test_root/package/contents/ui/config/$page_name" "$tooltip_config_smoke" "$graphs_config_smoke" <<'PY'
 from pathlib import Path
 import sys
 
@@ -167,7 +176,15 @@ main.write_text(
 )
 page = Path(sys.argv[3])
 body, close = page.read_text(encoding="utf-8").rsplit("}", 1)
-if sys.argv[4] == "true":
+if sys.argv[5] == "true":
+    edit = '''
+                root.moveChart(3, -1)
+                root.moveChart(2, -1)
+                root.moveChart(1, -1)
+                root.removeChart(2)
+                historyField.text = "120"
+'''
+elif sys.argv[4] == "true":
     edit = '''
                 root.moveSection(1, -1)
                 root.setSectionEnabled(4, false)
@@ -305,6 +322,27 @@ assert not next(section for section in sections if section["key"] == "batteries"
 assert "swap_usage" in sections[1]["items"], sections[1]["items"]
 PY
     fi
+    if [[ "$graphs_config_smoke" == true ]]; then
+        grep -Eq $'\tplasma-top\tconfig graphs show$' "$PLASMA_TOP_QML_TRACE" || {
+            echo "Graphs page did not request user config" >&2
+            cat "$test_root/qml.log" >&2
+            exit 1
+        }
+        grep -Eq $'\tplasma-top\tconfig graphs apply ' "$PLASMA_TOP_QML_TRACE" || {
+            echo "Graphs page did not submit edited layout" >&2
+            cat "$test_root/qml.log" >&2
+            exit 1
+        }
+        python3 - "$binary" <<'PY'
+import json
+import subprocess
+import sys
+
+settings = json.loads(subprocess.check_output([sys.argv[1], "config", "graphs", "show"], text=True))
+assert settings["order"] == ["network", "cpu", "gpu", "temperature"], settings
+assert settings["history_length"] == 120, settings
+PY
+    fi
     lease="$(find "$runtime_root/state/presented" -maxdepth 1 -type f -printf '%f\n' 2>/dev/null | awk '/^[1-9][0-9]*$/ { print; exit }')"
     if grep -Eq $'\tplasma-top\tpresent [1-9][0-9]*$' "$PLASMA_TOP_QML_TRACE"; then
         [[ -n "$lease" ]] || {
@@ -335,7 +373,9 @@ PY
         echo "best-effort clean-removal dismiss callback missing" >&2
         exit 1
     fi
-    if [[ "$tooltip_config_smoke" == true ]]; then
+    if [[ "$graphs_config_smoke" == true ]]; then
+        echo "QML Graphs config smoke passed: chart visibility, order, and history length edited through the Graphs page"
+    elif [[ "$tooltip_config_smoke" == true ]]; then
         echo "QML tooltip config smoke passed: section order and readings edited through the Main tooltip page"
     elif [[ "$config_smoke" == true ]]; then
         echo "QML config smoke passed: user config initialized and edited through the Daemon page"

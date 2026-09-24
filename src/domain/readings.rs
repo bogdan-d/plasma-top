@@ -430,6 +430,8 @@ pub struct DisplaySnapshot {
     pub cpu_turbo: Option<bool>,
     /// Shared CPU history used by traces and graphs.
     pub cpu_history: Vec<i32>,
+    /// CPU temperature history for the Graphs page, in °C.
+    pub cpu_temp_history: Vec<i32>,
     /// Shared memory history used by traces and graphs.
     pub mem_history: Vec<i32>,
     /// System uptime in seconds.
@@ -516,6 +518,8 @@ pub struct DisplaySnapshot {
     pub gpu_usage_history: Vec<i32>,
     /// Active GPU decoder history for the graphs page.
     pub gpu_dec_history: Vec<i32>,
+    /// Selected GPU temperature history for the Graphs page, in °C.
+    pub gpu_temp_history: Vec<i32>,
     /// Network upload history for the graphs page.
     pub net_up_history: Vec<u64>,
     /// Network download history for the graphs page.

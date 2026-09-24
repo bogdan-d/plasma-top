@@ -36,8 +36,10 @@ pub(crate) fn invalidate_scheduled_job(
             owners.cpu.uptime_seconds.invalidate();
             owners.cpu.load_average.invalidate();
             owners.cpu.cpu_prev_times.clear();
+            owners.cpu.cpu_temp_history.clear();
             readings.cpu_usage = None;
             readings.cpu_temp = None;
+            readings.cpu_temp_history.clear();
             readings.cpu_freq_mhz = None;
             readings.cpu_turbo = None;
             readings.uptime_seconds = None;
@@ -51,7 +53,11 @@ pub(crate) fn invalidate_scheduled_job(
         JobKind::CpuHistory => {
             owners.cpu.cpu_history.clear();
             owners.cpu.cpu_history_sample_at = None;
+            owners.cpu.cpu_temp_history.clear();
+            owners.cpu.gpu_temp_history.clear();
             readings.cpu_history.clear();
+            readings.cpu_temp_history.clear();
+            readings.gpu_temp_history.clear();
         }
         JobKind::CpuCoreHistory => {
             owners.cpu.cpu_core_history.clear();

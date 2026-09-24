@@ -5,7 +5,7 @@
 use serde::Deserialize;
 use toml::{Table, Value};
 
-use super::{COLUMN_DIGIT_RATIO, Cadence, TOOLTIP_WIDTH_FLOOR};
+use super::{COLUMN_DIGIT_RATIO, Cadence, GRAPH_CHARTS, TOOLTIP_WIDTH_FLOOR};
 
 /// Global display knobs: the daemon's two cadences, plus the inspection
 /// aid. Mirrors `DisplayConfig` in `src/config.py`.
@@ -48,8 +48,7 @@ impl Default for DisplayConfig {
     }
 }
 
-/// Tooltip deep-dive pages: which ones the wheel cycles through, and
-/// the only knob `graphs` exposes.
+/// Tooltip deep-dive pages and Graphs page history/layout settings.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(default)]
 pub struct PagesConfig {
@@ -57,6 +56,8 @@ pub struct PagesConfig {
     pub order: Vec<String>,
     /// Samples the graphs page's history charts keep.
     pub graph_history_length: i32,
+    /// Visible Graphs page charts in display order.
+    pub graph_order: Vec<String>,
     /// Graphs page PNG width in px; AUTO-derived from the resolved
     /// tooltip width.
     pub graph_width: i32,
@@ -72,6 +73,10 @@ impl Default for PagesConfig {
                 String::from("fastfetch"),
             ],
             graph_history_length: 60,
+            graph_order: GRAPH_CHARTS
+                .iter()
+                .map(|chart| (*chart).to_owned())
+                .collect(),
             graph_width: 315,
         }
     }

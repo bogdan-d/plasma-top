@@ -400,8 +400,12 @@ impl RuntimeState {
         use crate::scheduler::JobKind as Kind;
 
         let graph_input_changed = match job.kind {
-            Kind::Cpu => self.readings.cpu_usage.is_some(),
-            Kind::CpuHistory => !self.readings.cpu_history.is_empty(),
+            Kind::Cpu => self.readings.cpu_usage.is_some() || self.readings.cpu_temp.is_some(),
+            Kind::CpuHistory => {
+                !self.readings.cpu_history.is_empty()
+                    || !self.readings.cpu_temp_history.is_empty()
+                    || !self.readings.gpu_temp_history.is_empty()
+            }
             Kind::Memory => self.readings.mem_usage.is_some(),
             Kind::MemoryHistory => !self.readings.mem_history.is_empty(),
             Kind::NetworkRate => {
@@ -412,7 +416,9 @@ impl RuntimeState {
                     || !self.readings.net_down_history.is_empty()
             }
             Kind::NvidiaNvml | Kind::NvidiaFallback => {
-                self.readings.gpu_usage.is_some() || self.readings.gpu_dec.is_some()
+                self.readings.gpu_usage.is_some()
+                    || self.readings.gpu_dec.is_some()
+                    || self.readings.gpu_temp.is_some()
             }
             Kind::AmdFast => {
                 (self.readings.gpu_amd_usage.is_some()
@@ -423,6 +429,11 @@ impl RuntimeState {
                         && metrics.is_none_or(|metrics| {
                             metrics.contains(&crate::domain::Metric::GpuAmdCodecUsage)
                         }))
+            }
+            Kind::AmdSlow => {
+                self.readings.gpu_amd_temp.is_some()
+                    && metrics
+                        .is_none_or(|metrics| metrics.contains(&crate::domain::Metric::GpuAmdTemp))
             }
             Kind::IntelUsage => {
                 self.readings.gpu_intel_usage.is_some()
@@ -445,7 +456,10 @@ impl RuntimeState {
         match completion.ticket.job.owner {
             OwnerId::Cpu => {
                 self.readings.cpu_usage != readings.cpu_usage
+                    || self.readings.cpu_temp != readings.cpu_temp
                     || self.readings.cpu_history != readings.cpu_history
+                    || self.readings.cpu_temp_history != readings.cpu_temp_history
+                    || self.readings.gpu_temp_history != readings.gpu_temp_history
             }
             OwnerId::Memory => {
                 self.readings.mem_usage != readings.mem_usage
@@ -462,10 +476,12 @@ impl RuntimeState {
             OwnerId::Nvidia => {
                 self.readings.gpu_usage != readings.gpu_usage
                     || self.readings.gpu_dec != readings.gpu_dec
+                    || self.readings.gpu_temp != readings.gpu_temp
             }
             OwnerId::AmdGpu => {
                 self.readings.gpu_amd_usage != readings.gpu_amd_usage
                     || self.readings.gpu_amd_codec_usage != readings.gpu_amd_codec_usage
+                    || self.readings.gpu_amd_temp != readings.gpu_amd_temp
             }
             OwnerId::IntelGpu => {
                 self.readings.gpu_intel_usage != readings.gpu_intel_usage
@@ -476,6 +492,9 @@ impl RuntimeState {
                     || self.readings.gpu_dec_history != readings.gpu_dec_history
             }
             OwnerId::Discovery => match completion.ticket.job.source {
+                crate::scheduler::SourceIdentity::Inventory(InventoryFamily::Cpu) => {
+                    self.hw.cpu_temp_path != completion.hw.cpu_temp_path
+                }
                 crate::scheduler::SourceIdentity::Inventory(InventoryFamily::Nvidia) => {
                     self.hw.has_nvidia != completion.hw.has_nvidia
                 }

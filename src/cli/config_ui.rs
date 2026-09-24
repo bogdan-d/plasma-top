@@ -40,6 +40,24 @@ pub(super) fn parse(mut args: TailArgs) -> Result<ConfigUiCommand, CliError> {
                 }
             }
         }
+        "graphs" => {
+            let operation = args
+                .take_value("config", "graphs action")
+                .and_then(into_text)?;
+            match operation.as_str() {
+                "show" => ConfigUiCommand::GraphsShow,
+                "apply" => ConfigUiCommand::GraphsApply {
+                    payload: args.take_value("config", "JSON").and_then(into_text)?,
+                },
+                _ => {
+                    return Err(CliError::InvalidValue {
+                        command: "config",
+                        flag: "graphs action",
+                        value: operation,
+                    });
+                }
+            }
+        }
         _ => {
             return Err(CliError::InvalidValue {
                 command: "config",

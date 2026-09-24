@@ -25,11 +25,25 @@ pub(super) fn configured_capabilities(cfg: &Config) -> BTreeSet<Capability> {
         .chain(cfg.tooltip.sections.iter())
         .flat_map(|section| section.items.iter())
         .filter_map(|token| ItemToken::from_str(token).ok());
-    needed_capabilities(
+    let mut capabilities = needed_capabilities(
         items,
         notification_flags(cfg).into_iter(),
         cfg.pages.order.iter().map(String::as_str),
-    )
+    );
+    if temperature_graph_enabled(cfg) {
+        capabilities.insert(Capability::CpuTemperature);
+        capabilities.insert(Capability::GpuAmdTemperature);
+    }
+    capabilities
+}
+
+fn temperature_graph_enabled(cfg: &Config) -> bool {
+    cfg.pages.order.iter().any(|page| page == "graphs")
+        && cfg
+            .pages
+            .graph_order
+            .iter()
+            .any(|chart| chart == "temperature")
 }
 
 fn notification_flags(cfg: &Config) -> Vec<&'static str> {
@@ -88,6 +102,9 @@ pub(crate) fn scheduler_config(
             InventoryFamily::Intel,
             InventoryFamily::Network,
         ]);
+    }
+    if temperature_graph_enabled(cfg) {
+        hidden_inventory.insert(InventoryFamily::Cpu);
     }
     for family in hidden_inventory {
         demand.hidden.insert(catalog.inventory_job(family));

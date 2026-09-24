@@ -16,6 +16,7 @@ use crate::config::{
 };
 use crate::error::{Error, Result};
 
+mod graphs;
 mod tooltip;
 
 const PAGES: [&str; 5] = [
@@ -78,6 +79,15 @@ pub fn run(command: ConfigUiCommand) -> Result<()> {
         ConfigUiCommand::TooltipApply { payload } => {
             init(&path, &shipped_config())?;
             tooltip::apply(&path, &payload)
+        }
+        ConfigUiCommand::GraphsShow => {
+            init(&path, &shipped_config())?;
+            println!("{}", graphs::show(&path)?);
+            Ok(())
+        }
+        ConfigUiCommand::GraphsApply { payload } => {
+            init(&path, &shipped_config())?;
+            graphs::apply(&path, &payload)
         }
     }
 }

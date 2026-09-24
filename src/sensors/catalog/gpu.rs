@@ -92,6 +92,9 @@ impl Catalog<'_> {
         }
         if !self.hw.has_nvidia && self.cfg.pages.order.iter().any(|page| page == "graphs") {
             hidden.extend([Metric::GpuAmdUsage, Metric::GpuAmdCodecUsage]);
+            if temperature_graph_enabled(self.cfg) {
+                hidden.insert(Metric::GpuAmdTemp);
+            }
         }
         let supported = supported_metrics(source);
         for spec in self
@@ -142,6 +145,9 @@ impl Catalog<'_> {
         } else if self.hw.amd_gpu.is_some() {
             let mut jobs = self.amd_jobs(Metric::GpuAmdUsage);
             jobs.extend(self.amd_jobs(Metric::GpuAmdCodecUsage));
+            if temperature_graph_enabled(self.cfg) {
+                jobs.extend(self.amd_jobs(Metric::GpuAmdTemp));
+            }
             jobs
         } else {
             self.intel_usage_jobs()

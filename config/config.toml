@@ -1,7 +1,7 @@
 # config.toml — PlasmaTop behavior and data: thresholds, glyphs, item order,
 # hardware. Colors, spacing and fonts live in the style CSS, not here.
 # The installer copies this to ~/.config/plasma-top/config.toml if absent.
-# The widget edits common daemon options and the main tooltip layout; edit the file for the rest.
+# The widget edits common daemon options, the main tooltip, and Graphs; edit the file for the rest.
 # Per-machine tweaks auto-detect from the DMI name — see machines.toml.
 
 
@@ -101,6 +101,9 @@ order = ["graphs", "processes"]
 # graphs only: samples kept by its history charts (time window = this ×
 # display.history_interval). No extra memory when "graphs" is not in order.
 graph_history_length = 60
+# Visible charts in display order. Available: cpu, memory, gpu, network, temperature.
+# GPU and network charts also require a detected source; the temperature chart shows available CPU and GPU sensors.
+graph_order = ["cpu", "memory", "gpu", "network", "temperature"]
 
 
 # ── Forms ─────────────────────────────────────────────────────────────────────

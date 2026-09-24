@@ -149,6 +149,104 @@ fn format_graphs_embeds_pngs_and_legends() {
 }
 
 #[test]
+fn format_graphs_uses_selected_chart_order() {
+    let mut cfg = Config::default();
+    cfg.pages.graph_order = vec![String::from("network"), String::from("cpu")];
+    let hardware = hw();
+    let formatter = PageFormatter::new(&cfg, &hardware);
+    let html = formatter.format_graphs(&readings(), "", "", None);
+
+    assert_eq!(html.matches("data:image/png;base64,").count(), 2);
+    assert!(
+        html.find("Download").expect("network legend")
+            < html.find("CPU usage").expect("CPU legend")
+    );
+    assert!(!html.contains("Memory usage"));
+
+    cfg.pages.graph_order.clear();
+    let html = PageFormatter::new(&cfg, &hardware).format_graphs(&readings(), "", "", None);
+    assert!(!html.contains("data:image/png;base64,"));
+    assert!(html.contains("No graphs selected or available"));
+}
+
+#[test]
+fn format_graphs_limits_shared_history_to_requested_samples() {
+    let mut cfg = Config::default();
+    cfg.pages.graph_order = vec![String::from("cpu")];
+    cfg.pages.graph_history_length = 1;
+    cfg.pages.graph_width = 120;
+    let hardware = hw();
+    let html = PageFormatter::new(&cfg, &hardware).format_graphs(&readings(), "", "", None);
+    let expected = area_chart_png(
+        &[30.0],
+        120,
+        GRAPH_HEIGHT,
+        AreaChartOptions {
+            left_pad: GRAPH_LEFT_PAD,
+            line: BLUE_LINE,
+            fill: BLUE_FILL,
+            ..AreaChartOptions::default()
+        },
+    );
+
+    assert!(html.contains(&png_img(&expected, 120)));
+}
+
+#[test]
+fn format_graphs_overlays_cpu_and_selected_gpu_temperatures() {
+    let mut cfg = Config::default();
+    cfg.pages.graph_order = vec![String::from("temperature")];
+    cfg.pages.graph_history_length = 2;
+    cfg.pages.graph_width = 120;
+    let hardware = HardwareInventory {
+        cpu_temp_path: Some("/cpu/temp".into()),
+        amd_gpu: Some(crate::domain::readings::AmdGpuSource::default()),
+        ..HardwareInventory::default()
+    };
+    let readings = DisplaySnapshot {
+        cpu_temp: Some(53),
+        gpu_amd_temp: Some(91),
+        cpu_temp_history: vec![48, 50, 53],
+        gpu_temp_history: vec![80, 85, 91],
+        ..DisplaySnapshot::default()
+    };
+
+    let html = PageFormatter::new(&cfg, &hardware).format_graphs(&readings, "", "", None);
+    let expected = area_chart_png(
+        &[50.0, 53.0],
+        120,
+        GRAPH_HEIGHT,
+        AreaChartOptions {
+            vmax: 120.0,
+            left_pad: GRAPH_LEFT_PAD,
+            grid_levels: TEMPERATURE_GRID,
+            line: BLUE_LINE,
+            fill: BLUE_FILL,
+            overlay: Some(&[85.0, 91.0]),
+            overlay_line: ORANGE_LINE,
+            ..AreaChartOptions::default()
+        },
+    );
+    assert!(html.contains(&png_img(&expected, 120)));
+    assert_eq!(html.matches("data:image/png;base64,").count(), 1);
+    assert!(html.contains("CPU temp:"));
+    assert!(html.contains("GPU temp:"));
+    assert!(html.contains("53°C"));
+    assert!(html.contains("91°C"));
+    assert!(!html.contains("<table"));
+
+    let mut nvidia = hardware;
+    nvidia.has_nvidia = true;
+    let readings = DisplaySnapshot {
+        gpu_temp: Some(72),
+        ..readings
+    };
+    let html = PageFormatter::new(&cfg, &nvidia).format_graphs(&readings, "", "", None);
+    assert!(html.contains("72°C"));
+    assert!(!html.contains("91°C"));
+}
+
+#[test]
 fn format_top_process_escapes_commands_and_caps_rows() {
     let mut cfg = Config::default();
     cfg.display.tooltip_width = 34;

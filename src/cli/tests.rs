@@ -77,6 +77,20 @@ fn parses_widget_config_commands() {
             }),
         })
     );
+    assert_eq!(
+        parse(&["plasma-top", "config", "graphs", "show"]),
+        Ok(Cli {
+            command: Command::ConfigUi(ConfigUiCommand::GraphsShow),
+        })
+    );
+    assert_eq!(
+        parse(&["plasma-top", "config", "graphs", "apply", "{\"order\":[]}"]),
+        Ok(Cli {
+            command: Command::ConfigUi(ConfigUiCommand::GraphsApply {
+                payload: "{\"order\":[]}".to_owned(),
+            }),
+        })
+    );
 }
 
 #[test]

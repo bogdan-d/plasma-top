@@ -23,7 +23,7 @@ PlasmaTop renders CPU, memory, drives, GPU, temperatures, batteries, network and
 
 - **Panel** — compact live stats (usage bars/sparks, temperatures, battery, …), auto-fitted to the panel's size and orientation (horizontal or vertical).
 - **Tooltip** — the full stats view on hover, grouped into sections.
-- **Deep-dive pages** — scroll the mouse wheel over the widget to page through the tooltip: top processes, per-core CPU, listening connections, fastfetch system info, and history graphs (CPU / memory / GPU / network area charts). Enable and order them in the config.
+- **Deep-dive pages** — scroll the mouse wheel over the widget to page through the tooltip: top processes, per-core CPU, listening connections, fastfetch system info, and history graphs (CPU / memory / GPU / network / CPU and GPU temperature). Enable them in the Daemon settings. The Graphs settings choose chart visibility, chart order, and history length.
 - **Pin** — middle-click keeps the tooltip open as a persistent popup, so you can watch the graphs live without holding the pointer over the widget.
 - **Desktop mode** — drop the widget straight onto the desktop for an always-on, conky-style readout. Choose Plasma's background or keep it transparent on the wallpaper, pick the text and outline colors for legibility over any image, and scroll to page through the views. Set it in the widget's *Appearance* page (the Desktop options appear only when it's on the desktop).
 - **Auto light/dark** — follows the Plasma color scheme, hot-reloaded.
@@ -70,7 +70,7 @@ Re-run the same install command to upgrade, then log out and back in before usin
 
 The installed tree holds read-only defaults; your overrides go in **~/.config/plasma-top/** (or **$XDG_CONFIG_HOME/plasma-top/**). The installer copies `config.toml` there if it is absent. A system package cannot write every user's home at install time, so opening the widget's **Daemon** settings page creates that user's copy on first use. Existing user files are preserved. Changes hot-reload.
 
-The widget's **Daemon** page edits refresh and history intervals, enabled deep-dive pages, and notification switches. The **Main tooltip** page enables and reorders sections and adds, removes, or reorders their readings. Both pages save to the same user `config.toml` that the daemon reads. The **Appearance** page remains for widget-only font, color, and desktop presentation choices. Edit `config.toml` directly for panel item lists, section titles, thresholds, hardware mappings, and other advanced settings.
+The widget's **Daemon** page edits refresh and history intervals, enabled deep-dive pages, and notification switches. The **Main tooltip** page enables and reorders sections and adds, removes, or reorders their readings. The **Graphs** page shows or hides CPU, memory, GPU, network, and combined CPU/GPU temperature charts, reorders them, and sets the number of history samples. These pages save to the same user `config.toml` that the daemon reads. The **Appearance** page remains for widget-only font, color, and desktop presentation choices. Edit `config.toml` directly for deep-dive page order, panel item lists, section titles, thresholds, hardware mappings, and other advanced settings.
 
 - **config.toml** — behavior and data only (thresholds, glyphs, item order, hardware). Each surface (panel, tooltip) is a set of typed sections (cpumem, thermal, drives, gpu, batteries, io, load) with an order and per-section items. A config.toml in ~/.config/plasma-top replaces the shipped one; run **plasma-top list-items** for the valid metric:form names — it also prints where each one can go. An item listed on a surface it isn't meant for (a bare `cpu_usage:spark`, which carries no label, in a tooltip section) is dropped with a warning on the daemon's log, as is a typo'd name.
 - **Machines** — got more than one PC? The shipped machines.toml is just a how-to; list your machines in ~/.config/plasma-top/machines.toml, each with a detection rule and its tweaks. The one matching the current host is merged on top of the config — one synced config works everywhere.
@@ -87,6 +87,7 @@ plasma-top probe                     # hardware discovery + raw readings
 plasma-top list-items                # valid metric:form tokens
 plasma-top config init               # copy shipped config only if no user file exists
 plasma-top config show               # values used by the widget's Daemon page
+plasma-top config graphs show        # chart order and history length used by Graphs
 plasma-top profiling                 # per-item timing and cache state
 systemctl --user status plasma-top   # the live daemon
 ```

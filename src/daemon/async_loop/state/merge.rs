@@ -82,6 +82,8 @@ pub(super) fn apply_owner_readings(
             target.cpu_freq_mhz = source.cpu_freq_mhz;
             target.cpu_turbo = source.cpu_turbo;
             target.cpu_history.clone_from(&source.cpu_history);
+            target.cpu_temp_history.clone_from(&source.cpu_temp_history);
+            target.gpu_temp_history.clone_from(&source.gpu_temp_history);
             target.uptime_seconds = source.uptime_seconds;
             target.load_average = source.load_average;
             target.cpu_core_usage.clone_from(&source.cpu_core_usage);

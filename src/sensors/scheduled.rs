@@ -262,12 +262,22 @@ pub(crate) fn execute_scheduled_job(
             completion
         }
         JobKind::CpuHistory => {
+            let captured_at = history_capture_time(history_deadline, ctx);
+            let temperatures_changed =
+                cpu::append_graph_temperature_history(owners.cpu, cfg, hw, readings, captured_at);
+            readings
+                .cpu_temp_history
+                .clone_from(&owners.cpu.cpu_temp_history);
+            readings
+                .gpu_temp_history
+                .clone_from(&owners.cpu.gpu_temp_history);
             if let Some(value) = sample_at_history_deadline(&owners.cpu.usage, history_deadline)
                 .map(|sample| sample.value)
             {
-                let captured_at = history_capture_time(history_deadline, ctx);
                 cpu::append_cpu_history(owners.cpu, cfg, captured_at, value);
                 readings.cpu_history.clone_from(&owners.cpu.cpu_history);
+                CompletionKind::Captured
+            } else if temperatures_changed {
                 CompletionKind::Captured
             } else {
                 CompletionKind::Baseline

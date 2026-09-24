@@ -205,6 +205,71 @@ fn read_cpu_usage_computes_delta_caps_at_ninety_nine_and_trims_history() {
 }
 
 #[test]
+fn graph_temperature_history_tracks_sources_and_history_length() {
+    let mut cfg = Config::default();
+    cfg.pages.order = vec![String::from("graphs")];
+    cfg.pages.graph_history_length = 2;
+    let cpu_path = PathBuf::from("/cpu/temp");
+    let mut hw = HardwareInventory {
+        cpu_temp_path: Some(cpu_path.clone()),
+        amd_gpu: Some(crate::domain::readings::AmdGpuSource {
+            pci_identity: String::from("amd-a"),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let mut state = CpuState {
+        temperature_source: Some(cpu_path),
+        ..Default::default()
+    };
+    state.temperature.record_value(50, Duration::from_secs(1));
+    let mut readings = DisplaySnapshot {
+        gpu_amd_temp: Some(60),
+        ..Default::default()
+    };
+
+    assert!(append_graph_temperature_history(
+        &mut state,
+        &cfg,
+        &hw,
+        &readings,
+        Duration::from_secs(1)
+    ));
+    assert_eq!(state.cpu_temp_history, [50]);
+    assert_eq!(state.gpu_temp_history, [60]);
+
+    state.temperature.record_value(52, Duration::from_secs(2));
+    readings.gpu_amd_temp = Some(62);
+    append_graph_temperature_history(&mut state, &cfg, &hw, &readings, Duration::from_secs(2));
+    append_graph_temperature_history(&mut state, &cfg, &hw, &readings, Duration::from_secs(3));
+    assert_eq!(state.cpu_temp_history, [52, 52]);
+    assert_eq!(state.gpu_temp_history, [62, 62]);
+
+    hw.amd_gpu = Some(crate::domain::readings::AmdGpuSource {
+        pci_identity: String::from("amd-b"),
+        ..Default::default()
+    });
+    readings.gpu_amd_temp = None;
+    append_graph_temperature_history(&mut state, &cfg, &hw, &readings, Duration::from_secs(4));
+    assert!(state.gpu_temp_history.is_empty());
+    assert_eq!(state.cpu_temp_history, [52, 52]);
+
+    hw.cpu_temp_path = Some(PathBuf::from("/cpu/replaced"));
+    append_graph_temperature_history(&mut state, &cfg, &hw, &readings, Duration::from_secs(5));
+    assert!(state.cpu_temp_history.is_empty());
+
+    cfg.pages.graph_order.retain(|chart| chart != "temperature");
+    assert!(!append_graph_temperature_history(
+        &mut state,
+        &cfg,
+        &hw,
+        &readings,
+        Duration::from_secs(6)
+    ));
+    assert!(state.cpu_temp_history.is_empty());
+}
+
+#[test]
 fn read_cpu_usage_invalid_delta_does_not_append_history() {
     let tmp = TempTree::new();
     tmp.write("proc/stat", "cpu 10 0 10 80 0 0 0 0 0 0\n");

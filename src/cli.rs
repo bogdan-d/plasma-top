@@ -81,6 +81,13 @@ pub enum ConfigUiCommand {
         /// JSON payload with ordered sections and items.
         payload: String,
     },
+    /// Prints the editable Graphs page layout as JSON.
+    GraphsShow,
+    /// Saves the Graphs page layout and history length.
+    GraphsApply {
+        /// JSON payload with ordered charts and history length.
+        payload: String,
+    },
 }
 
 /// Parsed arguments for one-shot or timed scheduler profiling.
@@ -371,8 +378,9 @@ impl Display for CliError {
                         "'full', 'processes', 'connections', 'fastfetch', 'cpu_cores', 'graphs'"
                     }
                     ("page", "step") => "'next', 'prev'",
-                    ("config", "action") => "'init', 'show', 'apply', 'tooltip'",
+                    ("config", "action") => "'init', 'show', 'apply', 'tooltip', 'graphs'",
                     ("config", "tooltip action") => "'show', 'apply'",
+                    ("config", "graphs action") => "'show', 'apply'",
                     _ => "",
                 };
                 write!(
@@ -471,7 +479,7 @@ pub(crate) fn subcommand_help(command: &str) -> &'static str {
             "usage: plasma-top list-items [-h]\n\noptions:\n  -h, --help  show this help message and exit"
         }
         "config" => {
-            "usage: plasma-top config {init,show,apply POLL HISTORY PAGES NOTIFICATIONS,tooltip {show,apply JSON}}\n\ninit copies the shipped config if needed; show prints tab-separated values; apply saves the daemon settings; tooltip edits the main tooltip layout"
+            "usage: plasma-top config {init,show,apply POLL HISTORY PAGES NOTIFICATIONS,tooltip {show,apply JSON},graphs {show,apply JSON}}\n\ninit copies the shipped config if needed; show prints tab-separated values; apply saves the daemon settings; tooltip edits the main tooltip layout; graphs edits its charts and history length"
         }
         "click" => {
             "usage: plasma-top click [-h]\n\noptions:\n  -h, --help  show this help message and exit"

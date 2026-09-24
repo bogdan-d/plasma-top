@@ -324,6 +324,51 @@ fn execute_history_job(
 }
 
 #[test]
+fn cpu_history_job_captures_available_temperature_series() {
+    let mut cfg = Config::default();
+    cfg.pages.order = vec![String::from("graphs")];
+    let cpu_path = Path::new("/cpu/temp").to_path_buf();
+    let mut hw = HardwareInventory {
+        cpu_temp_path: Some(cpu_path.clone()),
+        amd_gpu: Some(crate::domain::readings::AmdGpuSource {
+            pci_identity: String::from("amd-a"),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let mut owners = TestOwners::default();
+    owners.cpu.temperature_source = Some(cpu_path);
+    owners
+        .cpu
+        .temperature
+        .record_value(49, Duration::from_millis(500));
+    owners
+        .cpu
+        .temperature
+        .record_value(50, Duration::from_millis(1500));
+    let mut readings = DisplaySnapshot {
+        gpu_amd_temp: Some(55),
+        ..Default::default()
+    };
+
+    let completion = execute_history_job(
+        crate::scheduler::JobId::singleton(
+            crate::scheduler::OwnerId::Cpu,
+            crate::scheduler::JobKind::CpuHistory,
+        ),
+        1,
+        &mut owners,
+        &mut hw,
+        &cfg,
+        &mut readings,
+    );
+
+    assert_eq!(completion, crate::scheduler::CompletionKind::Captured);
+    assert_eq!(readings.cpu_temp_history, [49]);
+    assert_eq!(readings.gpu_temp_history, [55]);
+}
+
+#[test]
 fn history_executor_carries_sample_captured_before_ticket_deadline() {
     let cfg = Config::default();
     let mut hw = HardwareInventory::default();

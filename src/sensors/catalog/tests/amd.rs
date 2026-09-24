@@ -182,6 +182,7 @@ fn notification_and_graph_demand_have_minimal_field_sets() {
     );
     cfg.notifications.gpu_amd_temp = false;
     cfg.pages.order = vec![String::from("graphs")];
+    cfg.pages.graph_order.retain(|chart| chart != "temperature");
     let graphs = plan(&cfg, &hw);
     let job = graphs
         .jobs
@@ -197,6 +198,19 @@ fn notification_and_graph_demand_have_minimal_field_sets() {
             .jobs
             .iter()
             .any(|spec| spec.id.kind == JobKind::AmdSlow)
+    );
+    cfg.pages.graph_order.push(String::from("temperature"));
+    let with_temperature = plan(&cfg, &hw);
+    assert!(with_temperature.jobs.iter().any(|spec| {
+        spec.id.kind == JobKind::AmdSlow
+            && spec
+                .amd
+                .as_ref()
+                .is_some_and(|amd| amd.hidden.contains(&Metric::GpuAmdTemp))
+    }));
+    assert!(
+        super::super::configured_capabilities(&cfg)
+            .contains(&crate::domain::metric::Capability::CpuTemperature)
     );
     let mut nvidia = hw.clone();
     nvidia.has_nvidia = true;
