@@ -1,7 +1,7 @@
 # config.toml — PlasmaTop behavior and data: thresholds, glyphs, item order,
 # hardware. Colors, spacing and fonts live in the style CSS, not here.
 # The installer copies this to ~/.config/plasma-top/config.toml if absent.
-# The widget's Daemon settings page edits common options; edit the file for the rest.
+# The widget edits common daemon options and the main tooltip layout; edit the file for the rest.
 # Per-machine tweaks auto-detect from the DMI name — see machines.toml.
 
 

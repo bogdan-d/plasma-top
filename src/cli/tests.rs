@@ -57,6 +57,26 @@ fn parses_widget_config_commands() {
             }),
         })
     );
+    assert_eq!(
+        parse(&["plasma-top", "config", "tooltip", "show"]),
+        Ok(Cli {
+            command: Command::ConfigUi(ConfigUiCommand::TooltipShow),
+        })
+    );
+    assert_eq!(
+        parse(&[
+            "plasma-top",
+            "config",
+            "tooltip",
+            "apply",
+            "{\"sections\":[]}"
+        ]),
+        Ok(Cli {
+            command: Command::ConfigUi(ConfigUiCommand::TooltipApply {
+                payload: "{\"sections\":[]}".to_owned(),
+            }),
+        })
+    );
 }
 
 #[test]

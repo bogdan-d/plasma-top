@@ -9,6 +9,8 @@ use std::time::Duration;
 
 use crate::runtime::presentation::InstanceId;
 
+mod config_ui;
+
 /// Parsed top-level CLI state.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Cli {
@@ -71,6 +73,13 @@ pub enum ConfigUiCommand {
         pages: String,
         /// Eleven notification enable flags in the UI order.
         notifications: String,
+    },
+    /// Prints the editable main-tooltip layout as JSON.
+    TooltipShow,
+    /// Saves the main-tooltip layout sent by the widget.
+    TooltipApply {
+        /// JSON payload with ordered sections and items.
+        payload: String,
     },
 }
 
@@ -286,7 +295,7 @@ impl Cli {
             "probe" => Command::Probe(parse_config_command("probe", tail)?),
             "profiling" => Command::Profiling(parse_profiling_command(tail)?),
             "list-items" => parse_list_items_command(tail)?,
-            "config" => Command::ConfigUi(parse_config_ui_command(tail)?),
+            "config" => Command::ConfigUi(config_ui::parse(tail)?),
             "page" => Command::Page(parse_page_command(tail)?),
             "present" => Command::Present(parse_presentation_command("present", tail)?),
             "dismiss" => Command::Dismiss(parse_presentation_command("dismiss", tail)?),
@@ -362,7 +371,8 @@ impl Display for CliError {
                         "'full', 'processes', 'connections', 'fastfetch', 'cpu_cores', 'graphs'"
                     }
                     ("page", "step") => "'next', 'prev'",
-                    ("config", "action") => "'init', 'show', 'apply'",
+                    ("config", "action") => "'init', 'show', 'apply', 'tooltip'",
+                    ("config", "tooltip action") => "'show', 'apply'",
                     _ => "",
                 };
                 write!(
@@ -411,7 +421,9 @@ fn usage_text(command: &str) -> &'static str {
             "usage: plasma-top profiling [-h] [--config PATH] [--duration SECONDS] [--scenario hidden|main|PAGE] [--stimuli]"
         }
         "list-items" => "usage: plasma-top list-items [-h]",
-        "config" => "usage: plasma-top config {init,show,apply POLL HISTORY PAGES NOTIFICATIONS}",
+        "config" => {
+            "usage: plasma-top config {init,show,apply POLL HISTORY PAGES NOTIFICATIONS,tooltip {show,apply JSON}}"
+        }
         "page" => "usage: plasma-top page [-h] {next,prev}",
         "present" => "usage: plasma-top present [-h] instance-id",
         "dismiss" => "usage: plasma-top dismiss [-h] instance-id",
@@ -459,7 +471,7 @@ pub(crate) fn subcommand_help(command: &str) -> &'static str {
             "usage: plasma-top list-items [-h]\n\noptions:\n  -h, --help  show this help message and exit"
         }
         "config" => {
-            "usage: plasma-top config {init,show,apply POLL HISTORY PAGES NOTIFICATIONS}\n\ninit copies the shipped config if needed; show prints tab-separated values; apply saves the widget settings"
+            "usage: plasma-top config {init,show,apply POLL HISTORY PAGES NOTIFICATIONS,tooltip {show,apply JSON}}\n\ninit copies the shipped config if needed; show prints tab-separated values; apply saves the daemon settings; tooltip edits the main tooltip layout"
         }
         "click" => {
             "usage: plasma-top click [-h]\n\noptions:\n  -h, --help  show this help message and exit"
@@ -664,43 +676,6 @@ fn parse_list_items_command(mut args: TailArgs) -> Result<Command, CliError> {
     }
 
     Ok(Command::ListItems)
-}
-
-fn parse_config_ui_command(mut args: TailArgs) -> Result<ConfigUiCommand, CliError> {
-    let action = args
-        .pop_front()
-        .ok_or(CliError::MissingValue {
-            command: "config",
-            flag: "action",
-        })
-        .and_then(into_text)?;
-    let command = match action.as_str() {
-        "init" => ConfigUiCommand::Init,
-        "show" => ConfigUiCommand::Show,
-        "apply" => {
-            let mut next = |flag| args.take_value("config", flag).and_then(into_text);
-            ConfigUiCommand::Apply {
-                poll: next("POLL")?,
-                history: next("HISTORY")?,
-                pages: next("PAGES")?,
-                notifications: next("NOTIFICATIONS")?,
-            }
-        }
-        _ => {
-            return Err(CliError::InvalidValue {
-                command: "config",
-                flag: "action",
-                value: action,
-            });
-        }
-    };
-    if let Some(argument) = args.pop_front() {
-        return Err(CliError::UnknownArgument {
-            command: "config",
-            argument: into_text(argument)?,
-        });
-    }
-    Ok(command)
 }
 
 fn parse_page_command(mut args: TailArgs) -> Result<PageCommand, CliError> {

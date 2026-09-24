@@ -36,6 +36,7 @@ Use the smallest check that exercises the changed behavior:
 | Render, CSS, or Qt RichText | `tools/qt_render_matrix.sh --no-build` |
 | Applet/runtime integration | `tools/qml_verify.sh --smoke` |
 | Daemon settings page | `tools/qml_verify.sh --config-smoke` |
+| Main tooltip settings page | `tools/qml_verify.sh --tooltip-config-smoke` |
 | Interactive application-form behavior | `tools/qml_verify.sh` |
 | Panel orientation, geometry, hover, pinning, or wheel behavior | Manual real-session verification with explicit approval |
 | Desktop representation or appearance settings | Manual real-session verification with explicit approval |

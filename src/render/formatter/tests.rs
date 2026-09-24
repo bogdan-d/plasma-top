@@ -361,6 +361,7 @@ fn available_sections_collapse_and_panel_omits_titles() {
 #[test]
 fn tooltip_and_panel_goldens_match_python_snapshots() {
     // Historical snapshots describe an NVIDIA/Intel machine without AMDGPU.
+    let shipped_config = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("config/config.toml");
     let hw = HardwareInventory {
         amd_gpu: None,
         ..full_hw()
@@ -373,7 +374,8 @@ fn tooltip_and_panel_goldens_match_python_snapshots() {
     ];
 
     for (name, vertical, panel) in cases {
-        let mut cfg = load_config(None, Some(vertical)).expect("load shipped config");
+        let mut cfg =
+            load_config(Some(&shipped_config), Some(vertical)).expect("load shipped config");
         reset_panel_autofit_fields(&mut cfg);
         let formatter = PanelFormatter::with_now_unix(&cfg, &hw, 1_000_000);
         if !panel {

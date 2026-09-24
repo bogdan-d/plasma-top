@@ -1,6 +1,6 @@
 [package]
 name = "plasma-top"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 rust-version = "1.98.1"
 license = "GPL-2.0-or-later"
@@ -49,6 +49,8 @@ toml_edit = "0.25"
 # `serde_derive` (already in the lock via `toml`'s transitive `serde_core`)
 # and re-uses `serde_core` already vendored. See `DEPENDENCIES.md`.
 serde = { version = "1", features = ["derive"] }
+# Structured payload between the tooltip editor and the daemon CLI.
+serde_json = "1"
 # Pure-Rust DEFLATE/zlib used by `render::chart` to encode deterministic PNG
 # bytes for the graphs page. Chosen over the `png` crate because PlasmaTop
 # already rasterizes pixels itself and needs only compression/decompression,

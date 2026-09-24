@@ -2,9 +2,7 @@ import QtQuick
 
 import org.kde.plasma.configuration
 
-// PlasmaTop wires the commands and mouse actions to the daemon (see main.xml
-// defaults), so the upstream "Command" and "Actions" pages are gone — only the
-// visual settings remain.
+// PlasmaTop wires commands and mouse actions to the daemon, so the upstream Command and Actions pages are replaced by app-owned settings.
 ConfigModel {
 	ConfigCategory {
 		name: i18n("Appearance")
@@ -15,5 +13,10 @@ ConfigModel {
 		name: i18n("Daemon")
 		icon: "preferences-system"
 		source: "config/ConfigDaemon.qml"
+	}
+	ConfigCategory {
+		name: i18n("Main tooltip")
+		icon: "view-list-details"
+		source: "config/ConfigTooltip.qml"
 	}
 }

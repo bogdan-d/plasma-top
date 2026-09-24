@@ -5,12 +5,13 @@ set -euo pipefail
 
 usage() {
     cat <<'EOF'
-Usage: tools/qml_verify.sh [--smoke|--config-smoke] [--no-build]
+Usage: tools/qml_verify.sh [--smoke|--config-smoke|--tooltip-config-smoke] [--no-build]
 
 Launch an isolated Plasma applet backed by the Rust daemon.
 
   --smoke     Run a short non-interactive load check, then exit.
   --config-smoke  Open the Daemon settings page in the isolated applet.
+  --tooltip-config-smoke  Edit the Main tooltip page in the isolated applet.
   --no-build  Reuse target/release/plasma-top.
 
 Without a smoke flag, close the plasmawindowed window to finish an Application-form inspection.
@@ -21,6 +22,7 @@ EOF
 
 smoke=false
 config_smoke=false
+tooltip_config_smoke=false
 build=true
 for arg in "$@"; do
     case "$arg" in
@@ -28,6 +30,10 @@ for arg in "$@"; do
     --config-smoke)
         smoke=true
         config_smoke=true
+        ;;
+    --tooltip-config-smoke)
+        smoke=true
+        tooltip_config_smoke=true
         ;;
     --no-build) build=false ;;
     -h | --help)
@@ -127,8 +133,10 @@ path.write_text(
 )
 PY
 
-if [[ "$config_smoke" == true ]]; then
-    python3 - "$test_root/package/contents/config/config.qml" "$test_root/package/contents/ui/main.qml" "$test_root/package/contents/ui/config/ConfigDaemon.qml" <<'PY'
+if [[ "$config_smoke" == true || "$tooltip_config_smoke" == true ]]; then
+    page_name=ConfigDaemon.qml
+    if [[ "$tooltip_config_smoke" == true ]]; then page_name=ConfigTooltip.qml; fi
+    python3 - "$test_root/package/contents/config/config.qml" "$test_root/package/contents/ui/main.qml" "$test_root/package/contents/ui/config/$page_name" "$tooltip_config_smoke" <<'PY'
 from pathlib import Path
 import sys
 
@@ -136,7 +144,7 @@ categories = Path(sys.argv[1])
 categories.write_text(
     categories.read_text(encoding="utf-8").replace(
         'source: "config/ConfigAppearance.qml"',
-        'source: "config/ConfigDaemon.qml"',
+        f'source: "config/{Path(sys.argv[3]).name}"',
         1,
     ),
     encoding="utf-8",
@@ -159,6 +167,16 @@ main.write_text(
 )
 page = Path(sys.argv[3])
 body, close = page.read_text(encoding="utf-8").rsplit("}", 1)
+if sys.argv[4] == "true":
+    edit = '''
+                root.moveSection(1, -1)
+                root.setSectionEnabled(4, false)
+                root.addItem(1, "swap_usage")
+'''
+else:
+    edit = '''
+                pollField.text = "2.5"
+'''
 page.write_text(
     body + '''
     Timer {
@@ -168,8 +186,8 @@ page.write_text(
         repeat: true
         onTriggered: {
             if (root.loaded && !root.busy) {
-                pollField.text = "2.5"
                 testSaveTimer.stop()
+''' + edit + '''
                 root.save()
             }
         }
@@ -264,6 +282,29 @@ if [[ "$smoke" == true ]]; then
             exit 1
         }
     fi
+    if [[ "$tooltip_config_smoke" == true ]]; then
+        grep -Eq $'\tplasma-top\tconfig tooltip show$' "$PLASMA_TOP_QML_TRACE" || {
+            echo "Main tooltip page did not request user config" >&2
+            cat "$test_root/qml.log" >&2
+            exit 1
+        }
+        grep -Eq $'\tplasma-top\tconfig tooltip apply ' "$PLASMA_TOP_QML_TRACE" || {
+            echo "Main tooltip page did not submit edited layout" >&2
+            cat "$test_root/qml.log" >&2
+            exit 1
+        }
+        python3 - "$binary" <<'PY'
+import json
+import subprocess
+import sys
+
+layout = json.loads(subprocess.check_output([sys.argv[1], "config", "tooltip", "show"], text=True))
+sections = layout["sections"]
+assert [section["key"] for section in sections[:2]] == ["drives", "cpumem"], sections
+assert not next(section for section in sections if section["key"] == "batteries")["enabled"]
+assert "swap_usage" in sections[1]["items"], sections[1]["items"]
+PY
+    fi
     lease="$(find "$runtime_root/state/presented" -maxdepth 1 -type f -printf '%f\n' 2>/dev/null | awk '/^[1-9][0-9]*$/ { print; exit }')"
     if grep -Eq $'\tplasma-top\tpresent [1-9][0-9]*$' "$PLASMA_TOP_QML_TRACE"; then
         [[ -n "$lease" ]] || {
@@ -294,7 +335,9 @@ if [[ "$smoke" == true ]]; then
         echo "best-effort clean-removal dismiss callback missing" >&2
         exit 1
     fi
-    if [[ "$config_smoke" == true ]]; then
+    if [[ "$tooltip_config_smoke" == true ]]; then
+        echo "QML tooltip config smoke passed: section order and readings edited through the Main tooltip page"
+    elif [[ "$config_smoke" == true ]]; then
         echo "QML config smoke passed: user config initialized and edited through the Daemon page"
     else
         echo "QML smoke passed: hidden reads gated; crash leases expire; clean-removal callback present"
