@@ -178,4 +178,11 @@ if XDG_RUNTIME_DIR=/ "$REPO_DIR/uninstall.sh" >/dev/null 2>&1; then exit 1; fi
 if grep -q -- '--global' "$FAKE_LOG"; then exit 1; fi
 if grep -q '^sudo ' "$FAKE_LOG"; then exit 1; fi
 
+# A fresh install creates the editable user copy and uninstall preserves it.
+rm --preserve-root=all --one-file-system -- "$XDG_CONFIG_HOME/plasma-top/config.toml"
+"$REPO_DIR/install.sh" >/dev/null
+cmp "$REPO_DIR/config/config.toml" "$XDG_CONFIG_HOME/plasma-top/config.toml"
+"$REPO_DIR/uninstall.sh" >/dev/null
+cmp "$REPO_DIR/config/config.toml" "$XDG_CONFIG_HOME/plasma-top/config.toml"
+
 echo "User-local install, upgrade, and uninstall checks passed"

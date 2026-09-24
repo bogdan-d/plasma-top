@@ -15,7 +15,7 @@
 		"Id": "com.github.bogdan-d.plasma-top",
 		"License": "GPL-2.0-or-later",
 		"Name": "PlasmaTop",
-		"Version": "1",
+		"Version": "0.3.0",
 		"Website": "https://github.com/bogdan-d/plasma-top"
 	},
 	"X-Plasma-API-Minimum-Version": "6.0"

@@ -6,6 +6,7 @@ Review every direct dependency here before updating `Cargo.lock`.
 | --- | --- | --- | --- |
 | `nix` | 0.31 | MIT | Safe `flock(2)`, `getuid(2)`, `poll(2)`, inotify, and process-group signal wrappers. Pure Rust over `libc`; features limited to `fs`, `inotify`, `poll`, `process`, `signal`, and `user`. Transitive: `bitflags`, `cfg-if`, `libc`; build helper: `cfg_aliases`. |
 | `toml` | 1 | MIT OR Apache-2.0 | Production config and test-fixture parsing. Pure Rust. Uses `serde_core`, `serde_spanned`, `toml_datetime`, `toml_parser`, `toml_writer`, `winnow`, and ordered-map support. |
+| [`toml_edit`](https://github.com/toml-rs/toml) | 0.25 | MIT OR Apache-2.0 | Preserves comments and unrelated TOML fields when the widget edits the user config. Pure Rust, already present through `toml`; direct use adds no new packages. Uses `indexmap`, `toml_datetime`, `toml_parser`, and `winnow`, with no build script or native dependency. |
 | `serde` | 1 | MIT OR Apache-2.0 | Typed config deserialization with derive support. Pure Rust; adds the `serde_derive` proc macro and reuses `serde_core`. |
 | `miniz_oxide` | 0.9 | MIT OR Zlib OR Apache-2.0 | DEFLATE/zlib for graph PNG encoding and focused decoding tests. Pure Rust; transitive dependency: `adler2`. |
 | [`nvml-wrapper`](https://github.com/rust-nvml/nvml-wrapper) | 0.13 | MIT OR Apache-2.0 | Optional, runtime-loaded NVIDIA NVML adapter using NVML 13 bindings. No native build or link step. Uses `libloading`, `nvml-wrapper-sys`, `thiserror`, and proc-macro support. Missing NVML remains non-fatal. |

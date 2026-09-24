@@ -62,6 +62,8 @@ print_dry_run() {
         printf '  Refuse an existing install tree without %q.\n' "$LIBDIR/.plasma-top-install"
         printf '  Move prior owned tree to a temporary backup; restore it if replacement fails.\n'
         print_command mv '$STAGE' "$LIBDIR"
+        printf '  Initialize the user config only if it is absent.\n'
+        print_command "$LAUNCHER" config init
         printf '  Move launcher, unit, icon, license, and notice temporary files to paths above; remove backup.\n'
 
         printf '\n4. Install or upgrade Plasma applet\n'
@@ -334,6 +336,7 @@ if [[ "$MODE" == user ]]; then
     mv "$LICENSEDIR/LICENSE.tmp" "$LICENSEDIR/LICENSE"
     mv "$LICENSEDIR/NOTICE.tmp" "$LICENSEDIR/NOTICE"
     remove_temp_tree "$BACKUP" "$DATA_HOME" .plasma-top.backup.
+    "$LAUNCHER" config init
 
     cp -a "$REPO_DIR/plasmoid/package/." "$APPLET_STAGE/"
     xml="$APPLET_STAGE/contents/config/main.xml"
@@ -397,6 +400,10 @@ if [[ -n "$ROOT" ]]; then
     $SUDO cp -r "$REPO_DIR/plasmoid/package/." "$APPLET_DIR/"
     echo "PlasmaTop staged under $ROOT"
     exit 0
+fi
+
+if [[ "$(id -u)" -ne 0 ]]; then
+    /usr/bin/plasma-top config init
 fi
 
 if kpackagetool6 --type Plasma/Applet --global --show "$APPLET_ID" >/dev/null 2>&1; then

@@ -31,6 +31,35 @@ fn parses_render_defaults() {
 }
 
 #[test]
+fn parses_widget_config_commands() {
+    assert_eq!(
+        parse(&["plasma-top", "config", "show"]),
+        Ok(Cli {
+            command: Command::ConfigUi(ConfigUiCommand::Show),
+        })
+    );
+    assert_eq!(
+        parse(&[
+            "plasma-top",
+            "config",
+            "apply",
+            "2.5",
+            "3",
+            "10100",
+            "01000000000",
+        ]),
+        Ok(Cli {
+            command: Command::ConfigUi(ConfigUiCommand::Apply {
+                poll: "2.5".to_owned(),
+                history: "3".to_owned(),
+                pages: "10100".to_owned(),
+                notifications: "01000000000".to_owned(),
+            }),
+        })
+    );
+}
+
+#[test]
 fn parses_render_overrides() {
     let cli = parse(&[
         "plasma-top",

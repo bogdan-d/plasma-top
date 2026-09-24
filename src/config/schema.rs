@@ -337,7 +337,7 @@ pub struct NotificationConfig {
 impl Default for NotificationConfig {
     fn default() -> Self {
         Self {
-            disk_usage: true,
+            disk_usage: false,
             disk_smart: true,
             cpu_temp: false,
             gpu_nvidia_temp: false,

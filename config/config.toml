@@ -1,6 +1,7 @@
 # config.toml — PlasmaTop behavior and data: thresholds, glyphs, item order,
 # hardware. Colors, spacing and fonts live in the style CSS, not here.
-# To customize: copy to ~/.config/plasma-top/config.toml and edit (hot-reloaded).
+# The installer copies this to ~/.config/plasma-top/config.toml if absent.
+# The widget's Daemon settings page edits common options; edit the file for the rest.
 # Per-machine tweaks auto-detect from the DMI name — see machines.toml.
 
 
@@ -200,14 +201,10 @@ load_avg_minutes = 10
 
 # ── Notifications ─────────────────────────────────────────────────────────────
 
-# Per-category on/off for the desktop notifications. The load-driven ones
-# (cpu_temp, gpu_nvidia_temp, load_avg) are OFF by default: under a normal heavy
-# workload — gaming, compiling — a laptop legitimately sustains 80°C+ and a high
-# load average, so as a default they fire correctly but constantly and read as
-# noise. Flip them to true if you want the thermal/load alerts. The rest stay on:
-# they fire rarely and are actionable (a dying disk, a low battery, a full disk).
+# Per-category on/off for desktop notifications.
+# Disk usage and load-driven alerts are disabled by default; enable any category here or in the widget's Daemon page.
 [notifications]
-disk_usage      = true
+disk_usage      = false
 disk_smart      = true
 cpu_temp        = false
 hd_temp         = true

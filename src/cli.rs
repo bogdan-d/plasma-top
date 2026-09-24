@@ -35,6 +35,8 @@ pub enum Command {
     Profiling(ProfilingCommand),
     /// Future list-items diagnostic entry point.
     ListItems,
+    /// Reads or updates the daemon's user configuration.
+    ConfigUi(ConfigUiCommand),
     /// Future page-step entry point.
     Page(PageCommand),
     /// Refreshes one applet instance's presentation lease.
@@ -50,6 +52,26 @@ pub enum Command {
 pub struct ConfigCommand {
     /// Optional path to a specific TOML configuration file.
     pub config: Option<PathBuf>,
+}
+
+/// User-config operations used by the widget settings page.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConfigUiCommand {
+    /// Copies the shipped config only when no user file exists.
+    Init,
+    /// Prints the settings exposed by the widget page.
+    Show,
+    /// Saves the settings exposed by the widget page.
+    Apply {
+        /// Poll interval in seconds.
+        poll: String,
+        /// History interval in seconds.
+        history: String,
+        /// Five page enable flags in the page order shown by the UI.
+        pages: String,
+        /// Eleven notification enable flags in the UI order.
+        notifications: String,
+    },
 }
 
 /// Parsed arguments for one-shot or timed scheduler profiling.
@@ -264,6 +286,7 @@ impl Cli {
             "probe" => Command::Probe(parse_config_command("probe", tail)?),
             "profiling" => Command::Profiling(parse_profiling_command(tail)?),
             "list-items" => parse_list_items_command(tail)?,
+            "config" => Command::ConfigUi(parse_config_ui_command(tail)?),
             "page" => Command::Page(parse_page_command(tail)?),
             "present" => Command::Present(parse_presentation_command("present", tail)?),
             "dismiss" => Command::Dismiss(parse_presentation_command("dismiss", tail)?),
@@ -292,6 +315,7 @@ impl Command {
             Self::Probe(_) => "probe",
             Self::Profiling(_) => "profiling",
             Self::ListItems => "list-items",
+            Self::ConfigUi(_) => "config",
             Self::Page(_) => "page",
             Self::Present(_) => "present",
             Self::Dismiss(_) => "dismiss",
@@ -309,7 +333,7 @@ impl Display for CliError {
             ),
             Self::UnknownCommand { command } => write!(
                 formatter,
-                "usage: plasma-top [-h] <command> ...\nplasma-top: error: argument <command>: invalid choice: '{command}' (choose from 'daemon', 'render', 'probe', 'profiling', 'list-items', 'page', 'click', 'present', 'dismiss')"
+                "usage: plasma-top [-h] <command> ...\nplasma-top: error: argument <command>: invalid choice: '{command}' (choose from 'daemon', 'render', 'probe', 'profiling', 'list-items', 'config', 'page', 'click', 'present', 'dismiss')"
             ),
             Self::UnknownArgument { command, argument } => {
                 write!(
@@ -338,6 +362,7 @@ impl Display for CliError {
                         "'full', 'processes', 'connections', 'fastfetch', 'cpu_cores', 'graphs'"
                     }
                     ("page", "step") => "'next', 'prev'",
+                    ("config", "action") => "'init', 'show', 'apply'",
                     _ => "",
                 };
                 write!(
@@ -386,6 +411,7 @@ fn usage_text(command: &str) -> &'static str {
             "usage: plasma-top profiling [-h] [--config PATH] [--duration SECONDS] [--scenario hidden|main|PAGE] [--stimuli]"
         }
         "list-items" => "usage: plasma-top list-items [-h]",
+        "config" => "usage: plasma-top config {init,show,apply POLL HISTORY PAGES NOTIFICATIONS}",
         "page" => "usage: plasma-top page [-h] {next,prev}",
         "present" => "usage: plasma-top present [-h] instance-id",
         "dismiss" => "usage: plasma-top dismiss [-h] instance-id",
@@ -432,6 +458,9 @@ pub(crate) fn subcommand_help(command: &str) -> &'static str {
         "list-items" => {
             "usage: plasma-top list-items [-h]\n\noptions:\n  -h, --help  show this help message and exit"
         }
+        "config" => {
+            "usage: plasma-top config {init,show,apply POLL HISTORY PAGES NOTIFICATIONS}\n\ninit copies the shipped config if needed; show prints tab-separated values; apply saves the widget settings"
+        }
         "click" => {
             "usage: plasma-top click [-h]\n\noptions:\n  -h, --help  show this help message and exit"
         }
@@ -454,6 +483,7 @@ fn command_name_static(command: &str) -> &'static str {
         "probe" => "probe",
         "profiling" => "profiling",
         "list-items" => "list-items",
+        "config" => "config",
         "page" => "page",
         "present" => "present",
         "dismiss" => "dismiss",
@@ -634,6 +664,43 @@ fn parse_list_items_command(mut args: TailArgs) -> Result<Command, CliError> {
     }
 
     Ok(Command::ListItems)
+}
+
+fn parse_config_ui_command(mut args: TailArgs) -> Result<ConfigUiCommand, CliError> {
+    let action = args
+        .pop_front()
+        .ok_or(CliError::MissingValue {
+            command: "config",
+            flag: "action",
+        })
+        .and_then(into_text)?;
+    let command = match action.as_str() {
+        "init" => ConfigUiCommand::Init,
+        "show" => ConfigUiCommand::Show,
+        "apply" => {
+            let mut next = |flag| args.take_value("config", flag).and_then(into_text);
+            ConfigUiCommand::Apply {
+                poll: next("POLL")?,
+                history: next("HISTORY")?,
+                pages: next("PAGES")?,
+                notifications: next("NOTIFICATIONS")?,
+            }
+        }
+        _ => {
+            return Err(CliError::InvalidValue {
+                command: "config",
+                flag: "action",
+                value: action,
+            });
+        }
+    };
+    if let Some(argument) = args.pop_front() {
+        return Err(CliError::UnknownArgument {
+            command: "config",
+            argument: into_text(argument)?,
+        });
+    }
+    Ok(command)
 }
 
 fn parse_page_command(mut args: TailArgs) -> Result<PageCommand, CliError> {

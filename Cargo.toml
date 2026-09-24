@@ -1,6 +1,6 @@
 [package]
 name = "plasma-top"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.98.1"
 license = "GPL-2.0-or-later"
@@ -38,6 +38,9 @@ nix = { version = "0.31", default-features = false, features = ["fs", "inotify",
 # License: MIT OR Apache-2.0. GPL-2.0-or-later compatible. Pure-Rust, no native
 # build script. See `DEPENDENCIES.md` for the full review row.
 toml = "1"
+# Edits the user config without discarding comments or unrelated settings.
+# Already present transitively through `toml`; see `DEPENDENCIES.md`.
+toml_edit = "0.25"
 # Derive-based deserialization for the typed `Config` tree and `Mounts` enum.
 # Used by `config::*` to decode TOML while preserving the contract that unknown
 # keys are ignored.

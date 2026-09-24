@@ -58,7 +58,7 @@ Traditional system-wide install remains available:
 ./install.sh --system
 ```
 
-Both modes build the locked Rust binary, install matching assets, applet, icon, and user service, then activate it. System mode uses `/usr/lib/plasma-top` and `/usr/bin/plasma-top` plus sudo for file installation. Your settings live in ~/.config/plasma-top and are never touched — see [Configuration](#configuration). For checkout-based development, use [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) instead of the system-wide installer.
+Both modes build the locked Rust binary, install matching assets, applet, icon, and user service, then activate it. System mode uses `/usr/lib/plasma-top` and `/usr/bin/plasma-top` plus sudo for file installation. Your existing settings in ~/.config/plasma-top are preserved — see [Configuration](#configuration). For checkout-based development, use [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) instead of the system-wide installer.
 
 Arch packaging metadata lives under `packaging/aur/`. It builds the locked native binary, installs the same applet/assets/service contracts, and has no Python runtime dependency. Maintainers can verify its staged manifest and install/upgrade/uninstall behavior with `tools/package_layout_test.sh`.
 
@@ -68,7 +68,9 @@ Re-run the same install command to upgrade, then log out and back in before usin
 
 ## Configuration
 
-The installed tree under **/usr/lib/plasma-top/** holds read-only defaults; your overrides go in **~/.config/plasma-top/**. Copy a default across and edit it — everything hot-reloads.
+The installed tree holds read-only defaults; your overrides go in **~/.config/plasma-top/** (or **$XDG_CONFIG_HOME/plasma-top/**). The installer copies `config.toml` there if it is absent. A system package cannot write every user's home at install time, so opening the widget's **Daemon** settings page creates that user's copy on first use. Existing user files are preserved. Changes hot-reload.
+
+The widget's **Daemon** page edits refresh and history intervals, enabled tooltip pages, and notification switches. It saves to the same user `config.toml` that the daemon reads. The **Appearance** page remains for widget-only font, color, and desktop presentation choices. Edit `config.toml` directly for item lists, thresholds, hardware mappings, and other advanced settings.
 
 - **config.toml** — behavior and data only (thresholds, glyphs, item order, hardware). Each surface (panel, tooltip) is a set of typed sections (cpumem, thermal, drives, gpu, batteries, io, load) with an order and per-section items. A config.toml in ~/.config/plasma-top replaces the shipped one; run **plasma-top list-items** for the valid metric:form names — it also prints where each one can go. An item listed on a surface it isn't meant for (a bare `cpu_usage:spark`, which carries no label, in a tooltip section) is dropped with a warning on the daemon's log, as is a typo'd name.
 - **Machines** — got more than one PC? The shipped machines.toml is just a how-to; list your machines in ~/.config/plasma-top/machines.toml, each with a detection rule and its tweaks. The one matching the current host is merged on top of the config — one synced config works everywhere.
@@ -83,6 +85,8 @@ plasma-top render                    # render to text in the terminal (no daemon
 plasma-top render --page processes   # render one tooltip deep-dive page (processes|cpu_cores|connections|fastfetch|graphs)
 plasma-top probe                     # hardware discovery + raw readings
 plasma-top list-items                # valid metric:form tokens
+plasma-top config init               # copy shipped config only if no user file exists
+plasma-top config show               # values used by the widget's Daemon page
 plasma-top profiling                 # per-item timing and cache state
 systemctl --user status plasma-top   # the live daemon
 ```

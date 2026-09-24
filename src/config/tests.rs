@@ -113,9 +113,9 @@ fn notify_thresholds_defaults_match_python() {
 }
 
 #[test]
-fn notifications_defaults_match_python() {
+fn notifications_defaults() {
     let n = NotificationConfig::default();
-    assert!(n.disk_usage);
+    assert!(!n.disk_usage);
     assert!(!n.cpu_temp);
     assert!(!n.gpu_nvidia_temp);
     assert!(!n.server_check);

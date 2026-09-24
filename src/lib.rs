@@ -21,6 +21,7 @@
 pub mod adapters;
 pub mod cli;
 pub mod config;
+pub mod config_ui;
 pub mod daemon;
 pub mod diagnostics;
 pub mod domain;
@@ -70,6 +71,7 @@ pub fn run(args: impl IntoIterator<Item = OsString>) -> Result<()> {
         Command::Probe(command) => diagnostics::run_probe(command.config.as_deref()),
         Command::Profiling(command) => diagnostics::run_profiling(&command),
         Command::ListItems => diagnostics::run_list_items(),
+        Command::ConfigUi(command) => config_ui::run(command),
         Command::Page(command) => daemon::run_page(command.direction),
         Command::Present(command) => {
             runtime::presentation::present(command.instance).map_err(Into::into)

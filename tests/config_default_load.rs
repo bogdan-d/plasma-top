@@ -1,28 +1,21 @@
-//! Integration test: load the shipped `config/config.toml` end-to-end and
-//! assert typed fields match the shipped product contract.
-//!
-//! Forces `vertical = Some(false)` so the orientation override is
-//! deterministic and does not depend on the host's Plasma state. The
-//! shipped `config.toml` lives under the repo's `config/` directory; this
-//! test resolves it via [`plasma_top::config::load_config`] with `path =
-//! None`, exercising the same default-resolution path the daemon uses.
+//! Integration tests for the shipped `config/config.toml` and its typed product defaults.
+//! An explicit config path and forced horizontal layout keep these tests independent of the user's XDG config and Plasma state.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use std::collections::BTreeSet;
 
-use plasma_top::config::{DiskConfig, Mounts, load_config};
+use plasma_top::config::{Config, DiskConfig, Mounts, assets, load_config};
 use plasma_top::domain::registry::unknown_item_names;
+
+fn load_shipped_config() -> Config {
+    let path = assets::shipped_config();
+    load_config(Some(&path), Some(false)).expect("load shipped config")
+}
 
 #[test]
 fn loads_shipped_config_with_forced_horizontal() {
-    // `path = None` resolves to the shipped `config/config.toml` (the dev
-    // checkout). Force horizontal so the orientation override is
-    // deterministic and independent of any Plasma state on the test host.
-    let cfg = match load_config(None, Some(false)) {
-        Ok(cfg) => cfg,
-        Err(error) => panic!("loading the shipped config failed: {error}"),
-    };
+    let cfg = load_shipped_config();
 
     // The shipped `machines.toml` has no `[<name>.detect]` rule that could
     // match a CI host; if it ever did, this test would catch the regression.
@@ -64,6 +57,7 @@ fn loads_shipped_config_with_forced_horizontal() {
     assert_eq!(cfg.disks.smart_interval.as_secs_f64(), 3600.0);
     assert_eq!(cfg.disks.smart_interval_hdd.as_secs_f64(), 21600.0);
     let _: &DiskConfig = &cfg.disks; // type-check the field shape
+    assert!(!cfg.notifications.disk_usage);
 
     // ── horizontal override: glyphs off, battery_sys removed ──────────────
     assert!(
@@ -92,10 +86,7 @@ fn loads_shipped_config_with_forced_horizontal() {
 
 #[test]
 fn shipped_config_has_no_unknown_or_misplaced_items() {
-    let cfg = match load_config(None, Some(false)) {
-        Ok(cfg) => cfg,
-        Err(error) => panic!("loading the shipped config failed: {error}"),
-    };
+    let cfg = load_shipped_config();
 
     let configured: BTreeSet<String> = cfg
         .panel
@@ -113,12 +104,7 @@ fn shipped_config_has_no_unknown_or_misplaced_items() {
 
 #[test]
 fn shipped_machines_template_has_no_detect_rules() {
-    // The shipped `machines.toml` is a how-to template with no top-level
-    // machine block. Even when a test host happens to expose a DMI, the
-    // load should report `machine == ""`.
-    let cfg = match load_config(None, Some(false)) {
-        Ok(cfg) => cfg,
-        Err(error) => panic!("loading the shipped config failed: {error}"),
-    };
+    // The shipped machines template has no detect rule, even when the test host exposes DMI data.
+    let cfg = load_shipped_config();
     assert_eq!(cfg.machine, "");
 }

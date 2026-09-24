@@ -5,24 +5,30 @@ set -euo pipefail
 
 usage() {
     cat <<'EOF'
-Usage: tools/qml_verify.sh [--smoke] [--no-build]
+Usage: tools/qml_verify.sh [--smoke|--config-smoke] [--no-build]
 
 Launch an isolated Plasma applet backed by the Rust daemon.
 
   --smoke     Run a short non-interactive load check, then exit.
+  --config-smoke  Open the Daemon settings page in the isolated applet.
   --no-build  Reuse target/release/plasma-top.
 
-Without --smoke, close the plasmawindowed window to finish an Application-form inspection.
+Without a smoke flag, close the plasmawindowed window to finish an Application-form inspection.
 `plasmawindowed` cannot emulate panel form factors; those checks currently require an explicitly approved real-session pass.
 All temporary files and the user-local test applet copy are removed on exit.
 EOF
 }
 
 smoke=false
+config_smoke=false
 build=true
 for arg in "$@"; do
     case "$arg" in
     --smoke) smoke=true ;;
+    --config-smoke)
+        smoke=true
+        config_smoke=true
+        ;;
     --no-build) build=false ;;
     -h | --help)
         usage
@@ -121,6 +127,59 @@ path.write_text(
 )
 PY
 
+if [[ "$config_smoke" == true ]]; then
+    python3 - "$test_root/package/contents/config/config.qml" "$test_root/package/contents/ui/main.qml" "$test_root/package/contents/ui/config/ConfigDaemon.qml" <<'PY'
+from pathlib import Path
+import sys
+
+categories = Path(sys.argv[1])
+categories.write_text(
+    categories.read_text(encoding="utf-8").replace(
+        'source: "config/ConfigAppearance.qml"',
+        'source: "config/ConfigDaemon.qml"',
+        1,
+    ),
+    encoding="utf-8",
+)
+main = Path(sys.argv[2])
+text = main.read_text(encoding="utf-8")
+body, close = text.rsplit("}", 1)
+main.write_text(
+    body + '''
+    Timer {
+        interval: 300
+        running: true
+        onTriggered: {
+            var action = Plasmoid.internalAction("configure")
+            if (action) action.trigger()
+        }
+    }
+''' + "}" + close,
+    encoding="utf-8",
+)
+page = Path(sys.argv[3])
+body, close = page.read_text(encoding="utf-8").rsplit("}", 1)
+page.write_text(
+    body + '''
+    Timer {
+        id: testSaveTimer
+        interval: 100
+        running: true
+        repeat: true
+        onTriggered: {
+            if (root.loaded && !root.busy) {
+                pollField.text = "2.5"
+                testSaveTimer.stop()
+                root.save()
+            }
+        }
+    }
+''' + "}" + close,
+    encoding="utf-8",
+)
+PY
+fi
+
 kpackagetool6 --type Plasma/Applet --install "$test_root/package" >/dev/null
 
 "$binary" daemon >"$test_root/daemon.log" 2>&1 &
@@ -184,6 +243,27 @@ if [[ "$smoke" == true ]]; then
         cat "$test_root/qml.log" >&2
         exit 1
     fi
+    if [[ "$config_smoke" == true ]]; then
+        grep -Eq $'\tplasma-top\tconfig show$' "$PLASMA_TOP_QML_TRACE" || {
+            echo "Daemon settings page did not request user config" >&2
+            cat "$test_root/qml.log" >&2
+            exit 1
+        }
+        [[ -s "$XDG_CONFIG_HOME/plasma-top/config.toml" ]] || {
+            echo "Daemon settings page did not initialize user config" >&2
+            exit 1
+        }
+        grep -Eq $'\tplasma-top\tconfig apply 2\.5 ' "$PLASMA_TOP_QML_TRACE" || {
+            echo "Daemon settings page did not submit edited values" >&2
+            cat "$test_root/qml.log" >&2
+            exit 1
+        }
+        grep -Eq '^poll_interval[[:space:]]*=[[:space:]]*2\.5' "$XDG_CONFIG_HOME/plasma-top/config.toml" || {
+            echo "Daemon settings page did not save the edited interval" >&2
+            cat "$test_root/qml.log" >&2
+            exit 1
+        }
+    fi
     lease="$(find "$runtime_root/state/presented" -maxdepth 1 -type f -printf '%f\n' 2>/dev/null | awk '/^[1-9][0-9]*$/ { print; exit }')"
     if grep -Eq $'\tplasma-top\tpresent [1-9][0-9]*$' "$PLASMA_TOP_QML_TRACE"; then
         [[ -n "$lease" ]] || {
@@ -214,7 +294,11 @@ if [[ "$smoke" == true ]]; then
         echo "best-effort clean-removal dismiss callback missing" >&2
         exit 1
     fi
-    echo "QML smoke passed: hidden reads gated; crash leases expire; clean-removal callback present"
+    if [[ "$config_smoke" == true ]]; then
+        echo "QML config smoke passed: user config initialized and edited through the Daemon page"
+    else
+        echo "QML smoke passed: hidden reads gated; crash leases expire; clean-removal callback present"
+    fi
     exit 0
 fi
 

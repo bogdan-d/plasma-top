@@ -219,6 +219,7 @@ fn sustained_without_hysteresis_clears_below_trip() {
 #[test]
 fn every_notification_type_emits_exact_ordered_payloads() {
     let mut cfg = Config::default();
+    cfg.notifications.disk_usage = true;
     cfg.notifications.cpu_temp = true;
     cfg.notifications.gpu_nvidia_temp = true;
     cfg.notifications.load_avg = true;

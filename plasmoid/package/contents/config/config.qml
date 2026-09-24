@@ -11,4 +11,9 @@ ConfigModel {
 		icon: "preferences-desktop-color"
 		source: "config/ConfigAppearance.qml"
 	}
+	ConfigCategory {
+		name: i18n("Daemon")
+		icon: "preferences-system"
+		source: "config/ConfigDaemon.qml"
+	}
 }
