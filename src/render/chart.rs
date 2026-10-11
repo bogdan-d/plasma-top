@@ -39,7 +39,10 @@ const DIGIT_WIDTH: usize = 3;
 const DIGIT_HEIGHT: usize = 5;
 const DEFAULT_GRID_LEVELS: &[f64] = &[0.0, 25.0, 50.0, 75.0, 100.0];
 
-const DIGITS: [([[u8; DIGIT_WIDTH]; DIGIT_HEIGHT], char); 10] = [
+/// Smallest full-scale value of a rate chart, so idle noise does not fill the plot.
+const RATE_SCALE_FLOOR: f64 = 4_000.0;
+
+const DIGITS: [([[u8; DIGIT_WIDTH]; DIGIT_HEIGHT], char); 13] = [
     ([*b"111", *b"101", *b"101", *b"101", *b"111"], '0'),
     ([*b"110", *b"010", *b"010", *b"010", *b"111"], '1'),
     ([*b"111", *b"001", *b"111", *b"100", *b"111"], '2'),
@@ -50,7 +53,67 @@ const DIGITS: [([[u8; DIGIT_WIDTH]; DIGIT_HEIGHT], char); 10] = [
     ([*b"111", *b"001", *b"001", *b"010", *b"010"], '7'),
     ([*b"111", *b"101", *b"111", *b"101", *b"111"], '8'),
     ([*b"111", *b"101", *b"111", *b"001", *b"111"], '9'),
+    ([*b"101", *b"101", *b"110", *b"101", *b"101"], 'K'),
+    ([*b"101", *b"111", *b"111", *b"101", *b"101"], 'M'),
+    ([*b"111", *b"100", *b"101", *b"101", *b"111"], 'G'),
 ];
+
+/// Y-axis of a chart whose range follows its data: full-scale value plus labeled grid levels.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Scale {
+    /// Full-scale value.
+    pub vmax: f64,
+    /// Grid levels in chart-value units.
+    pub levels: [f64; 5],
+    /// One baked label per grid level; each fits the 4-glyph label margin.
+    pub labels: [String; 5],
+}
+
+/// Picks the smallest 1/2/4/8 × 10ⁿ bytes-per-second scale covering `peak`.
+///
+/// Those mantissas keep every quarter-scale label within four glyphs in the decimal units `net_fmt` prints.
+#[must_use]
+pub fn rate_scale(peak: f64) -> Scale {
+    let mut vmax = RATE_SCALE_FLOOR;
+    let mut decade = 1_000.0;
+    'search: loop {
+        for mantissa in [1.0, 2.0, 4.0, 8.0] {
+            let candidate = mantissa * decade;
+            if candidate >= RATE_SCALE_FLOOR && candidate >= peak {
+                vmax = candidate;
+                break 'search;
+            }
+        }
+        if decade >= 1e12 {
+            break;
+        }
+        decade *= 10.0;
+    }
+    let levels = [0.0, 0.25, 0.5, 0.75, 1.0].map(|quarter| vmax * quarter);
+    let labels = levels.map(rate_label);
+    Scale {
+        vmax,
+        levels,
+        labels,
+    }
+}
+
+fn rate_label(value: f64) -> String {
+    let (scaled, unit) = if value >= 1e9 {
+        (value / 1e9, "G")
+    } else if value >= 1e6 {
+        (value / 1e6, "M")
+    } else if value >= 1e3 {
+        (value / 1e3, "K")
+    } else {
+        (value, "")
+    };
+    if scaled.fract() == 0.0 {
+        format!("{scaled:.0}{unit}")
+    } else {
+        format!("{scaled:.1}{unit}")
+    }
+}
 
 /// Rendering knobs for [`area_chart_png`].
 #[derive(Debug, Clone)]
@@ -75,6 +138,8 @@ pub struct AreaChartOptions<'a> {
     pub overlay_line: RGBA,
     /// Whether to draw numeric y-axis labels in the reserved left margin.
     pub label_values: bool,
+    /// Labels drawn instead of the numeric grid levels, one per level.
+    pub grid_labels: Option<&'a [String]>,
 }
 
 impl Default for AreaChartOptions<'static> {
@@ -90,6 +155,7 @@ impl Default for AreaChartOptions<'static> {
             overlay: None,
             overlay_line: GRID,
             label_values: true,
+            grid_labels: None,
         }
     }
 }
@@ -139,15 +205,19 @@ pub fn area_chart_png(
         );
     }
 
-    for &level in options.grid_levels {
+    for (index, &level) in options.grid_levels.iter().enumerate() {
         let gy = round_half_even(value_yf(level, options.vmax, floor_y, span));
         draw_horizontal_grid(&mut pixels, width, height, plot_x0, gy, options.grid);
         if options.left_pad > 0 && options.label_values {
+            let label = options
+                .grid_labels
+                .and_then(|labels| labels.get(index).cloned())
+                .unwrap_or_else(|| level_to_string(level));
             draw_digits(
                 &mut pixels,
                 width,
                 height,
-                &level_to_string(level),
+                &label,
                 options.left_pad.saturating_sub(2) as isize,
                 gy,
                 options.label,
@@ -348,6 +418,13 @@ fn draw_digits(
 
     let mut x = right_x;
     for ch in text.chars().rev() {
+        if ch == '.' {
+            x -= 1;
+            let y = (top + DIGIT_HEIGHT - 1) as isize;
+            set_px_signed(pixels, width, height, x, y, color, 1.0);
+            x -= 1;
+            continue;
+        }
         x -= DIGIT_WIDTH as isize;
         if let Some(glyph) = digit_glyph(ch) {
             for (row_index, row) in glyph.iter().enumerate() {

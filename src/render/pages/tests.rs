@@ -199,6 +199,24 @@ fn format_graphs_draws_disk_chart_only_for_a_detected_device() {
 }
 
 #[test]
+fn format_graphs_memory_legend_adds_used_and_total_when_known() {
+    let mut cfg = Config::default();
+    cfg.pages.graph_order = vec![String::from("memory")];
+    let readings = DisplaySnapshot {
+        mem_used_gib: Some(32),
+        mem_total_gib: Some(125),
+        ..readings()
+    };
+
+    let html = PageFormatter::new(&cfg, &hw()).format_graphs(&readings, "", "", None);
+
+    assert!(html.contains(r#"<span class="val warn">55%</span>"#));
+    assert!(html.contains(
+        r#"<span class="label">Memory used:</span>&nbsp;<span class="val">32G / 125G</span>"#
+    ));
+}
+
+#[test]
 fn format_graphs_limits_shared_history_to_requested_samples() {
     let mut cfg = Config::default();
     cfg.pages.graph_order = vec![String::from("cpu")];

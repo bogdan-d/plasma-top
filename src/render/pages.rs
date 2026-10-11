@@ -6,7 +6,7 @@ use crate::domain::{DisplaySnapshot, HardwareInventory};
 use super::cells::{TOP_PROCESS_COMM_MIN, TOP_PROCESS_MIN_PID, TOP_PROCESS_SIDE_COLS, net_fmt};
 use super::chart::{
     AreaChartOptions, BLUE_FILL, BLUE_LINE, GREEN_FILL, GREEN_LINE, ORANGE_LINE, PURPLE_FILL,
-    PURPLE_LINE, RED_LINE, RGBA, TEAL_FILL, TEAL_LINE, area_chart_png,
+    PURPLE_LINE, RED_LINE, RGBA, TEAL_FILL, TEAL_LINE, area_chart_png, rate_scale,
 };
 use super::model::{EMPTY_VALUE, css_class_active, css_class_from_thresholds};
 use super::traces::{TraceMetric, braille_html};
@@ -271,6 +271,13 @@ impl<'a> PageFormatter<'a> {
         if enabled("memory") {
             let history =
                 &readings.mem_history[readings.mem_history.len().saturating_sub(history_len)..];
+            // The series stays in percent; only the axis is relabeled as shares of total RAM.
+            let total_labels = readings.mem_total_gib.map(|total| {
+                [0, 1, 2, 3, 4].map(|quarter| match quarter {
+                    0 => String::from("0"),
+                    _ => format!("{}G", (total * quarter + 2) / 4),
+                })
+            });
             let png = area_chart_png(
                 &history
                     .iter()
@@ -282,24 +289,29 @@ impl<'a> PageFormatter<'a> {
                     left_pad: GRAPH_LEFT_PAD,
                     line: PURPLE_LINE,
                     fill: PURPLE_FILL,
+                    grid_labels: total_labels.as_ref().map(<[String; 5]>::as_slice),
                     ..AreaChartOptions::default()
                 },
             );
-            blocks.push((
-                "memory",
-                png_img(&png, width)
-                    + &legend(vec![(
-                        Some(PURPLE_LINE),
-                        "Memory usage",
-                        graph_value_band(
-                            readings.mem_usage,
-                            Some((
-                                self.cfg.thresholds.mem_usage[0],
-                                self.cfg.thresholds.mem_usage[1],
-                            )),
-                        ),
-                    )]),
-            ));
+            let mut entries = vec![(
+                Some(PURPLE_LINE),
+                "Memory usage",
+                graph_value_band(
+                    readings.mem_usage,
+                    Some((
+                        self.cfg.thresholds.mem_usage[0],
+                        self.cfg.thresholds.mem_usage[1],
+                    )),
+                ),
+            )];
+            if let (Some(used), Some(total)) = (readings.mem_used_gib, readings.mem_total_gib) {
+                entries.push((
+                    Some(PURPLE_LINE),
+                    "Memory used",
+                    format!(r#"<span class="val">{used}G / {total}G</span>"#),
+                ));
+            }
+            blocks.push(("memory", png_img(&png, width) + &legend(entries)));
         }
 
         let gpu = if self.hw.has_nvidia {
@@ -386,109 +398,46 @@ impl<'a> PageFormatter<'a> {
         }
 
         if enabled("network") && self.hw.net_device.is_some() {
-            let down = readings.net_down_history.iter().copied().max().unwrap_or(0);
-            let up = readings.net_up_history.iter().copied().max().unwrap_or(0);
-            let peak = down.max(up).max(1) as f64;
-            let grid_levels = [0.0];
-            let overlay = readings
-                .net_up_history
-                .iter()
-                .map(|value| *value as f64)
-                .collect::<Vec<_>>();
-            let png = area_chart_png(
-                &readings
-                    .net_down_history
-                    .iter()
-                    .map(|value| *value as f64)
-                    .collect::<Vec<_>>(),
-                width,
-                GRAPH_HEIGHT,
-                AreaChartOptions {
-                    vmax: peak,
-                    left_pad: GRAPH_LEFT_PAD,
-                    grid_levels: &grid_levels,
-                    label_values: false,
-                    line: TEAL_LINE,
-                    fill: TEAL_FILL,
-                    overlay: Some(&overlay),
-                    overlay_line: RED_LINE,
-                    ..AreaChartOptions::default()
-                },
-            );
             blocks.push((
                 "network",
-                png_img(&png, width)
-                    + &legend(vec![
-                        (
-                            Some(TEAL_LINE),
-                            "Download",
-                            format!(
-                                r#"<span class="val">{}</span>"#,
-                                net_fmt(readings.net_down_bps.unwrap_or(0))
-                            ),
-                        ),
-                        (
-                            Some(RED_LINE),
-                            "Upload",
-                            format!(
-                                r#"<span class="val">{}</span>"#,
-                                net_fmt(readings.net_up_bps.unwrap_or(0))
-                            ),
-                        ),
-                    ]),
+                rate_chart(
+                    width,
+                    RateSeries {
+                        history: &readings.net_down_history,
+                        current: readings.net_down_bps,
+                        label: "Download",
+                        line: TEAL_LINE,
+                    },
+                    TEAL_FILL,
+                    RateSeries {
+                        history: &readings.net_up_history,
+                        current: readings.net_up_bps,
+                        label: "Upload",
+                        line: RED_LINE,
+                    },
+                ),
             ));
         }
 
         if enabled("disk") && self.hw.disk_io_device.is_some() {
-            let read = readings
-                .disk_read_history
-                .iter()
-                .map(|value| *value as f64)
-                .collect::<Vec<_>>();
-            let write = readings
-                .disk_write_history
-                .iter()
-                .map(|value| *value as f64)
-                .collect::<Vec<_>>();
-            let peak = read.iter().chain(&write).copied().fold(1.0, f64::max);
-            let grid_levels = [0.0];
-            let png = area_chart_png(
-                &read,
-                width,
-                GRAPH_HEIGHT,
-                AreaChartOptions {
-                    vmax: peak,
-                    left_pad: GRAPH_LEFT_PAD,
-                    grid_levels: &grid_levels,
-                    label_values: false,
-                    line: PURPLE_LINE,
-                    fill: PURPLE_FILL,
-                    overlay: Some(&write),
-                    overlay_line: ORANGE_LINE,
-                    ..AreaChartOptions::default()
-                },
-            );
             blocks.push((
                 "disk",
-                png_img(&png, width)
-                    + &legend(vec![
-                        (
-                            Some(PURPLE_LINE),
-                            "Disk read",
-                            format!(
-                                r#"<span class="val">{}</span>"#,
-                                net_fmt(readings.disk_read_bps.unwrap_or(0))
-                            ),
-                        ),
-                        (
-                            Some(ORANGE_LINE),
-                            "Disk write",
-                            format!(
-                                r#"<span class="val">{}</span>"#,
-                                net_fmt(readings.disk_write_bps.unwrap_or(0))
-                            ),
-                        ),
-                    ]),
+                rate_chart(
+                    width,
+                    RateSeries {
+                        history: &readings.disk_read_history,
+                        current: readings.disk_read_bps,
+                        label: "Disk read",
+                        line: PURPLE_LINE,
+                    },
+                    PURPLE_FILL,
+                    RateSeries {
+                        history: &readings.disk_write_history,
+                        current: readings.disk_write_bps,
+                        label: "Disk write",
+                        line: ORANGE_LINE,
+                    },
+                ),
             ));
         }
 
@@ -688,6 +637,65 @@ fn graph_value_active(current: Option<i32>, threshold: Option<i32>) -> String {
             format!(r#"<span class="val {class}">{current}%</span>"#)
         }
     }
+}
+
+/// One line of a throughput chart: its history, current rate, and legend identity.
+struct RateSeries<'a> {
+    history: &'a [u64],
+    current: Option<u64>,
+    label: &'a str,
+    line: RGBA,
+}
+
+/// Draws a filled primary and line-only overlay throughput chart on a shared scale that follows the visible peak.
+fn rate_chart(
+    width: usize,
+    primary: RateSeries<'_>,
+    fill: RGBA,
+    overlay: RateSeries<'_>,
+) -> String {
+    let values = |series: &RateSeries<'_>| {
+        series
+            .history
+            .iter()
+            .map(|value| *value as f64)
+            .collect::<Vec<_>>()
+    };
+    let primary_values = values(&primary);
+    let overlay_values = values(&overlay);
+    let peak = primary_values
+        .iter()
+        .chain(&overlay_values)
+        .copied()
+        .fold(0.0, f64::max);
+    let scale = rate_scale(peak);
+    let png = area_chart_png(
+        &primary_values,
+        width,
+        GRAPH_HEIGHT,
+        AreaChartOptions {
+            vmax: scale.vmax,
+            left_pad: GRAPH_LEFT_PAD,
+            grid_levels: &scale.levels,
+            grid_labels: Some(&scale.labels),
+            line: primary.line,
+            fill,
+            overlay: Some(&overlay_values),
+            overlay_line: overlay.line,
+            ..AreaChartOptions::default()
+        },
+    );
+    let entry = |series: &RateSeries<'_>| {
+        format!(
+            r#"<span class="val">{}</span>"#,
+            net_fmt(series.current.unwrap_or(0))
+        )
+    };
+    png_img(&png, width)
+        + &legend(vec![
+            (Some(primary.line), primary.label, entry(&primary)),
+            (Some(overlay.line), overlay.label, entry(&overlay)),
+        ])
 }
 
 fn png_img(png: &[u8], width: usize) -> String {

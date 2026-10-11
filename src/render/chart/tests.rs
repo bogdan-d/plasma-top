@@ -196,3 +196,25 @@ fn constant_series_chart_matches_python_pixels() {
     assert_eq!(pixel(&decoded, 5, 6), (82, 159, 199, 220));
     assert_eq!(pixel(&decoded, 9, 7), (100, 147, 171, 120));
 }
+
+#[test]
+fn rate_scale_covers_peak_with_four_glyph_labels() {
+    let labels = |peak: f64| rate_scale(peak).labels;
+
+    assert_eq!(rate_scale(0.0).vmax, 4_000.0);
+    assert_eq!(labels(0.0), ["0", "1K", "2K", "3K", "4K"]);
+    assert_eq!(labels(9_000.0), ["0", "2.5K", "5K", "7.5K", "10K"]);
+    assert_eq!(labels(800_000.0), ["0", "200K", "400K", "600K", "800K"]);
+    assert_eq!(labels(800_001.0), ["0", "250K", "500K", "750K", "1M"]);
+    assert_eq!(labels(1_500_000.0), ["0", "500K", "1M", "1.5M", "2M"]);
+    assert_eq!(labels(3e9), ["0", "1G", "2G", "3G", "4G"]);
+    for exponent in 0..12 {
+        for mantissa in [1.0, 2.0, 4.0, 8.0] {
+            let scale = rate_scale(mantissa * 10f64.powi(exponent));
+            assert!(
+                scale.labels.iter().all(|label| label.len() <= 4),
+                "{scale:?}"
+            );
+        }
+    }
+}
