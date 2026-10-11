@@ -441,16 +441,26 @@ fn history_executor_rejects_first_sample_captured_after_ticket_deadline() {
 }
 
 #[test]
-fn typed_cpu_network_and_intel_histories_carry_predeadline_samples() {
+fn typed_cpu_network_disk_and_intel_histories_carry_predeadline_samples() {
     let mut cfg = Config::default();
     cfg.pages.order.push(String::from("graphs"));
     let pci = String::from("0000:00:02.0");
     let mut hw = HardwareInventory {
         net_device: Some(String::from("eth0")),
+        disk_io_device: Some(String::from("nvme0n1")),
         intel_gpu_pci: Some(pci.clone()),
         ..HardwareInventory::default()
     };
     let mut owners = TestOwners::default();
+    owners.disk.rate_device.clone_from(&hw.disk_io_device);
+    owners
+        .disk
+        .io
+        .record_value((300, 400), Duration::from_millis(500));
+    owners
+        .disk
+        .io
+        .record_value((700, 600), Duration::from_millis(1_500));
     owners
         .cpu
         .usage
@@ -501,6 +511,13 @@ fn typed_cpu_network_and_intel_histories_carry_predeadline_samples() {
                 crate::scheduler::SourceIdentity::Device(format!("intel:{pci}")),
             ),
         ),
+        (
+            4,
+            crate::scheduler::JobId::singleton(
+                crate::scheduler::OwnerId::Disk,
+                crate::scheduler::JobKind::DiskIoHistory,
+            ),
+        ),
     ] {
         assert_eq!(
             execute_history_job(job, run_id, &mut owners, &mut hw, &cfg, &mut readings,),
@@ -512,6 +529,10 @@ fn typed_cpu_network_and_intel_histories_carry_predeadline_samples() {
     assert_eq!(owners.network.net_up_history(), [100]);
     assert_eq!(owners.network.net_down_history(), [200]);
     assert_eq!(owners.gpu_history.usage, [20]);
+    assert_eq!(owners.disk.read_history(), [300]);
+    assert_eq!(owners.disk.write_history(), [400]);
+    assert_eq!(readings.disk_read_history, [300]);
+    assert_eq!(readings.disk_write_history, [400]);
 }
 
 #[test]

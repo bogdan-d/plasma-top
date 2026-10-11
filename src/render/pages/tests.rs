@@ -170,6 +170,35 @@ fn format_graphs_uses_selected_chart_order() {
 }
 
 #[test]
+fn format_graphs_draws_disk_chart_only_for_a_detected_device() {
+    let mut cfg = Config::default();
+    cfg.pages.graph_order = vec![String::from("disk")];
+    let readings = DisplaySnapshot {
+        disk_read_history: vec![1000, 2000],
+        disk_write_history: vec![500, 4000],
+        disk_read_bps: Some(2_000_000),
+        disk_write_bps: Some(4_000_000),
+        ..DisplaySnapshot::default()
+    };
+
+    let html = PageFormatter::new(&cfg, &hw()).format_graphs(&readings, "", "", None);
+    assert!(html.contains("No graphs selected or available"));
+
+    let hardware = HardwareInventory {
+        disk_io_device: Some(String::from("nvme0n1")),
+        ..hw()
+    };
+    let html = PageFormatter::new(&cfg, &hardware).format_graphs(&readings, "", "", None);
+    assert_eq!(html.matches("data:image/png;base64,").count(), 1);
+    assert!(
+        html.contains(r#"<span class="label">Disk read:</span>&nbsp;<span class="val">2M</span>"#)
+    );
+    assert!(
+        html.contains(r#"<span class="label">Disk write:</span>&nbsp;<span class="val">4M</span>"#)
+    );
+}
+
+#[test]
 fn format_graphs_limits_shared_history_to_requested_samples() {
     let mut cfg = Config::default();
     cfg.pages.graph_order = vec![String::from("cpu")];

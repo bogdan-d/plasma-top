@@ -34,6 +34,9 @@ pub(super) fn configured_capabilities(cfg: &Config) -> BTreeSet<Capability> {
         capabilities.insert(Capability::CpuTemperature);
         capabilities.insert(Capability::GpuAmdTemperature);
     }
+    if disk::io_graph_enabled(cfg) {
+        capabilities.insert(Capability::DiskIo);
+    }
     capabilities
 }
 
@@ -105,6 +108,9 @@ pub(crate) fn scheduler_config(
     }
     if temperature_graph_enabled(cfg) {
         hidden_inventory.insert(InventoryFamily::Cpu);
+    }
+    if disk::io_graph_enabled(cfg) {
+        hidden_inventory.insert(InventoryFamily::DiskIo);
     }
     for family in hidden_inventory {
         demand.hidden.insert(catalog.inventory_job(family));

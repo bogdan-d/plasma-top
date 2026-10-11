@@ -55,7 +55,7 @@ pub use geometry::{
 // ── Constants ───────────────────────────────────────────────────────────────
 
 /// Chart keys accepted by the Graphs tooltip page, in its default order.
-pub const GRAPH_CHARTS: [&str; 5] = ["cpu", "memory", "gpu", "network", "temperature"];
+pub const GRAPH_CHARTS: [&str; 6] = ["cpu", "memory", "gpu", "network", "disk", "temperature"];
 
 /// Built-in lower bound for the tooltip width (monospace columns).
 ///

@@ -439,6 +439,59 @@ impl<'a> PageFormatter<'a> {
             ));
         }
 
+        if enabled("disk") && self.hw.disk_io_device.is_some() {
+            let read = readings
+                .disk_read_history
+                .iter()
+                .map(|value| *value as f64)
+                .collect::<Vec<_>>();
+            let write = readings
+                .disk_write_history
+                .iter()
+                .map(|value| *value as f64)
+                .collect::<Vec<_>>();
+            let peak = read.iter().chain(&write).copied().fold(1.0, f64::max);
+            let grid_levels = [0.0];
+            let png = area_chart_png(
+                &read,
+                width,
+                GRAPH_HEIGHT,
+                AreaChartOptions {
+                    vmax: peak,
+                    left_pad: GRAPH_LEFT_PAD,
+                    grid_levels: &grid_levels,
+                    label_values: false,
+                    line: PURPLE_LINE,
+                    fill: PURPLE_FILL,
+                    overlay: Some(&write),
+                    overlay_line: ORANGE_LINE,
+                    ..AreaChartOptions::default()
+                },
+            );
+            blocks.push((
+                "disk",
+                png_img(&png, width)
+                    + &legend(vec![
+                        (
+                            Some(PURPLE_LINE),
+                            "Disk read",
+                            format!(
+                                r#"<span class="val">{}</span>"#,
+                                net_fmt(readings.disk_read_bps.unwrap_or(0))
+                            ),
+                        ),
+                        (
+                            Some(ORANGE_LINE),
+                            "Disk write",
+                            format!(
+                                r#"<span class="val">{}</span>"#,
+                                net_fmt(readings.disk_write_bps.unwrap_or(0))
+                            ),
+                        ),
+                    ]),
+            ));
+        }
+
         let selected_gpu_temp = if self.hw.has_nvidia {
             readings.gpu_temp
         } else if self.hw.amd_gpu.is_some() {

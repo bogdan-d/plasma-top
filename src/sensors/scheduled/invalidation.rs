@@ -99,6 +99,11 @@ pub(crate) fn invalidate_scheduled_job(
             readings.disk_read_bps = None;
             readings.disk_write_bps = None;
         }
+        JobKind::DiskIoHistory => {
+            owners.disk.reset_io_history();
+            readings.disk_read_history.clear();
+            readings.disk_write_history.clear();
+        }
         JobKind::DiskUsage => {
             if let SourceIdentity::Mount(path) = &job.source {
                 let key = path.to_string_lossy();

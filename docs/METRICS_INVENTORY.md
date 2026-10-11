@@ -64,6 +64,7 @@ Relevant code: `src/sensors/network.rs` and the network section of `src/sensors/
 | Mount discovery | Configured mounts or `/proc/mounts`; device identity from `/sys` | Direct Rust file and symlink reads | Explicit mounts are fixed; automatic mounts are reconciled at `display.poll_interval` while disk usage is demanded |
 | Filesystem usage | Mounted filesystem | `nix::sys::statvfs::statvfs` syscall wrapper | Once per requested mount per poll, sequentially |
 | Disk read/write rate | `/proc/diskstats` | Direct Rust file read; sector-counter diff using 512-byte sectors | Every requested poll; first sample seeds the diff; device changes reset it |
+| Disk read/write history | Rate samples already collected | In-memory vectors | Sampled at `display.history_interval` while the Graphs page includes the `disk` chart |
 | Disk temperature | Discovered `nvme` or `drivetemp` hwmon `temp*_input` files | Direct Rust file read | 30-second freshness budget per drive |
 | Fan speed | Discovered hwmon `fan*_input` files | Direct Rust file read | 30-second freshness budget per fan |
 | SMART health | UDisks2 `SmartUpdate` and typed property calls | Persistent system zbus service | Per-drive configurable SSD/HDD freshness budget; owner calls are sequential; SMART update timeout is 15 seconds |

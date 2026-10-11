@@ -113,6 +113,12 @@ pub(super) fn apply_owner_readings(
         OwnerId::Disk => {
             target.disk_read_bps = source.disk_read_bps;
             target.disk_write_bps = source.disk_write_bps;
+            target
+                .disk_read_history
+                .clone_from(&source.disk_read_history);
+            target
+                .disk_write_history
+                .clone_from(&source.disk_write_history);
             target.disk_usage.clone_from(&source.disk_usage);
             target.disk_smart.clone_from(&source.disk_smart);
             target.hd_temps.clone_from(&source.hd_temps);

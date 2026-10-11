@@ -415,6 +415,13 @@ impl RuntimeState {
                 !self.readings.net_up_history.is_empty()
                     || !self.readings.net_down_history.is_empty()
             }
+            Kind::DiskIo => {
+                self.readings.disk_read_bps.is_some() || self.readings.disk_write_bps.is_some()
+            }
+            Kind::DiskIoHistory => {
+                !self.readings.disk_read_history.is_empty()
+                    || !self.readings.disk_write_history.is_empty()
+            }
             Kind::NvidiaNvml | Kind::NvidiaFallback => {
                 self.readings.gpu_usage.is_some()
                     || self.readings.gpu_dec.is_some()
@@ -507,13 +514,18 @@ impl RuntimeState {
                 crate::scheduler::SourceIdentity::Inventory(InventoryFamily::Network) => {
                     self.hw.net_device != completion.hw.net_device
                 }
+                crate::scheduler::SourceIdentity::Inventory(InventoryFamily::DiskIo) => {
+                    self.hw.disk_io_device != completion.hw.disk_io_device
+                }
                 _ => false,
             },
-            OwnerId::Process
-            | OwnerId::Disk
-            | OwnerId::Power
-            | OwnerId::External
-            | OwnerId::Page => false,
+            OwnerId::Disk => {
+                self.readings.disk_read_bps != readings.disk_read_bps
+                    || self.readings.disk_write_bps != readings.disk_write_bps
+                    || self.readings.disk_read_history != readings.disk_read_history
+                    || self.readings.disk_write_history != readings.disk_write_history
+            }
+            OwnerId::Process | OwnerId::Power | OwnerId::External | OwnerId::Page => false,
         }
     }
 

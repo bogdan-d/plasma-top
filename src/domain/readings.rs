@@ -524,6 +524,10 @@ pub struct DisplaySnapshot {
     pub net_up_history: Vec<u64>,
     /// Network download history for the graphs page.
     pub net_down_history: Vec<u64>,
+    /// Disk read-rate history for the graphs page.
+    pub disk_read_history: Vec<u64>,
+    /// Disk write-rate history for the graphs page.
+    pub disk_write_history: Vec<u64>,
     /// Screen brightness percentage.
     pub screen_brightness: Option<i32>,
     /// Pending package-update count.

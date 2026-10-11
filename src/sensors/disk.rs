@@ -75,9 +75,48 @@ pub struct DiskState {
     prev_read_bytes: u64,
     prev_write_bytes: u64,
     rate_sample_at: Option<Duration>,
+    read_history: Vec<u64>,
+    write_history: Vec<u64>,
+    pub(super) io_history_sample_at: Option<Duration>,
 }
 
 impl DiskState {
+    /// Returns the cached read-rate history for the graphs page.
+    #[must_use]
+    pub fn read_history(&self) -> &[u64] {
+        &self.read_history
+    }
+
+    /// Returns the cached write-rate history for the graphs page.
+    #[must_use]
+    pub fn write_history(&self) -> &[u64] {
+        &self.write_history
+    }
+
+    pub(crate) fn reset_io_history(&mut self) {
+        self.read_history.clear();
+        self.write_history.clear();
+        self.io_history_sample_at = None;
+    }
+
+    /// Appends one disk I/O history point, trimmed to the graphs page history length.
+    pub(crate) fn append_io_history(
+        &mut self,
+        cfg: &Config,
+        captured_at: Duration,
+        read_bps: u64,
+        write_bps: u64,
+    ) {
+        self.io_history_sample_at = Some(captured_at);
+        self.read_history.push(read_bps);
+        self.write_history.push(write_bps);
+        let max_len = cfg.pages.graph_history_length.max(0) as usize;
+        for history in [&mut self.read_history, &mut self.write_history] {
+            let excess = history.len().saturating_sub(max_len);
+            history.drain(..excess);
+        }
+    }
+
     pub(crate) fn reset_io(&mut self) {
         self.io.invalidate();
         self.rate_device = None;
@@ -104,6 +143,10 @@ impl DiskState {
         cfg: &Config,
         capabilities: &BTreeSet<Capability>,
     ) {
+        let io_source_changed = self.rate_device.is_some() && self.rate_device != hw.disk_io_device;
+        if !io_graph_enabled(cfg) || hw.disk_io_device.is_none() || io_source_changed {
+            self.reset_io_history();
+        }
         if !capabilities.contains(&Capability::DiskIo)
             || hw.disk_io_device.is_none()
             || self.rate_device.as_deref() != hw.disk_io_device.as_deref()
@@ -143,6 +186,12 @@ impl DiskState {
             self.smart_sources.clear();
         }
     }
+}
+
+/// Returns whether the graphs page is configured with its disk I/O chart.
+pub(crate) fn io_graph_enabled(cfg: &Config) -> bool {
+    cfg.pages.order.iter().any(|page| page == "graphs")
+        && cfg.pages.graph_order.iter().any(|chart| chart == "disk")
 }
 
 fn reconcile_path_samples(
