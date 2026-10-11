@@ -251,6 +251,35 @@ fn configured_graph_histories_are_hidden_demand() {
 }
 
 #[test]
+fn disk_io_history_follows_the_disk_chart() {
+    let mut cfg = without_notifications(Config::default());
+    cfg.panel.sections.clear();
+    cfg.tooltip.sections.clear();
+    cfg.pages.order = vec![String::from("graphs")];
+    let hw = HardwareInventory {
+        disk_io_device: Some(String::from("nvme0n1")),
+        ..HardwareInventory::default()
+    };
+    let hidden_kinds = |cfg: &Config| {
+        scheduler_config(cfg, &hw, Path::new("/missing-proc"), ConfigGeneration(1))
+            .demand
+            .hidden
+            .iter()
+            .map(|job| job.kind)
+            .collect::<BTreeSet<_>>()
+    };
+
+    let kinds = hidden_kinds(&cfg);
+    assert!(kinds.contains(&JobKind::DiskIo));
+    assert!(kinds.contains(&JobKind::DiskIoHistory));
+
+    cfg.pages.graph_order.retain(|chart| chart != "disk");
+    let kinds = hidden_kinds(&cfg);
+    assert!(!kinds.contains(&JobKind::DiskIo));
+    assert!(!kinds.contains(&JobKind::DiskIoHistory));
+}
+
+#[test]
 fn cpu_core_history_is_only_cpu_cores_page_demand() {
     let mut cfg = without_notifications(Config::default());
     cfg.panel.sections.clear();

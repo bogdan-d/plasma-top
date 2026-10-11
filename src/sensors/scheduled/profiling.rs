@@ -34,6 +34,7 @@ pub(crate) fn capture_time(
         ]),
         (JobKind::NetworkHistory, _) => network::net_history_sample_at(owners.network),
         (JobKind::DiskIo, _) => retained(&owners.disk.io),
+        (JobKind::DiskIoHistory, _) => owners.disk.io_history_sample_at,
         (JobKind::DiskUsage, SourceIdentity::Mount(path)) => {
             owners.disk.usage.get(path.to_str()?).and_then(retained)
         }

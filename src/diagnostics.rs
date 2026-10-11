@@ -377,6 +377,8 @@ fn print_readings(r: &DisplaySnapshot) {
     reading!(r, gpu_dec_history);
     reading!(r, net_up_history);
     reading!(r, net_down_history);
+    reading!(r, disk_read_history);
+    reading!(r, disk_write_history);
     reading!(r, screen_brightness);
     reading!(r, system_updates);
     reading!(r, server_ok);

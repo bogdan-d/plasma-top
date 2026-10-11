@@ -140,6 +140,16 @@ impl Catalog<'_> {
             jobs.insert(network.clone());
             jobs.insert(self.network_history(network));
         }
+        if disk::io_graph_enabled(self.cfg)
+            && let Some(disk_io) = self.disk_io_jobs().pop()
+        {
+            jobs.insert(disk_io.clone());
+            jobs.insert(self.insert(JobSpec::history(
+                JobId::singleton(OwnerId::Disk, JobKind::DiskIoHistory),
+                disk_io,
+                self.cfg.display.history_interval.duration(),
+            )));
+        }
         let gpu_sources = if self.hw.has_nvidia {
             self.nvidia_jobs()
         } else if self.hw.amd_gpu.is_some() {

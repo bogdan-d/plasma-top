@@ -427,6 +427,20 @@ pub(crate) fn execute_scheduled_job(
             readings.disk_write_bps = write;
             completion
         }
+        JobKind::DiskIoHistory => {
+            if let Some((read, write)) =
+                sample_at_history_deadline(&owners.disk.io, history_deadline)
+                    .map(|sample| sample.value)
+            {
+                let captured_at = history_capture_time(history_deadline, ctx);
+                owners.disk.append_io_history(cfg, captured_at, read, write);
+                readings.disk_read_history = owners.disk.read_history().to_vec();
+                readings.disk_write_history = owners.disk.write_history().to_vec();
+                CompletionKind::Captured
+            } else {
+                CompletionKind::Baseline
+            }
+        }
         JobKind::DiskUsage => {
             let SourceIdentity::Mount(path) = &job.source else {
                 return absent(notifications);
@@ -643,6 +657,7 @@ pub(crate) fn reset_counter_baseline(job: &JobId, owners: OwnerRefs<'_>) {
         | JobKind::MemoryHistory
         | JobKind::NetworkIdentity
         | JobKind::NetworkHistory
+        | JobKind::DiskIoHistory
         | JobKind::DiskUsage
         | JobKind::Smart
         | JobKind::DiskTemperature

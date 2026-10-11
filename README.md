@@ -23,7 +23,7 @@ PlasmaTop renders CPU, memory, drives, GPU, temperatures, batteries, network and
 
 - **Panel** — compact live stats (usage bars/sparks, temperatures, battery, …), auto-fitted to the panel's size and orientation (horizontal or vertical).
 - **Tooltip** — the full stats view on hover, grouped into sections.
-- **Deep-dive pages** — scroll the mouse wheel over the widget to page through the tooltip: top processes, per-core CPU, listening connections, fastfetch system info, and history graphs (CPU / memory / GPU / network / CPU and GPU temperature). Enable them in the Daemon settings. The Graphs settings choose chart visibility, chart order, and history length.
+- **Deep-dive pages** — scroll the mouse wheel over the widget to page through the tooltip: top processes, per-core CPU, listening connections, fastfetch system info, and history graphs (CPU / memory / GPU / network / disk I/O / CPU and GPU temperature). Enable them in the Daemon settings. The Graphs settings choose chart visibility, chart order, and history length.
 - **Pin** — left-click keeps the tooltip open as a persistent popup, so you can watch the graphs live without holding the pointer over the widget. By default, middle-click opens KDE System Monitor.
 - **Desktop mode** — drop the widget straight onto the desktop for an always-on, conky-style readout. Choose Plasma's background or keep it transparent on the wallpaper, pick the text and outline colors for legibility over any image, and scroll to page through the views. Set it in the widget's *Appearance* page (the Desktop options appear only when it's on the desktop).
 - **Auto light/dark** — follows the Plasma color scheme, hot-reloaded.

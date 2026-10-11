@@ -179,6 +179,7 @@ pub(crate) enum JobKind {
     NetworkIdentity,
     NetworkHistory,
     DiskIo,
+    DiskIoHistory,
     DiskUsage,
     Smart,
     DiskTemperature,

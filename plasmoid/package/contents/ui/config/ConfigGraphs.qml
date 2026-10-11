@@ -29,6 +29,7 @@ LibConfig.FormKCM {
 		case "memory": return i18n("Memory usage")
 		case "gpu": return i18n("GPU usage and codec")
 		case "network": return i18n("Network download and upload")
+		case "disk": return i18n("Disk read and write")
 		case "temperature": return i18n("CPU and GPU temperature")
 		default: return i18n("Unknown chart: %1", chart)
 		}
