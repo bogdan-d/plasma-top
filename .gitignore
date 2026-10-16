@@ -7,3 +7,6 @@ __pycache__/
 # Tooling caches / agent config (not part of the shipped tool)
 .claude/
 .vscode/settings.json
+
+# Local scratch: captures, helper scripts, review reports (not shipped)
+/.tmp/
