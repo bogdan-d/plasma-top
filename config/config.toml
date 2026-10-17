@@ -102,9 +102,9 @@ order = ["graphs", "processes"]
 # graphs only: samples kept by its history charts (time window = this ×
 # display.history_interval). No extra memory when "graphs" is not in order.
 graph_history_length = 60
-# Visible charts in display order. Available: cpu, memory, gpu, network, disk, temperature.
-# GPU, network, and disk charts also require a detected source; the temperature chart shows available CPU and GPU sensors.
-graph_order = ["cpu", "memory", "gpu", "network", "disk", "temperature"]
+# Visible charts in display order. Available: cpu, memory, gpu, npu, network, disk, temperature.
+# GPU, NPU, network, and disk charts also require a detected source; the temperature chart shows available CPU and GPU sensors.
+graph_order = ["cpu", "memory", "gpu", "npu", "network", "disk", "temperature"]
 
 
 # ── Forms ─────────────────────────────────────────────────────────────────────

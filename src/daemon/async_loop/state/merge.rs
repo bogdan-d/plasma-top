@@ -150,6 +150,9 @@ pub(super) fn apply_owner_readings(
             target.npu_amd_usage = source.npu_amd_usage;
             target.npu_amd_power_mw = source.npu_amd_power_mw;
             target.npu_amd_freq = source.npu_amd_freq;
+            target
+                .npu_amd_usage_history
+                .clone_from(&source.npu_amd_usage_history);
         }
         OwnerId::IntelGpu => {
             target.gpu_intel_freq = source.gpu_intel_freq;

@@ -397,6 +397,40 @@ impl<'a> PageFormatter<'a> {
             ));
         }
 
+        if enabled("npu") && self.hw.amd_npu.is_some() {
+            let history = &readings.npu_amd_usage_history[readings
+                .npu_amd_usage_history
+                .len()
+                .saturating_sub(history_len)..];
+            let png = area_chart_png(
+                &history
+                    .iter()
+                    .map(|value| f64::from(*value))
+                    .collect::<Vec<_>>(),
+                width,
+                GRAPH_HEIGHT,
+                AreaChartOptions {
+                    left_pad: GRAPH_LEFT_PAD,
+                    line: TEAL_LINE,
+                    fill: TEAL_FILL,
+                    ..AreaChartOptions::default()
+                },
+            );
+            let thresholds = self.cfg.thresholds.npu_amd_usage;
+            blocks.push((
+                "npu",
+                png_img(&png, width)
+                    + &legend(vec![(
+                        Some(TEAL_LINE),
+                        "NPU usage",
+                        graph_value_band(
+                            readings.npu_amd_usage,
+                            Some((thresholds[0], thresholds[1])),
+                        ),
+                    )]),
+            ));
+        }
+
         if enabled("network") && self.hw.net_device.is_some() {
             blocks.push((
                 "network",

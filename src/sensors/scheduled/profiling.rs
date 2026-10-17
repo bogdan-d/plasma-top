@@ -76,6 +76,7 @@ pub(crate) fn capture_time(
             )
         }
         (JobKind::AmdNpu, _) => super::npu::capture_time(owners.amd_npu),
+        (JobKind::AmdNpuHistory, _) => owners.amd_npu.history_sample_at(),
         (JobKind::IntelFrequency, _) => retained(&owners.intel_gpu.frequency),
         (JobKind::IntelUsage, _) => retained(&owners.intel_gpu.usage),
         (JobKind::GpuHistory, _) => oldest([

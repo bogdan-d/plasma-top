@@ -450,6 +450,8 @@ impl RuntimeState {
                 !self.readings.gpu_usage_history.is_empty()
                     || !self.readings.gpu_dec_history.is_empty()
             }
+            Kind::AmdNpu => self.readings.npu_amd_usage.is_some(),
+            Kind::AmdNpuHistory => !self.readings.npu_amd_usage_history.is_empty(),
             _ => false,
         };
         super::worker::invalidate_readings(job, &mut self.readings, metrics);
@@ -498,6 +500,10 @@ impl RuntimeState {
                 self.readings.gpu_usage_history != readings.gpu_usage_history
                     || self.readings.gpu_dec_history != readings.gpu_dec_history
             }
+            OwnerId::AmdNpu => {
+                self.readings.npu_amd_usage != readings.npu_amd_usage
+                    || self.readings.npu_amd_usage_history != readings.npu_amd_usage_history
+            }
             OwnerId::Discovery => match completion.ticket.job.source {
                 crate::scheduler::SourceIdentity::Inventory(InventoryFamily::Cpu) => {
                     self.hw.cpu_temp_path != completion.hw.cpu_temp_path
@@ -517,6 +523,9 @@ impl RuntimeState {
                 crate::scheduler::SourceIdentity::Inventory(InventoryFamily::DiskIo) => {
                     self.hw.disk_io_device != completion.hw.disk_io_device
                 }
+                crate::scheduler::SourceIdentity::Inventory(InventoryFamily::AmdNpu) => {
+                    self.hw.amd_npu != completion.hw.amd_npu
+                }
                 _ => false,
             },
             OwnerId::Disk => {
@@ -525,11 +534,7 @@ impl RuntimeState {
                     || self.readings.disk_read_history != readings.disk_read_history
                     || self.readings.disk_write_history != readings.disk_write_history
             }
-            OwnerId::Process
-            | OwnerId::Power
-            | OwnerId::AmdNpu
-            | OwnerId::External
-            | OwnerId::Page => false,
+            OwnerId::Process | OwnerId::Power | OwnerId::External | OwnerId::Page => false,
         }
     }
 

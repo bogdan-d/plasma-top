@@ -196,3 +196,26 @@ fn brightness_removal_invalidates_only_brightness_external_data() {
         Some(PathBuf::from("/run/server"))
     );
 }
+
+#[test]
+fn npu_history_invalidation_clears_owner_and_snapshot_history_but_keeps_values() {
+    let mut owners = Owners::new();
+    owners
+        .amd_npu
+        .append_history(94, Duration::from_secs(1), 60);
+    let mut readings = DisplaySnapshot {
+        npu_amd_usage: Some(94),
+        npu_amd_usage_history: vec![94],
+        ..DisplaySnapshot::default()
+    };
+    let job = JobId::with_source(
+        OwnerId::AmdNpu,
+        JobKind::AmdNpuHistory,
+        SourceIdentity::Device(String::from("npu:0000:c4:00.1+0000:c3:00.0")),
+    );
+    invalidate_scheduled_job(&job, owners.refs(), &mut readings, None);
+    assert!(owners.amd_npu.usage_history().is_empty());
+    assert_eq!(owners.amd_npu.history_sample_at(), None);
+    assert!(readings.npu_amd_usage_history.is_empty());
+    assert_eq!(readings.npu_amd_usage, Some(94));
+}

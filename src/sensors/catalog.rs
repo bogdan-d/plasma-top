@@ -13,7 +13,7 @@ use crate::scheduler::{
     PeripheralSource, SchedulerConfig, SourceIdentity, TimingClass,
 };
 
-use super::{disk, network, power, process};
+use super::{disk, network, npu_amd, power, process};
 
 mod gpu;
 
@@ -36,6 +36,9 @@ pub(super) fn configured_capabilities(cfg: &Config) -> BTreeSet<Capability> {
     }
     if disk::io_graph_enabled(cfg) {
         capabilities.insert(Capability::DiskIo);
+    }
+    if npu_amd::graph_enabled(cfg) {
+        capabilities.insert(Capability::NpuAmdUsage);
     }
     capabilities
 }
@@ -111,6 +114,9 @@ pub(crate) fn scheduler_config(
     }
     if disk::io_graph_enabled(cfg) {
         hidden_inventory.insert(InventoryFamily::DiskIo);
+    }
+    if npu_amd::graph_enabled(cfg) {
+        hidden_inventory.insert(InventoryFamily::AmdNpu);
     }
     for family in hidden_inventory {
         demand.hidden.insert(catalog.inventory_job(family));

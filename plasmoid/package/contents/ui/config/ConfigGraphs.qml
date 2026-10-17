@@ -28,6 +28,7 @@ LibConfig.FormKCM {
 		case "cpu": return i18n("CPU usage")
 		case "memory": return i18n("Memory usage")
 		case "gpu": return i18n("GPU usage and codec")
+		case "npu": return i18n("NPU usage")
 		case "network": return i18n("Network download and upload")
 		case "disk": return i18n("Disk read and write")
 		case "temperature": return i18n("CPU and GPU temperature")
@@ -138,7 +139,7 @@ LibConfig.FormKCM {
 		text: i18n("Graphs")
 	}
 	QQC2.Label {
-		text: i18n("Choose which charts appear and move them into display order. GPU and network charts appear only when their sources are available. The temperature chart shows CPU and GPU sensors together where supported.")
+		text: i18n("Choose which charts appear and move them into display order. GPU, NPU, and network charts appear only when their sources are available. The temperature chart shows CPU and GPU sensors together where supported.")
 		wrapMode: Text.WordWrap
 	}
 	ColumnLayout {

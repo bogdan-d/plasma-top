@@ -7,6 +7,7 @@ use std::io;
 use std::path::Path;
 use std::time::Duration;
 
+use crate::config::Config;
 use crate::domain::readings::{AmdNpuSource, RetainedMetricSample};
 
 use super::gpu_amd::{entry_exists, invalid_data, numbered_entries, optional_file, pci_identity};
@@ -32,11 +33,21 @@ pub struct AmdNpuSamples {
     pub frequency: RetainedMetricSample<u16>,
 }
 
-/// Detected source and retained samples. No timers or freshness policy.
+/// Whether the graphs page is configured with its NPU chart.
+///
+/// Unlike the GPU and network charts, NPU history needs both conditions, so a graphs page without the chart costs no NPU work.
+pub(crate) fn graph_enabled(cfg: &Config) -> bool {
+    cfg.pages.order.iter().any(|page| page == "graphs")
+        && cfg.pages.graph_order.iter().any(|chart| chart == "npu")
+}
+
+/// Detected source, retained samples, and busy history. No timers or freshness policy.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct AmdNpuState {
     source: Option<AmdNpuSource>,
     samples: AmdNpuSamples,
+    usage_history: Vec<i32>,
+    history_sample_at: Option<Duration>,
 }
 
 impl AmdNpuState {
@@ -46,12 +57,40 @@ impl AmdNpuState {
         &self.samples
     }
 
-    /// Clears every sample when the source appears, disappears, or changes identity.
+    /// Busy history for the graphs page, oldest first.
+    #[must_use]
+    pub fn usage_history(&self) -> &[i32] {
+        &self.usage_history
+    }
+
+    /// Capture time of the newest history point.
+    #[must_use]
+    pub const fn history_sample_at(&self) -> Option<Duration> {
+        self.history_sample_at
+    }
+
+    /// Clears samples and history when the source appears, disappears, or changes identity.
     pub fn reconcile_source(&mut self, source: Option<&AmdNpuSource>) {
         if self.source.as_ref() != source {
-            self.samples = AmdNpuSamples::default();
-            self.source = source.cloned();
+            *self = Self {
+                source: source.cloned(),
+                ..Self::default()
+            };
         }
+    }
+
+    /// Appends one busy point, keeping at most `max_len` points.
+    pub fn append_history(&mut self, usage: i32, captured_at: Duration, max_len: usize) {
+        self.history_sample_at = Some(captured_at);
+        self.usage_history.push(usage);
+        let excess = self.usage_history.len().saturating_sub(max_len);
+        self.usage_history.drain(..excess);
+    }
+
+    /// Clears the busy history.
+    pub fn reset_history(&mut self) {
+        self.usage_history.clear();
+        self.history_sample_at = None;
     }
 
     /// Clears every retained sample and attempt time.

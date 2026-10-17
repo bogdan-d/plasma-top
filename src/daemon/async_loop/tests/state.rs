@@ -632,3 +632,56 @@ fn amd_history_commit_keeps_deadlines_and_slow_invalidation_independent() {
     assert_eq!(state.render_generation, generation + 4);
     let _ = fs::remove_dir_all(root);
 }
+
+#[test]
+fn npu_history_reaches_the_merged_snapshot_and_invalidation_clears_it() {
+    let (root, paths) = test_paths("npu-history-commit");
+    fs::create_dir_all(&paths.state).expect("state root");
+    let cfg = Config::default();
+    let active = build_pages(&cfg.pages.order);
+    let mut state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
+    let source = SourceIdentity::Device(String::from("npu:0000:c4:00.1+0000:c3:00.0"));
+    let fast = JobId::with_source(OwnerId::AmdNpu, JobKind::AmdNpu, source.clone());
+    let history = JobId::with_source(OwnerId::AmdNpu, JobKind::AmdNpuHistory, source);
+    let generation = state.render_generation;
+    let completion = worker::JobCompletion {
+        ticket: JobTicket {
+            metrics: Default::default(),
+            run_id: RunId(1),
+            job: history.clone(),
+            config_generation: ConfigGeneration(1),
+            inventory_generation: InventoryGeneration(1),
+            history_deadline: None,
+        },
+        completion: CompletionKind::Captured,
+        readings: DisplaySnapshot {
+            npu_amd_usage: Some(94),
+            npu_amd_usage_history: vec![93, 94],
+            ..DisplaySnapshot::default()
+        },
+        notifications: DisplaySnapshot::default(),
+        notification_ready: false,
+        hw: HardwareInventory::default(),
+        resolved_mounts: Vec::new(),
+        command_cache: None,
+        rendered_page: None,
+        style_generation: 1,
+        render_generation: generation,
+        decoder_outcome: None,
+        gpu_history_point: None,
+        decision: None,
+    };
+    state.commit(&completion);
+    assert_eq!(state.readings.npu_amd_usage_history, [93, 94]);
+    assert_eq!(state.render_generation, generation + 1);
+
+    // A removed chart or a replaced source drops the history job from the plan, which invalidates it.
+    state.invalidate_job_readings(&history, None);
+    assert!(state.readings.npu_amd_usage_history.is_empty());
+    assert_eq!(state.readings.npu_amd_usage, Some(94));
+    assert_eq!(state.render_generation, generation + 2);
+    state.invalidate_job_readings(&fast, None);
+    assert_eq!(state.readings.npu_amd_usage, None);
+    assert_eq!(state.render_generation, generation + 3);
+    let _ = fs::remove_dir_all(root);
+}

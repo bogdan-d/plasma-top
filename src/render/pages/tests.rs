@@ -417,3 +417,45 @@ fn amd_graph_legend_uses_codec_label_and_its_own_threshold() {
     assert!(html.contains("Decoder:"));
     assert!(!html.contains("AMD codec activity"));
 }
+
+#[test]
+fn format_graphs_draws_npu_busy_history_only_for_a_detected_npu() {
+    let mut cfg = Config::default();
+    cfg.pages.graph_order = vec![String::from("gpu"), String::from("npu")];
+    cfg.pages.graph_history_length = 2;
+    cfg.pages.graph_width = 120;
+    let readings = DisplaySnapshot {
+        npu_amd_usage: Some(94),
+        npu_amd_usage_history: vec![0, 93, 94],
+        ..DisplaySnapshot::default()
+    };
+
+    let html = PageFormatter::new(&cfg, &hw()).format_graphs(&readings, "", "", None);
+    assert!(html.contains("No graphs selected or available"));
+
+    let hardware = HardwareInventory {
+        amd_npu: Some(crate::domain::readings::AmdNpuSource {
+            accel_pci: String::from("0000:c4:00.1"),
+            metrics_pci: String::from("0000:c3:00.0"),
+            metrics_path: "/sys/gpu_metrics".into(),
+        }),
+        ..hw()
+    };
+    let html = PageFormatter::new(&cfg, &hardware).format_graphs(&readings, "", "", None);
+    let expected = area_chart_png(
+        &[93.0, 94.0],
+        120,
+        GRAPH_HEIGHT,
+        AreaChartOptions {
+            left_pad: GRAPH_LEFT_PAD,
+            line: TEAL_LINE,
+            fill: TEAL_FILL,
+            ..AreaChartOptions::default()
+        },
+    );
+    assert!(html.contains(&png_img(&expected, 120)));
+    assert_eq!(
+        normalize_png_uris(html),
+        r#"<div class="tooltip"><div style="font-size:6px">&nbsp;</div><div><img src="<PNG>" width="120" height="84"></div><div class="page"><span style="color:rgb(26,188,156)">●</span>&nbsp;<span class="label">NPU usage:</span>&nbsp;<span class="val crit">94%</span></div></div>"#
+    );
+}

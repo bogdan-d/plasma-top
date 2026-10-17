@@ -22,7 +22,15 @@ fn edits_chart_order_and_history_without_losing_other_config() {
         serde_json::from_str(&show(&path).expect("show Graphs settings")).expect("decode snapshot");
     assert_eq!(
         snapshot.order,
-        ["cpu", "memory", "gpu", "network", "disk", "temperature"]
+        [
+            "cpu",
+            "memory",
+            "gpu",
+            "npu",
+            "network",
+            "disk",
+            "temperature"
+        ]
     );
     assert_eq!(snapshot.history_length, 60);
     assert_eq!(snapshot.available, GRAPH_CHARTS);

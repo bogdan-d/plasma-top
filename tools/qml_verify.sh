@@ -178,6 +178,7 @@ page = Path(sys.argv[3])
 body, close = page.read_text(encoding="utf-8").rsplit("}", 1)
 if sys.argv[5] == "true":
     edit = '''
+                root.moveChart(4, -1)
                 root.moveChart(3, -1)
                 root.moveChart(2, -1)
                 root.moveChart(1, -1)
@@ -339,7 +340,7 @@ import subprocess
 import sys
 
 settings = json.loads(subprocess.check_output([sys.argv[1], "config", "graphs", "show"], text=True))
-assert settings["order"] == ["network", "cpu", "gpu", "temperature"], settings
+assert settings["order"] == ["network", "cpu", "gpu", "npu", "disk", "temperature"], settings
 assert settings["history_length"] == 120, settings
 PY
     fi

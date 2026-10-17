@@ -162,6 +162,16 @@ impl Catalog<'_> {
                 self.cfg.display.history_interval.duration(),
             )));
         }
+        if npu_amd::graph_enabled(self.cfg)
+            && let Some(npu) = self.amd_npu_jobs().pop()
+        {
+            jobs.insert(npu.clone());
+            jobs.insert(self.insert(JobSpec::history(
+                JobId::with_source(OwnerId::AmdNpu, JobKind::AmdNpuHistory, npu.source.clone()),
+                npu,
+                self.cfg.display.history_interval.duration(),
+            )));
+        }
         let gpu_sources = if self.hw.has_nvidia {
             self.nvidia_jobs()
         } else if self.hw.amd_gpu.is_some() {

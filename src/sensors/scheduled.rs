@@ -547,6 +547,15 @@ pub(crate) fn execute_scheduled_job(
             &mut notifications,
         ),
         JobKind::AmdNpu => npu::execute(job, owners.amd_npu, hw, ctx, readings),
+        JobKind::AmdNpuHistory => npu::execute_history(
+            job,
+            owners.amd_npu,
+            hw,
+            cfg,
+            history_deadline,
+            ctx,
+            readings,
+        ),
         JobKind::NvidiaNvml
         | JobKind::NvidiaFallback
         | JobKind::IntelFrequency
@@ -670,6 +679,7 @@ pub(crate) fn reset_counter_baseline(job: &JobId, owners: OwnerRefs<'_>) {
         | JobKind::AmdFast
         | JobKind::AmdSlow
         | JobKind::AmdNpu
+        | JobKind::AmdNpuHistory
         | JobKind::NvidiaNvml
         | JobKind::NvidiaFallback
         | JobKind::IntelFrequency
@@ -708,7 +718,7 @@ fn reconcile(
         .nvidia
         .reconcile_source(caps.contains(&Capability::GpuNvidia) && hw.has_nvidia);
     gpu::reconcile_amd(owners.amd_gpu, hw, caps);
-    npu::reconcile(owners.amd_npu, hw, caps);
+    npu::reconcile(owners.amd_npu, hw, cfg, caps);
     owners.intel_gpu.reconcile_sources(
         hw.intel_gpu_pci.as_deref(),
         hw.intel_gpu_freq_path.as_ref(),

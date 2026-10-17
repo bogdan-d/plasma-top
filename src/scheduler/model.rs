@@ -192,6 +192,7 @@ pub(crate) enum JobKind {
     AmdFast,
     AmdSlow,
     AmdNpu,
+    AmdNpuHistory,
     IntelFrequency,
     IntelUsage,
     GpuHistory,

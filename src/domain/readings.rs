@@ -539,6 +539,8 @@ pub struct DisplaySnapshot {
     pub npu_amd_power_mw: Option<u16>,
     /// AMD NPU clock in MHz; zero once the suspended NPU's filtered clock decays.
     pub npu_amd_freq: Option<u16>,
+    /// AMD NPU busy history for the graphs page.
+    pub npu_amd_usage_history: Vec<i32>,
     /// Intel GPU active frequency in MHz.
     pub gpu_intel_freq: Option<i32>,
     /// Intel GPU render usage percentage.
