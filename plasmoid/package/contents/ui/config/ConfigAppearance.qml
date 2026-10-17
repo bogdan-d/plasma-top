@@ -31,8 +31,6 @@ LibConfig.FormKCM {
 	property bool cfg_desktopOutline
 	property string cfg_desktopOutlineColor
 	property string cfg_clickCommand
-	property string cfg_mousewheelUpCommand
-	property string cfg_mousewheelDownCommand
 	property bool cfg_useFixedWidth
 	property int cfg_fixedWidth
 	property bool cfg_useFixedHeight

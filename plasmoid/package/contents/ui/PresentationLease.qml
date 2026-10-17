@@ -1,104 +1,57 @@
 import QtQuick
 
-import org.kde.plasma.plasma5support as Plasma5Support
+import org.kde.plasma.workspace.dbus as DBus
 
+// This widget's presentation lease on the daemon. The daemon ties the lease to plasmashell's bus connection, so a crash releases it; a removed widget does not close that shared connection, so destruction still dismisses.
 Item {
 	id: root
 
 	required property bool presented
 	required property int instanceId
-	required property string backendCommand
+	// The daemon's service, path and interface, as `asyncCall` message fields.
+	required property var target
+	// Sends one call to the current daemon and reports success through `done(ok)`; replies from an earlier daemon never arrive.
+	required property var call
 	readonly property bool validInstanceId: instanceId > 0
-	property int execNonce: 0
-	property bool commandRunning: false
-	property bool commandTarget: false
-	property bool commandWasTarget: false
-	property string commandInFlight: ""
-	property bool leaseKnown: false
+	// One call in flight at a time, so the daemon always receives this widget's latest intent last.
+	property bool running: false
+	// Whether leaseActive is what the daemon holds; a failed call makes it unknown.
+	property bool leaseKnown: true
 	property bool leaseActive: false
-	property bool refreshPending: false
-	property int retriesRemaining: 1
 
-	function command(action) {
-		return backendCommand + " " + action + " " + instanceId
-	}
-
-	function sync(refresh) {
-		if (!validInstanceId) {
-			console.warn("[plasma-top] plasmoid id must be a positive integer:", instanceId)
-			return
-		}
-		if (commandTarget !== presented) {
-			commandTarget = presented
-			retriesRemaining = 1
-		}
-		if (refresh && presented) {
-			refreshPending = true
-			retriesRemaining = 1
-		}
+	// A newly registered daemon holds no lease for us: forget ours and present again if presented.
+	function restart() {
+		running = false
+		leaseKnown = true
+		leaseActive = false
 		drain()
 	}
 
 	function drain() {
-		if (commandRunning)
+		if (running)
 			return
-		var target = commandTarget
-		if (leaseKnown && leaseActive === target && !(target && refreshPending))
+		if (!validInstanceId) {
+			console.warn("[plasma-top] plasmoid id must be a positive integer:", instanceId)
 			return
-		commandInFlight = command(target ? "present" : "dismiss") + " # " + (++execNonce)
-		commandRunning = true
-		commandWasTarget = target
-		if (target)
-			refreshPending = false
-		executable.exec(commandInFlight)
-	}
-
-	Plasma5Support.DataSource {
-		id: executable
-		engine: "executable"
-		connectedSources: []
-		onNewData: (sourceName, data) => {
-			var exitCode = data["exit code"]
-			var stderr = data["stderr"]
-			disconnectSource(sourceName)
-			if (sourceName !== root.commandInFlight)
-				return
-			var actionPresented = root.commandWasTarget
-			root.commandRunning = false
-			root.commandInFlight = ""
-			root.leaseKnown = exitCode === 0
-			if (exitCode === 0) {
-				root.leaseActive = actionPresented
-				root.retriesRemaining = 1
-				if (actionPresented)
-					root.refreshPending = false
-			} else {
-				console.warn("[plasma-top] presentation command failed:", exitCode, stderr)
-			}
-			if (exitCode === 0 || root.commandTarget !== actionPresented) {
-				root.drain()
-			} else if (root.retriesRemaining > 0) {
-				root.retriesRemaining -= 1
-				root.drain()
-			}
 		}
-		function exec(command) {
-			if (command)
-				connectSource(command)
-		}
+		var intent = presented
+		if (leaseKnown && leaseActive === intent)
+			return
+		running = true
+		call(intent ? "Present" : "Dismiss", "(t)", [instanceId], ok => {
+			root.running = false
+			root.leaseKnown = ok
+			if (ok)
+				root.leaseActive = intent
+			// A failure waits for the next intent change or daemon registration instead of retrying in a loop.
+			if (ok || root.presented !== intent)
+				root.drain()
+		})
 	}
 
-	Timer {
-		interval: 30000
-		repeat: true
-		running: root.presented
-		onTriggered: root.sync(true)
-	}
-
-	onPresentedChanged: sync(false)
-	Component.onCompleted: sync(false)
+	onPresentedChanged: drain()
 	Component.onDestruction: {
 		if (validInstanceId)
-			executable.exec(command("dismiss") + " # " + (++execNonce))
+			DBus.SessionBus.asyncCall(Object.assign({ member: "Dismiss", signature: "(t)", arguments: [instanceId] }, target))
 	}
 }

@@ -17,7 +17,7 @@ System stats in your **KDE Plasma** panel, plus a rich, paginated tooltip — dr
   </tr>
 </table>
 
-PlasmaTop renders CPU, memory, drives, GPU, temperatures, batteries, network and load as HTML that a bundled Plasma applet displays. The daemon runs in memory and atomically writes the panel and tooltip under `$XDG_RUNTIME_DIR/plasma-top` (falling back to `/tmp/plasma-top-$UID` when unavailable), and the applet just cats them, so display refresh needs no browser, shell pipeline, or per-metric process. While no tooltip is presented, tooltip-only collection and rendering stop and the last `tooltip.html` remains available for immediate display on the next hover, pin, or desktop presentation. Optional command-backed sensors and pages remain isolated behind timeout-bound adapters.
+PlasmaTop renders CPU, memory, drives, GPU, temperatures, batteries, network and load as HTML that a bundled Plasma applet displays. The daemon runs in memory and pushes the panel and tooltip to the applet over the user session bus, so display refresh needs no browser, shell pipeline, or per-metric process, and plasmashell starts no process to show or page it. While no tooltip is presented, tooltip-only collection and rendering stop and the applet keeps the last tooltip for immediate display on the next hover, pin, or desktop presentation. Optional command-backed sensors and pages remain isolated behind timeout-bound adapters.
 
 ## Features
 
@@ -31,7 +31,7 @@ PlasmaTop renders CPU, memory, drives, GPU, temperatures, batteries, network and
 
 ## Requirements
 
-- **KDE Plasma 6**
+- **KDE Plasma 6.8 or newer**
 - **Rust 1.98.1 and Cargo** to build from source; neither is needed after install.
 - A **Nerd Font** for the glyphs (the applet defaults to *NotoSansM Nerd Font Mono*). Pick it in the widget's *Appearance* page.
 - **Optional feature dependencies**
@@ -81,7 +81,7 @@ The widget's **Daemon** page edits refresh and history intervals, enabled deep-d
 - **Machines** — got more than one PC? The shipped machines.toml is just a how-to; list your machines in ~/.config/plasma-top/machines.toml, each with a detection rule and its tweaks. The one matching the current host is merged on top of the config — one synced config works everywhere.
 - **Style** — the shipped style/style-dark.css and style-light.css hold colors and spacing; drop a same-named file in ~/.config/plasma-top/style/ to override it. config.toml never carries colors. Glyphs live in style/icons.toml, labels in lang/en.toml.
 
-Everything hot-reloads without a restart: inotify notices TOML/CSS creation or edits, Global Theme changes, and panel geometry changes, then the daemon coalesces each source for 50 ms before applying it. Page and presentation controls target updated tooltip HTML in under 100 ms.
+Everything hot-reloads without a restart: inotify notices TOML/CSS creation or edits and Global Theme changes, then the daemon coalesces each source for 50 ms before applying it; panel geometry changes apply as soon as the applet reports them. Page and presentation changes target updated tooltip HTML in under 100 ms.
 
 ## CLI
 
@@ -99,7 +99,7 @@ systemctl --user status plasma-top   # the live daemon
 
 ## How it works
 
-The daemon's pipeline (in `src/`: sensors, formatter, render model, mono renderer) renders stats as monospace-aligned HTML; the applet in `plasmoid/` displays it and publishes live panel geometry back to the daemon, which auto-fits bars and sparks to it. See [docs/](docs/) for the design (DESIGN.md), metric acquisition inventory (METRICS_INVENTORY.md), layout (LAYOUT.md), item catalogue (ITEMS.md) and performance (PERFORMANCE.md) notes.
+The daemon's pipeline (in `src/`: sensors, formatter, render model, mono renderer) renders stats as monospace-aligned HTML; the applet in `plasmoid/` displays what the daemon pushes over D-Bus and reports live panel geometry back to it, which auto-fits bars and sparks to it. See [docs/](docs/) for the design (DESIGN.md), metric acquisition inventory (METRICS_INVENTORY.md), layout (LAYOUT.md), item catalogue (ITEMS.md) and performance (PERFORMANCE.md) notes.
 
 ## License & credits
 

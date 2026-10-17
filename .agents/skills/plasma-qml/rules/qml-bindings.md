@@ -9,4 +9,4 @@
 - Preserve existing equality semantics unless the change specifically requires coercion behavior to change; broad style rewrites hide functional changes.
 - Use typed properties and signal parameters where practical. Keep dynamic `var` only for genuinely heterogeneous QML/JavaScript values.
 
-For this applet, `plasmoid`, `Plasmoid`, `StandardPaths`, and Plasma data-engine objects are runtime-provided context/API surfaces. Do not rewrite them into a standalone-application architecture to satisfy generic static analysis.
+For this applet, `plasmoid`, `Plasmoid`, the `org.kde.plasma.workspace.dbus` types, and Plasma data-engine objects are runtime-provided context/API surfaces. Do not rewrite them into a standalone-application architecture to satisfy generic static analysis.

@@ -9,7 +9,7 @@ pkgdesc="System stats in the KDE Plasma panel and a paginated tooltip"
 arch=('x86_64')
 url="https://github.com/bogdan-d/plasma-top"
 license=('GPL-2.0-or-later')
-depends=('plasma-workspace')
+depends=('plasma-workspace>=6.8')
 optdepends=('nvidia-utils: NVIDIA GPU metrics through NVML or nvidia-smi'
 	'iproute2: network identity and the connections tooltip page'
 	'iw: Wi-Fi SSID and signal'

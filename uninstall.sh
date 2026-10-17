@@ -62,6 +62,7 @@ fi
 
 APPLET_ID="com.github.bogdan-d.plasma-top"
 
+# The runtime directory is only left by versions before the D-Bus applet protocol; uninstall still removes it.
 prepare_runtime_cache() {
     local runtime_base runtime_dir cache_base cache_dir
     if [[ -n "${XDG_RUNTIME_DIR:-}" ]]; then

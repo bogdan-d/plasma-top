@@ -110,6 +110,8 @@ struct StimulusStats {
     planned: usize,
     records: BTreeMap<StimulusId, StimulusRecord>,
     publications: BTreeMap<PublicationId, StimulusId>,
+    // An observed stimulus whose transition deferred publication until pending work completes or the activation timeout fires. The next tooltip publication completes it, whatever its reason, because a deferred refresh may merge into a coincident display-deadline publication.
+    awaiting_publication: Option<StimulusId>,
     skipped: usize,
     requested_state: Option<ProfileStimulusState>,
     observed_state: Option<ProfileStimulusState>,
@@ -455,6 +457,8 @@ impl ProfileSession {
             if let Some(publication) = publication {
                 record.publication = Some(publication);
                 stimuli.publications.insert(publication, id);
+            } else {
+                stimuli.awaiting_publication = Some(id);
             }
         } else {
             record.completed = true;
@@ -568,7 +572,11 @@ impl ProfileSession {
             .stimuli
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let Some(id) = stimuli.publications.remove(&publication) else {
+        let Some(id) = stimuli
+            .publications
+            .remove(&publication)
+            .or_else(|| stimuli.awaiting_publication.take())
+        else {
             return;
         };
         let Some(record) = stimuli.records.get_mut(&id) else {
@@ -741,7 +749,7 @@ impl ProfileSession {
         }
         let _ = writeln!(
             output,
-            "  write_time: not_applicable (HTML runtime writes disabled)"
+            "  write_time: not_applicable (publication goes to a discarding sink)"
         );
         drop(publications);
         if stimuli_enabled {

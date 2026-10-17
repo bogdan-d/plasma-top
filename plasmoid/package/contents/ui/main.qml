@@ -1,13 +1,12 @@
 import QtQuick
 import QtQuick.Layouts
-import QtCore
-import Qt.labs.folderlistmodel
 
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.plasmoid
 import org.kde.plasma.core as PlasmaCore
 import org.kde.plasma.components as PlasmaComponent
 import org.kde.plasma.plasma5support as Plasma5Support
+import org.kde.plasma.workspace.dbus as DBus
 
 PlasmoidItem {
 	id: widget
@@ -17,37 +16,20 @@ PlasmoidItem {
 	// https://github.com/KDE/plasma-framework/blob/master/src/declarativeimports/core/datasource.h
 	// https://github.com/KDE/plasma-framework/blob/master/src/declarativeimports/core/datasource.cpp
 	// https://github.com/KDE/plasma-framework/blob/master/src/plasma/scripting/dataenginescript.cpp
+	// Runs the configured middle-click command; the daemon itself is reached over D-Bus.
 	Plasma5Support.DataSource {
 		id: executable
 		engine: "executable"
 		connectedSources: []
-		onNewData: (sourceName, data) => {
-			var exitCode = data["exit code"]
-			var exitStatus = data["exit status"]
-			var stdout = data["stdout"]
-			var stderr = data["stderr"]
-			exited(sourceName, exitCode, exitStatus, stdout, stderr)
-			disconnectSource(sourceName) // cmd finished
-		}
+		onNewData: (sourceName, data) => disconnectSource(sourceName)
 		function exec(cmd) {
 			if (cmd) {
 				connectSource(cmd)
 			}
 		}
-		signal exited(string cmd, int exitCode, int exitStatus, string stdout, string stderr)
 	}
 
-	// Force a unique source per invocation. The executable DataSource keys its
-	// sources by the command string and silently drops connectSource() for a
-	// string that is still connected; with a no-output command like
-	// `plasma-top page next` the engine can also suppress the (identical, empty)
-	// data update, so the source never delivers newData, is never disconnected,
-	// and every later same-direction scroll is a no-op — the "wheel goes dead
-	// after a quick reverse" bug. A trailing shell comment (# n) makes each call
-	// a distinct source that runs and disconnects cleanly. Safe: the engine runs
-	// the command through a shell. Only fire-and-forget actions (click, paging)
-	// use this; the panel/tooltip cat commands must keep their stable source
-	// names, which onExited matches on.
+	// The executable DataSource keys sources by command string and drops connectSource() for one still connected, so a trailing shell comment (# n) makes each click a distinct source.
 	property int execNonce: 0
 	function execOnce(cmd) {
 		if (cmd)
@@ -56,14 +38,6 @@ PlasmoidItem {
 
 	function performClick() {
 		execOnce(plasmoid.configuration.clickCommand)
-	}
-
-	function performMouseWheelUp() {
-		execOnce(plasmoid.configuration.mousewheelUpCommand)
-	}
-
-	function performMouseWheelDown() {
-		execOnce(plasmoid.configuration.mousewheelDownCommand)
 	}
 
 	// One wheel gesture, one page. A movement of the wheel emits a burst of events
@@ -83,12 +57,8 @@ PlasmoidItem {
 			return
 		if (!wheelInGesture) {
 			wheelInGesture = true
-			if (delta > 0)
-				performMouseWheelUp()
-			else
-				performMouseWheelDown()
-			// No catch-up needed: the notch bumps the daemon's page counter, the daemon
-			// rewrites the tooltip, and the watcher brings it in on its own.
+			// Wheel up turns back a page. The daemon publishes the new page's tooltip on its own.
+			callDaemon("StepPage", "(i)", [delta > 0 ? -1 : 1], null)
 		}
 		wheelGestureEnd.restart()   // any event extends the current gesture
 	}
@@ -102,29 +72,79 @@ PlasmoidItem {
 
 	Item {
 		id: config
-		// The daemon publishes into a per-user runtime directory, and we resolve the
-		// very same one it does: QStandardPaths' RuntimeLocation IS $XDG_RUNTIME_DIR
-		// on Linux, which is what the daemon reads (see src/runtime/mod.rs). So the path
-		// is written down in neither the kcfg nor the daemon's config — the two sides
-		// derive it and cannot drift apart. It also can't be a kcfg default: /run/user/
-		// <uid> isn't knowable when the package is built and installed system-wide.
-		// writableLocation returns a url ("file:///run/user/1000"); the cats need a
-		// plain path, the watcher needs the url.
-		readonly property string runtimeDir:
-			StandardPaths.writableLocation(StandardPaths.RuntimeLocation)
-				.toString().replace(/^file:\/\//, "") + "/plasma-top"
-		readonly property url runtimeUrl: "file://" + runtimeDir
-		// Not knobs: these two cats and the geometry write below are the whole
-		// contract with the daemon, not commands anyone is meant to swap out.
-		readonly property string command: "cat " + runtimeDir + "/panel.html"
-		readonly property string tooltipCommand: "cat " + runtimeDir + "/tooltip.html"
-		readonly property string geomFile: runtimeDir + "/state/geom"
 		readonly property bool clickEnabled: !!plasmoid.configuration.clickCommand
-		readonly property bool mousewheelEnabled: (plasmoid.configuration.mousewheelUpCommand || plasmoid.configuration.mousewheelDownCommand)
 		readonly property color textColor: plasmoid.configuration.textColor || Kirigami.Theme.textColor
 		readonly property color outlineColor: plasmoid.configuration.outlineColor || Kirigami.Theme.backgroundColor
 		readonly property bool showOutline: plasmoid.configuration.showOutline
+	}
 
+	// The daemon's versioned applet interface (see docs/adr/0003-applet-protocol-over-session-dbus.md).
+	readonly property var daemonTarget: ({
+		service: "com.github.bogdan_d.PlasmaTop",
+		path: "/com/github/bogdan_d/PlasmaTop",
+		iface: "com.github.bogdan_d.PlasmaTop1",
+	})
+	// Bumped on every daemon registration; a reply from an earlier daemon is ignored.
+	property int serviceLifetime: 0
+	property bool ready: false
+
+	// Calls the daemon asynchronously with an explicit signature, so the module never introspects first. `done(ok)` runs only for replies from the current daemon.
+	function callDaemon(member, signature, args, done) {
+		if (!daemonWatcher.registered) {
+			if (done)
+				done(false)
+			return
+		}
+		var lifetime = serviceLifetime
+		var settle = ok => reply => {
+			if (lifetime !== widget.serviceLifetime)
+				return
+			if (!ok)
+				console.warn("[plasma-top]", member, "failed:", reply.error.name, reply.error.message)
+			if (done)
+				done(ok)
+		}
+		DBus.SessionBus.asyncCall(Object.assign({ member: member, signature: signature, arguments: args }, daemonTarget), settle(true), settle(false))
+	}
+
+	// A daemon that (re)registers starts empty: fetch its state, resend geometry, and present again if presented. Registration stays observable because the daemon never lets another process replace its name.
+	function daemonRegistered() {
+		serviceLifetime += 1
+		daemon.updateAll()
+		sendGeometry()
+		lease.restart()
+	}
+
+	DBus.DBusServiceWatcher {
+		id: daemonWatcher
+		busType: DBus.BusType.Session
+		watchedService: widget.daemonTarget.service
+		onRegisteredChanged: {
+			if (registered && widget.ready)
+				widget.daemonRegistered()
+		}
+	}
+
+	// Received values live here; displayed text is separate, so empty values and daemon absence never blank the widget.
+	DBus.Properties {
+		id: daemon
+		busType: DBus.BusType.Session
+		service: widget.daemonTarget.service
+		path: widget.daemonTarget.path
+		iface: widget.daemonTarget.iface
+		onPropertiesChanged: (interfaceName, changed, invalidated) => {
+			if ("PanelHtml" in changed)
+				widget.showPanel(daemon.properties.PanelHtml)
+			if ("TooltipHtml" in changed && widget.presented)
+				widget.showTooltip(daemon.properties.TooltipHtml)
+		}
+	}
+
+	// Last measured panel geometry as SetGeometry arguments; null until every measurement is positive.
+	property var geometry: null
+	function sendGeometry() {
+		if (geometry)
+			callDaemon("SetGeometry", "(ddbd)", geometry, null)
 	}
 
 	// https://stackoverflow.com/questions/4842424/list-of-ansi-color-escape-sequences
@@ -241,18 +261,17 @@ PlasmoidItem {
 
 	property string outputText: ''
 	property string tooltipText: ''
-	// Whether the panel widget is currently hovered (the hover tooltip is shown).
-	// Set from the compact representation's HoverHandler (panelHover), which fires
-	// reliably on the first hover. readOutputs reads it (with `expanded`) as the gate
-	// on the tooltip's share of each watcher notification.
+	// Whether the panel widget is hovered (the hover tooltip is shown), set from the compact representation's HoverHandler, which fires reliably on the first hover.
 	property bool tooltipHovered: false
 	readonly property bool planar: plasmoid.formFactor === PlasmaCore.Types.Planar
 	readonly property bool presented: tooltipHovered || expanded || planar
 
 	PresentationLease {
+		id: lease
 		presented: widget.presented
 		instanceId: Number(plasmoid.id)
-		backendCommand: plasmoid.configuration.backendCommand
+		target: widget.daemonTarget
+		call: widget.callDaemon
 	}
 
 	// Desktop "no background" look: with the widget transparent on the wallpaper,
@@ -322,94 +341,28 @@ PlasmoidItem {
 		return formattedText
 	}
 
-	Connections {
-		target: executable
-		function onExited(cmd, exitCode, exitStatus, stdout, stderr) {
-			// Match by prefix: the tooltip/paging commands carry a " # <nonce>"
-			// suffix (see execOnce) to dodge the DataSource's duplicate-source
-			// dropping. The two base commands cat different files, so neither is a
-			// prefix of the other.
-			var isPanel = config.command !== "" && cmd.indexOf(config.command) === 0
-			var isTooltip = config.tooltipCommand !== "" && cmd.indexOf(config.tooltipCommand) === 0
-			if (isPanel || isTooltip) {
-				var formattedText = formatOutputText(stdout)
-
-				// console.log('[plasma-top]', 'stdout', JSON.stringify(stdout))
-				// console.log('[plasma-top]', 'format', JSON.stringify(formattedText))
-
-				if (isPanel) {
-					widget.outputText = formattedText
-				} else if (isTooltip) {
-					widget.tooltipText = formattedText
-				}
-			}
-		}
+	function showPanel(html) {
+		if (html)
+			widget.outputText = formatOutputText(String(html))
 	}
 
-	function runCommand() {
-		// console.log('[plasma-top]', Date.now(), 'runCommand', config.command)
-		executable.exec(config.command)
+	// Only a presented widget re-lays out tooltip RichText; a hidden one catches up when it is presented.
+	function showTooltip(html) {
+		if (html)
+			widget.tooltipText = formatOutputText(String(html))
 	}
 
-	function runTooltipCommand() {
-		// Nonce it (execOnce) so a rapid re-cat is never dropped as a duplicate
-		// source: catching up after a page change fires several cats within a few
-		// hundred ms, and an identical-output cat could otherwise leave the source
-		// connected and swallow the next one. onExited matches by prefix.
-		execOnce(config.tooltipCommand)
-	}
-
-	// Watch the directory because atomic publication replaces file inodes; applet reads on watcher notifications instead of owning a display clock.
-	FolderListModel {
-		id: outputWatcher
-		folder: config.runtimeUrl
-		nameFilters: ["*.html"]
-		showDirs: false
-		// nameFilters filters rows, not notifications; debounce coalesces atomic publication bursts into one read.
-		onDataChanged: readDebounce.restart()
-		onRowsInserted: readDebounce.restart()
-	}
-
-	// This timer only coalesces watcher notifications after the runtime directory stays quiet for 50ms.
-	Timer {
-		id: readDebounce
-		interval: 50
-		onTriggered: widget.readOutputs()
-	}
-
-	// Reattach when the daemon starts after the applet or the runtime directory is recreated while Plasma stays running.
-	// FolderListModel cannot discover a recreated directory without resetting its folder.
-	// A healthy runtime has HTML entries, which stops this retry timer after the watcher and panel output recover.
-	Timer {
-		id: bootstrap
-		interval: 1000
-		repeat: true
-		running: widget.outputText === "" || outputWatcher.count === 0
-		onTriggered: {
-			outputWatcher.folder = ""
-			outputWatcher.folder = config.runtimeUrl
-			widget.runCommand()
-		}
-	}
-
-	function readOutputs() {
-		widget.runCommand()
-		// The tooltip read stays lazy — the panel's is not. Qt reparses and relays out the tooltip's RichText on every text change, so re-reading it while nobody is looking is work for no one.
-		// Presentation reads the retained frame immediately; watcher notifications then deliver activation and scheduled refreshes.
+	onPresentedChanged: {
 		if (widget.presented)
-			widget.runTooltipCommand()
-	}
-
-	Component.onCompleted: {
-		// The watcher only speaks when the directory changes, so read once at load instead of waiting for the daemon's next publication.
-		widget.runCommand()
+			widget.showTooltip(daemon.properties.TooltipHtml)
 	}
 
 	Plasmoid.onActivated: widget.expanded = !widget.expanded
 
-	onPresentedChanged: {
-		if (widget.presented)
-			widget.runTooltipCommand()
+	Component.onCompleted: {
+		widget.ready = true
+		if (daemonWatcher.registered)
+			widget.daemonRegistered()
 	}
 
 	// The hover tooltip: our HTML content fed to the shell's own tooltip area
@@ -495,10 +448,7 @@ PlasmoidItem {
 		readonly property bool isInPanel: isHorizontal || isVertical
 		readonly property bool isOnDesktop: !isInPanel
 
-		// plasma-top: republish the geometry when the panel orientation changes.
-		// output.width can change (and trigger publishGeometry) BEFORE isVertical
-		// updates, leaving a stale orientation flag in the file; this guarantees a
-		// republish with the correct value once the orientation settles.
+		// output.width can change before isVertical settles, so the orientation change publishes again with the settled flag.
 		onIsVerticalChanged: output.publishGeometry()
 
 		readonly property int itemWidth: {
@@ -539,14 +489,10 @@ PlasmoidItem {
 		// Relying on toolTipItem.onVisibleChanged alone missed that first show
 		// (the item is created visible=true, so the dialog displaying it produced
 		// no visible-change edge) — the tooltip stayed frozen on the first hover
-		// until you left and re-entered. See readOutputs for the why of lazy.
+		// until you left and re-entered.
 		HoverHandler {
 			id: panelHover
-			onHoveredChanged: {
-				// tooltipHovered IS the gate readOutputs consults; setting it is what
-				// opens and closes the tooltip's share of the watcher.
-				widget.tooltipHovered = hovered
-			}
+			onHoveredChanged: widget.tooltipHovered = hovered
 		}
 
 		// Note MouseArea is below the Text so
@@ -582,13 +528,7 @@ PlasmoidItem {
 			text: widget.outputText
 			textFormat: Text.RichText
 
-			// plasma-top: publish the panel's real geometry (the Text's usable width
-			// in px, the real advance of one mono glyph in px, orientation) to a
-			// file the daemon reads to auto-fit the bar and width, without guessing
-			// DPI or margins. advanceWidth via TextMetrics because with font.pointSize
-			// the resolved pixelSize isn't readable. Reuses the widget's DataSource
-			// for the shell-out; updates on a width change (panel resize) or font
-			// change (glyph advance change).
+			// The panel's real geometry (the Text's usable width, one mono glyph's advance, orientation) lets the daemon auto-fit bars and width without guessing DPI or margins. TextMetrics measures the advance because the pixelSize resolved from font.pointSize isn't readable.
 			TextMetrics {
 				id: glyphMetrics
 				font: output.font
@@ -606,19 +546,9 @@ PlasmoidItem {
 				onAdvanceWidthChanged: output.publishGeometry()
 			}
 			function publishGeometry() {
-				if (output.width > 0 && glyphMetrics.advanceWidth > 0) {
-					// mkdir -p: we can publish before the daemon has ever run, and the
-					// geometry lives in the runtime tree's state/ subdirectory — out of
-					// the watched directory, since it churns on every panel resize and
-					// has nothing to show. Already a shell (the redirect), so the mkdir
-					// costs no extra process.
-					executable.exec(
-						"sh -c 'mkdir -p " + config.runtimeDir + "/state && "
-						+ "printf \"%s %s %s %s\\n\" " + output.width + " "
-						+ (glyphMetrics.advanceWidth / 10) + " "
-						+ (panelItem.isVertical ? 1 : 0) + " "
-						+ (tooltipGlyphMetrics.advanceWidth / 10)
-						+ " > " + config.geomFile + "'")
+				if (output.width > 0 && glyphMetrics.advanceWidth > 0 && tooltipGlyphMetrics.advanceWidth > 0) {
+					widget.geometry = [output.width, glyphMetrics.advanceWidth / 10, panelItem.isVertical, tooltipGlyphMetrics.advanceWidth / 10]
+					widget.sendGeometry()
 				}
 			}
 			onWidthChanged: publishGeometry()

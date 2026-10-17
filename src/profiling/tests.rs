@@ -295,6 +295,48 @@ fn stimulus_latency_requires_the_correlated_in_memory_html_publication() {
 }
 
 #[test]
+fn deferred_stimulus_completes_on_a_refresh_merged_into_a_display_deadline() {
+    let session = ProfileSession::default();
+    session.enable_stimuli(1);
+    session.record_stimulus_started(
+        StimulusId(1),
+        ProfileEventKind::Control,
+        StimulusExpectation::Presentation {
+            presented: true,
+            html_publication: true,
+        },
+        Duration::from_millis(5),
+    );
+    // The presentation waited for pending work, so its transition published nothing.
+    session.observe_presentation(
+        true,
+        &Transition {
+            disposition: crate::scheduler::EventDisposition::Accepted,
+            actions: Vec::new(),
+        },
+    );
+    assert!(!session.stimulus_completed(StimulusId(1)));
+
+    session.record_publication(
+        PublicationId(9),
+        PublishReason::DisplayDeadline,
+        true,
+        Duration::ZERO,
+        Duration::from_millis(105),
+        Duration::ZERO,
+        None,
+        0,
+    );
+
+    assert!(session.stimulus_completed(StimulusId(1)));
+    assert!(
+        session
+            .report(Duration::from_secs(1), "main")
+            .contains("event_control_latency: p50=100.000ms")
+    );
+}
+
+#[test]
 fn stimuli_wait_for_slow_publication_then_schedule_relative_to_completion() {
     let root = std::env::temp_dir().join(format!(
         "plasma-top-profile-stimulus-test-{}",

@@ -5,6 +5,6 @@
 - Stop timers, watchers, animations, and polling when their work is inactive. Visibility alone does not guarantee that ticking stops.
 - Keep applet-wide interaction state on the root when compact, full, and pinned surfaces must share it. Keep representation-only state inside its component.
 - Guard asynchronous or externally delivered callbacks against object teardown and stale state. A callback can arrive after visibility or expansion changes.
-- Prefer signal handlers over polling when Plasma or the file watcher already publishes the event.
+- Prefer signal handlers over polling when Plasma or the daemon's property signals already publish the event.
 
-PlasmaTop-specific lifecycle: tooltip reads happen only while hovered, expanded, or pinned; tooltip page generation remains daemon-side only while active. Wheel and click commands remain QML-owned and event-driven.
+PlasmaTop-specific lifecycle: tooltip text is laid out only while hovered, expanded, pinned, or planar; tooltip page generation remains daemon-side only while active. Wheel gestures and clicks remain QML-owned and event-driven.

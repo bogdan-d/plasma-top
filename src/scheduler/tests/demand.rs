@@ -107,18 +107,17 @@ fn presented_main_and_selected_page_add_only_their_jobs() {
 }
 
 #[test]
-fn tooltip_activation_publishes_retained_frame_then_one_refresh() {
+fn tooltip_activation_with_pending_work_publishes_once_when_it_completes() {
     let mut fixture = demand_fixture();
     let activation = fixture.scheduler.handle(SchedulerEvent::TooltipPresented {
         at: at_millis(1),
         presented: true,
     });
+    // The applet keeps showing its last tooltip, so no partial frame is published while work is pending.
     assert!(
         publications(&activation)
             .iter()
-            .any(|(_, reason, panel, tooltip)| {
-                *reason == PublishReason::TooltipActivated && !panel && *tooltip
-            })
+            .all(|(_, _, _, tooltip)| !tooltip)
     );
     let main_ticket = starts(&activation)
         .into_iter()
@@ -287,12 +286,20 @@ fn hidden_grace_keeps_demand_but_never_publishes_tooltip() {
 }
 
 #[test]
-fn representation_within_grace_immediately_republishes_retained_tooltip() {
+fn representation_within_grace_with_nothing_pending_republishes_immediately() {
     let mut fixture = demand_fixture();
-    let _ = fixture.scheduler.handle(SchedulerEvent::TooltipPresented {
+    let activation = fixture.scheduler.handle(SchedulerEvent::TooltipPresented {
         at: SchedulerTime::ZERO,
         presented: true,
     });
+    for ticket in starts(&activation) {
+        let _ = finish(
+            &mut fixture.scheduler,
+            SchedulerTime::ZERO,
+            ticket,
+            CompletionKind::Captured,
+        );
+    }
     let _ = fixture.scheduler.handle(SchedulerEvent::TooltipPresented {
         at: at_millis(1),
         presented: false,
@@ -559,8 +566,24 @@ fn same_time_completion_config_and_page_events_each_publish_tooltip_updates() {
     assert!(
         publications(&paged)
             .iter()
+            .all(|(_, _, _, tooltip)| !tooltip),
+        "the new page's body is still pending"
+    );
+    let page_ticket = starts(&paged)
+        .into_iter()
+        .find(|ticket| ticket.job.kind == JobKind::CpuCores)
+        .expect("page job start");
+    let built = finish(
+        &mut scheduler,
+        at_millis(2),
+        page_ticket,
+        CompletionKind::Captured,
+    );
+    assert!(
+        publications(&built)
+            .iter()
             .any(
-                |(_, reason, panel, tooltip)| *reason == PublishReason::PageChanged
+                |(_, reason, panel, tooltip)| *reason == PublishReason::TooltipRefresh
                     && !panel
                     && *tooltip
             )

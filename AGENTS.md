@@ -10,15 +10,16 @@ Put throwaway work in the gitignored `.tmp/` at repository root, not `/tmp`: dow
 
 - Item identity is `metric[:form]`: domain rules live in `src/domain/{metric,form,item,registry}.rs`; render dispatch lives in `src/render/registry.rs`.
 - Pipeline: `src/sensors/` -> `DisplaySnapshot` -> `src/render/{formatter,model,mono}.rs` -> table-free HTML.
-- `src/daemon.rs` owns lifecycle, reload, collection, publication, page wake, and shutdown. Host process/D-Bus/notification boundaries live in `src/adapters.rs` and are injectable through `domain/boundary.rs`.
+- `src/daemon.rs` owns lifecycle, reload, collection, publication, applet requests, and shutdown. Host process/D-Bus/notification boundaries live in `src/adapters.rs` and are injectable through `domain/boundary.rs`.
 - Read `docs/LAYOUT.md` before changing `render/mono.rs`; real HTML tables are forbidden on render paths because Qt RichText layout is prohibitively costly.
 
 ## Load-bearing contracts
 
-- Runtime root is a watched protocol, not scratch space. Only `panel.html` and `tooltip.html` persist directly under `<runtime>/`; atomic-write temporaries are transient. Changing state belongs under `<runtime>/state/`. See `src/runtime/`.
+- The applet talks to the daemon through one versioned session-bus interface, `com.github.bogdan_d.PlasmaTop1` (see `src/adapters/applet.rs` and ADR 0003). Any incompatible change bumps the trailing version. Only the production daemon owns `com.github.bogdan_d.PlasmaTop`, without replacement or queueing; `render`, `probe`, and `profiling` never export it.
+- A presentation lease is keyed by the caller's unique bus name and applet instance and ends on `Dismiss`, client disconnect, or the daemon's own connection loss. Do not add heartbeats or expiry. Applet requests stay ordered and are never dropped or coalesced.
 - Keep config as data/behavior. Glyphs live in `style/icons.toml`, labels in `lang/*.toml`, colors in CSS. Mirror every selector/layout change between `style-dark.css` and `style-light.css`.
 - Config merge order is defaults, detected machine, panel orientation, auto-fit. Preserve unknown/misplaced item warnings and last-good reload behavior.
-- Tooltip pages are built only while active. Wheel/click commands and pinning are QML contracts; do not move them into daemon polling.
+- Tooltip pages are built only while active. Wheel gestures, clicks, and pinning are QML contracts; do not move them into daemon polling. Every test that runs a real daemon or applet uses a private session bus.
 - Tooltip width is derived from maxed readings. Any new width-driving field must be bounded and covered by `canonical_width_covers_every_tooltip_item`.
 - Qt RichText supports less CSS than browsers. Validate visual changes with `tools/qt_shot.py` or `tools/qt_render_matrix.sh` before theorizing from browser CSS.
 - Keep all repository text English. Comments explain invariants, not mechanics.

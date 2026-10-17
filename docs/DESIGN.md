@@ -4,7 +4,7 @@
 
 PlasmaTop replaced a shell script that repeatedly started processes for every sensor and render. That design cost roughly 2 W on the original machine. The current system keeps hardware inventory, metric samples, histories, formatting, and owner state behind one current-thread Tokio daemon shell. Plasma receives ready-to-display HTML rather than owning sensor logic or another polling clock.
 
-Compatibility drives the shape: the Rust backend preserves the applet, config, runtime files, CLI, sensor formulas, rendering, and graceful absence behavior.
+Compatibility drives the shape: the Rust backend preserves the config, CLI, sensor formulas, rendering, and graceful absence behavior. The applet talks to the daemon over the session bus ([ADR 0003](adr/0003-applet-protocol-over-session-dbus.md)).
 
 ## Repository architecture
 
@@ -13,14 +13,14 @@ src/
   lib.rs, cli.rs             command parsing and dispatch
   daemon.rs                  lifecycle, reload, poll, publish, shutdown
   diagnostics.rs             render, probe, profiling, list-items
-  adapters.rs, adapters/     host clock and owned async I/O services
+  adapters.rs, adapters/     host clock, owned async I/O services, applet bus service
   domain/                    forms, metrics, tokens, readings, state, boundaries
   config/                    typed TOML, merges, assets, geometry
   sensors/                   discovery, one-attempt reads, and owner state
   render/                    cells, dispatch, formatter, mono layout, pages, chart
-  runtime/                   paths, atomic publication, locked page state
+  fs_atomic.rs               atomic file replacement
 
-plasmoid/                    unchanged Plasma display/interaction boundary
+plasmoid/                    Plasma display/interaction boundary
 config/, style/, lang/       shipped data and presentation assets
 service/, packaging/         native Rust runtime installation
 tests/                      integration tests, fixtures, and fixed snapshots
@@ -28,25 +28,23 @@ tests/                      integration tests, fixtures, and fixed snapshots
 
 `lib.rs` is the process composition root. `daemon.rs` owns the runtime loop; feature modules own their rules and state. Host effects cross explicit traits in `domain/boundary.rs`, with production implementations in `adapters.rs` and deterministic fakes under `test_support/`.
 
-## Runtime protocol
+## Applet protocol
 
-The daemon and applet independently derive `<runtime>` as `$XDG_RUNTIME_DIR/plasma-top`, falling back to `/tmp/plasma-top-$UID`.
+The production daemon owns `com.github.bogdan_d.PlasmaTop` on the session bus and serves `com.github.bogdan_d.PlasmaTop1` at `/com/github/bogdan_d/PlasmaTop`. The trailing `1` is the protocol version.
 
 ```text
-<runtime>/
-  panel.html                 watched panel output
-  tooltip.html               watched tooltip output
-  state/
-    geom                     usable_px glyph_advance vertical tooltip_advance
-    page                     current tooltip page counter
-    npages                   published page count
-    presented/
-      <instance-id>          numeric per-applet presentation lease
+properties  PanelHtml s, TooltipHtml s, Page u, PageCount u
+methods     StepPage(i delta)          +1 or -1, wraps; no-op with one page
+            Present(t instance)        lease (sender, instance)
+            Dismiss(t instance)        unknown lease is a no-op
+            SetGeometry(d usable_px, d glyph_advance, b vertical, d tooltip_advance)
 ```
 
-Only panel and tooltip HTML persist directly in the watched directory. Atomic publication creates a transient PID-qualified sibling, then renames it over the destination. Other churn belongs under `state/`; adding a persistent top-level file would trigger unnecessary applet refresh work. Readers see either complete old or complete new content. Page updates use `flock` to avoid lost mouse-wheel increments. The daemon watches stable parent directories with nonblocking inotify, debounces each logical source for 50 ms, and rescans and re-arms after overflow, ignored watches, or directory recreation; there is no periodic file polling fallback.
+HTML properties change only when published bytes change; `TooltipHtml` changes only while presented. `Page` and `PageCount` are announced together, independently of HTML, and `Page` is clamped below `PageCount`. Arguments out of range return `InvalidArgs` and change nothing. The adapter in `src/adapters/applet.rs` dispatches calls in receive order onto a bounded channel that the daemon loop selects on; a full channel holds calls back instead of dropping them. Client disconnects arrive as `ClientGone`; the daemon's own connection loss clears every lease, reconnects with backoff, and reacquires the name without replacement. A second daemon fails at startup, and diagnostics never export the interface.
 
-The applet watches this directory and uses `cat` only after a file change. It publishes geometry to `state/geom`, allowing the daemon to auto-fit bars, columns, sparks, and graph pixels. Each presented applet refreshes its numeric lease every 30 seconds; the daemon expires leases after 90 seconds. `display.poll_interval` remains the system's only display cadence.
+Page, leases, and geometry live in daemon memory. Accepted geometry is also written to `~/.cache/plasma-top/geom`, which cold start, `render`, and `probe` read so the first paint is width-fitted. The daemon watches config, style, theme, and Plasma config directories with nonblocking inotify, debounces each logical source for 50 ms, and rescans and re-arms after overflow, ignored watches, or directory recreation; there is no periodic file polling fallback.
+
+The applet's `Properties` binding receives pushed values in-process, and it calls methods with `SessionBus.asyncCall` and explicit signatures. It measures panel geometry and sends it only when every measurement is positive. `display.poll_interval` remains the system's only display cadence.
 
 ## Config and assets
 
@@ -61,7 +59,7 @@ Layers apply in this order:
 
 Surface sections support replacement plus `items_add`, `items_remove`, and `order_add`. Unknown item tokens and tokens placed on an unsupported surface are dropped with warnings. Colors stay in CSS, glyphs in `style/icons.toml`, labels in `lang/*.toml`; config contains behavior and data only.
 
-Styles and config hot-reload. Plasma theme and panel geometry changes also re-resolve output without restarting the daemon.
+Styles and config hot-reload. Plasma theme changes and new applet geometry also re-resolve output without restarting the daemon.
 
 ## Metric × form model
 
@@ -99,25 +97,25 @@ Graphs are raster PNGs built in `render/chart.rs` with a small pure-Rust pixel p
 
 Page zero is the full tooltip. Configured deep pages are `processes`, `cpu_cores`, `connections`, `fastfetch`, and `graphs`. Only the selected page body is built. Commands, process scans, and chart rasterization therefore cost nothing while another page is selected.
 
-Wheel and click actions run `plasma-top page next|prev` and `plasma-top click`. Hover, pinning, and planar/full representation run `plasma-top present <instance-id>` and `plasma-top dismiss <instance-id>`; any live per-applet lease means the tooltip is presented. The daemon watches page and lease state, changes demand, and republishes only the tooltip without running unrelated jobs. Presentation shows the retained `tooltip.html` immediately, then permits one bounded activation refresh. Dismissal stops tooltip builds and writes immediately while a one-second work-only grace avoids cancelling page jobs during brief hover gaps; after the grace, tooltip-only demand and disposable page work stop. Multiple instances aggregate safely because one remaining live lease keeps presentation active.
+A wheel gesture calls `StepPage`; middle-click runs `plasma-top click`. Hover, pinning, and planar/full representation call `Present` and `Dismiss` with the plasmoid id; any live lease means the tooltip is presented. Page steps and lease changes wake the daemon loop at once, change demand, and republish only the tooltip without running unrelated jobs. Presentation shows the applet's retained tooltip text immediately, then permits one bounded activation refresh. While that refresh, or a newly selected page's jobs, are pending, the daemon publishes no tooltip; the completion or the 100 ms timeout publishes it, so the applet never shows a page whose body is still being built. Presenting an existing lease again requests one more refresh without toggling presentation. Dismissal stops tooltip builds and writes immediately while a one-second work-only grace avoids cancelling page jobs during brief hover gaps; after the grace, tooltip-only demand and disposable page work stop. Multiple instances aggregate safely because one remaining live lease keeps presentation active.
 
-The daemon and loaded QML must come from the same package version because the lease protocol has no mixed-version readiness fallback. Upgrades leave the old daemon and old loaded QML running until logout; the next login activates both new versions together. Restarting only one side during this window is unsupported.
+The daemon and loaded QML must come from the same package version; a mismatched interface fails visibly in the plasmashell log. Upgrades leave the old daemon and old loaded QML running until logout; the next login activates both new versions together. Restarting only one side during this window is unsupported.
 
 ## Daemon lifecycle
 
-Startup resolves config/assets, creates runtime directories, publishes page metadata, synchronously seeds bounded local `/proc` and `/sys` inventory, initializes the scheduler from that real inventory, and immediately dispatches panel-demand jobs. Command and D-Bus inventory discovery proceeds progressively after first paint only for demanded hardware families. First panel publication occurs when required startup jobs finish or the scheduler's 200 ms deadline is observed; real panel blockers are never replaced by synthetic completions. The normal loop then:
+Startup resolves config/assets, acquires the bus name, announces the page selection, synchronously seeds bounded local `/proc` and `/sys` inventory, initializes the scheduler from that real inventory, and immediately dispatches panel-demand jobs. Command and D-Bus inventory discovery proceeds progressively after first paint only for demanded hardware families. First panel publication occurs when required startup jobs finish or the scheduler's 200 ms deadline is observed; real panel blockers are never replaced by synthetic completions. The normal loop then:
 
-1. converts config, inventory, file, page, time, and lifecycle changes into typed scheduler events;
+1. converts config, inventory, file, applet request, time, and lifecycle changes into typed scheduler events;
 2. executes emitted start actions one at a time and feeds typed capture, baseline, absence, or failure completions back;
 3. evaluates notifications only for accepted notification-eligible captures after first panel publication, independently of an aggregate counter's completion classification;
 4. assembles retained samples and renders only when the scheduler emits a publication action;
-5. atomically publishes changed panel and tooltip bytes independently;
-6. sleeps until the next scheduler deadline, inotify event, I/O completion, or lifecycle signal.
+5. publishes changed panel and tooltip bytes independently as bus properties;
+6. sleeps until the next scheduler deadline, applet request, inotify event, I/O completion, or lifecycle signal.
 
-SIGINT and SIGTERM are received by the Tokio shell. UPower changes coalesce into demanded battery and inventory refresh triggers. logind `PrepareForSleep(true)` sends scheduler `Suspend`; the matching false event sends `Resume`, which resets counter baselines and reconciles volatile inventory before dispatch resumes. Shutdown removes live panel and control files, retains the last-good tooltip for immediate activation after restart, and gives I/O services at most 500 ms to cancel commands, kill process groups, and reject pending work. It joins only a finished I/O shell; an over-budget shell is abandoned for process exit and reported as a critical shutdown timeout. The service remains a normal user unit with restart-on-failure.
+SIGINT and SIGTERM are received by the Tokio shell. UPower changes coalesce into demanded battery and inventory refresh triggers. logind `PrepareForSleep(true)` sends scheduler `Suspend`; the matching false event sends `Resume`, which resets counter baselines and reconciles volatile inventory before dispatch resumes. Shutdown releases the bus name and gives I/O services at most 500 ms to cancel commands, kill process groups, and reject pending work. It joins only a finished I/O shell; an over-budget shell is abandoned for process exit and reported as a critical shutdown timeout. The service remains a normal user unit with restart-on-failure.
 
 ## Dependencies and verification
 
 Production dependencies are reviewed in `DEPENDENCIES.md`. The crate denies unsafe production code, `unwrap`, `expect`, `todo`, and `unimplemented`. Optional NVML support is feature-gated and falls back non-fatally to `nvidia-smi`.
 
-Rust tests cover domain rules, config, rendering, sensors, adapter traces, runtime concurrency, daemon lifecycle, CLI processes, packaging, and applet integration. Fixed compatibility corpora live with those tests. Full commands live in [DEVELOPMENT.md](DEVELOPMENT.md). Deferred work lives in [`.scratch/`](../.scratch/).
+Rust tests cover domain rules, config, rendering, sensors, adapter traces, the applet bus service on a private bus, daemon lifecycle, CLI processes, packaging, and applet integration. Fixed compatibility corpora live with those tests. Full commands live in [DEVELOPMENT.md](DEVELOPMENT.md). Deferred work lives in [`.scratch/`](../.scratch/).

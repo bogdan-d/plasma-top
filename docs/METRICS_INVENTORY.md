@@ -127,7 +127,7 @@ The update and server-check producers are outside the daemon. Optimizing or chan
 
 ## Deep-dive page inventory
 
-Deep-dive page bodies are built only for the selected page while at least one presentation lease is live. Inotify-delivered page changes use a 50 ms logical-source debounce, update page demand, and target republished tooltip HTML in under 100 ms without running unrelated jobs. Hover, pinning, and planar/full representation create or refresh per-instance leases every 30 seconds; dismissal removes a lease, stale leases expire after 90 seconds, and any remaining live instance keeps tooltip demand active. When the last lease disappears, tooltip builds and writes stop immediately, the last file remains for immediate reactivation, and active tooltip-only work receives a one-second grace before cancellation.
+Deep-dive page bodies are built only for the selected page while at least one presentation lease is live. A `StepPage` call wakes the daemon at once, updates page demand, and targets republished tooltip HTML in under 100 ms without running unrelated jobs. Hover, pinning, and planar/full representation hold a lease per applet instance on the caller's bus connection; dismissal or the client's disconnect ends it, and any remaining live instance keeps tooltip demand active. When the last lease ends, tooltip builds and announcements stop immediately, the applet keeps its last tooltip for immediate reactivation, and active tooltip-only work receives a one-second grace before cancellation.
 
 | Page | Source | Blocking/retention behavior |
 | --- | --- | --- |
@@ -143,10 +143,10 @@ Deep-dive page bodies are built only for the selected page while at least one pr
 | Crate | Acquisition role |
 | --- | --- |
 | Rust standard library | `/proc` and `/sys` reads, directory walks, symlink inspection, direct file I/O, clocks, and synchronous owner control |
-| `nix` | Safe `statvfs`, Bolt HID `poll(2)`, and command process-group kill wrappers; also supports runtime locking/user boundaries |
+| `nix` | Safe `statvfs`, Bolt HID `poll(2)`, and command process-group kill wrappers; also supports config-edit locking and user boundaries |
 | `nvml-wrapper` | Optional safe, runtime-loaded NVML integration for NVIDIA metrics |
 | `tokio` | Current-thread command, timeout, pipe-drain, bounded-channel, timer, and Unix signal services |
-| `zbus` | Persistent typed UPower/UDisks/session-notification calls plus UPower/logind signal streams |
+| `zbus` | Persistent typed UPower/UDisks/session-notification calls plus UPower/logind signal streams; also serves the applet interface |
 
 `toml`, `serde`, and `miniz_oxide` are production dependencies but do not acquire metrics; they handle configuration and graph compression.
 

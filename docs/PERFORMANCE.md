@@ -4,13 +4,13 @@ Read this before changing daemon polling, metric-sample retention, freshness bud
 
 ## Measure current Rust behavior
 
-`plasma-top profiling` uses `std::time::Instant` around real config loading, hardware discovery, and cold/warm serial scheduler execution. It prints timings to stdout and never writes daemon runtime files:
+`plasma-top profiling` uses `std::time::Instant` around real config loading, hardware discovery, and cold/warm serial scheduler execution. It prints timings to stdout and never owns the daemon's bus name:
 
 ```bash
 ./plasma-top profiling --config config/config.toml
 ```
 
-Timed profiling runs the production scheduler-aware async owner loop and I/O services while suppressing panel and tooltip file publication. Its disposable root carries only isolated event-protocol state and config copies. `main` is the default timed scenario; `hidden` models panel/notification/history demand, and a configured page id models a presented tooltip with that page selected. Unknown or unconfigured page ids are rejected.
+Timed profiling runs the production scheduler-aware async owner loop and I/O services while panel and tooltip publications go to a discarding sink; it never exports the applet interface. Its disposable root carries only config copies. `main` is the default timed scenario; `hidden` models panel/notification/history demand, and a configured page id models a presented tooltip with that page selected. Unknown or unconfigured page ids are rejected.
 
 ```bash
 ./plasma-top profiling --config config/config.toml --duration 30
@@ -20,7 +20,7 @@ Timed profiling runs the production scheduler-aware async owner loop and I/O ser
 
 These ordinary timed commands hold the requested presentation and page state steady for the full measurement. They do not inject page, presentation, or config changes.
 
-The timed report includes per-job captured/baseline/absent/failed/rejected/cancelled/in-flight dispositions, process and D-Bus call counts, queue/run percentiles, maximum age from accepted retained source-capture timestamps, timer wake lateness, first-paint latency, render percentiles separated by publication reason, and scheduled-publication lateness measured after rendering against the scheduler's typed display deadline. Queue latency ends only when work actually begins, so blocking-lane and task-pool admission are included there rather than in run time. Deadline counts are limited to phase-locked display ticks actually skipped, first paints over 250 ms, and scheduled publications over 50 ms; nanosecond timer delay is reported only in wake-lateness percentiles. Runtime-file write timing is reported as not applicable because panel and tooltip writes are deliberately disabled. A duration must be finite and positive; `--scenario` is valid only with `--duration`.
+The timed report includes per-job captured/baseline/absent/failed/rejected/cancelled/in-flight dispositions, process and D-Bus call counts, queue/run percentiles, maximum age from accepted retained source-capture timestamps, timer wake lateness, first-paint latency, render percentiles separated by publication reason, and scheduled-publication lateness measured after rendering against the scheduler's typed display deadline. Queue latency ends only when work actually begins, so blocking-lane and task-pool admission are included there rather than in run time. Deadline counts are limited to phase-locked display ticks actually skipped, first paints over 250 ms, and scheduled publications over 50 ms; nanosecond timer delay is reported only in wake-lateness percentiles. Write timing is reported as not applicable because publications go to a discarding sink. A duration must be finite and positive; `--scenario` is valid only with `--duration`.
 
 Add `--stimuli` only when measuring page, presentation-control, and config event latency:
 
@@ -28,9 +28,9 @@ Add `--stimuli` only when measuring page, presentation-control, and config event
 ./plasma-top profiling --config config/config.toml --duration 5 --scenario main --stimuli
 ```
 
-This opt-in run executes one serial bounded sequence through the isolated page, presentation-lease, and copied-config files. Every action waits for the watcher to observe its exact expected page/presentation/config state and, when applicable, for the exact scheduler publication identity to finish tooltip HTML rendering in memory. Protocol-file writes update only requested stimulus state; acceptance, scheduler work, rendering, and stimulus completion use cached watcher/scheduler-observed state. The next action is scheduled relative to that completion, not scheduler boot. A short or slow run reports the pending stimulus identity, expected state, timeout, unstarted actions, and separate protocol-requested and watcher/scheduler-observed states instead of consuming restore actions, claiming an unobserved page, or implying restoration. The report labels aggregate job/call/render counts as covering both the scenario and stimulus work. The user's config and runtime remain untouched.
+This opt-in run executes one serial bounded sequence: page steps and presentation changes enter as typed applet requests through the same in-process seam the D-Bus adapter feeds, and config changes atomically rewrite a copied config file. Every action waits for the daemon to observe its exact expected page/presentation/config state and, when applicable, for the exact scheduler publication identity to finish tooltip HTML rendering in memory. The next action is scheduled relative to that completion, not scheduler boot. A short or slow run reports the pending stimulus identity, expected state, timeout, unstarted actions, and separate requested and observed states instead of consuming restore actions, claiming an unobserved page, or implying restoration. The report labels aggregate job/call/render counts as covering both the scenario and stimulus work. The user's config, the live daemon, and the live widget remain untouched; ordinary I/O such as enabled desktop notifications stays active.
 
-Page, control, and config latency starts immediately after the external-protocol atomic rename succeeds. It includes inotify observation and debounce, production event/reload and scheduler handling, and ends only at the correlated in-memory tooltip HTML publication. A publication caused by an external style/config source cannot satisfy a stimulus merely because it has the same broad publication reason. Publication bytes remain in memory instead of being written, so this boundary measures the daemon's complete publication work but not plasmashell parsing or QML layout. Each kind reports sample count, p50/p95/p99, and the number over 100 ms.
+Page and control latency starts when the request is injected; config latency starts immediately after the copied config's atomic rename succeeds and includes inotify observation and debounce. Each ends only at the correlated in-memory tooltip HTML publication, after production request/reload and scheduler handling. A publication caused by an external style/config source cannot satisfy a stimulus merely because it has the same broad publication reason. Publication bytes stay in a discarding sink, so this boundary measures the daemon's complete publication work but not bus marshalling, plasmashell parsing, or QML layout. Each kind reports sample count, p50/p95/p99, and the number over 100 ms.
 
 Shutdown timing starts when the profile deadline is observed, immediately before both the scheduler shutdown event and shell/service shutdown request. It ends only after daemon owner/notification orchestration has terminated, command and D-Bus services have completed their shutdown, and the owned runtime thread has joined or exhausted the same shared 500 ms budget. The report gives the isolated duration and count over 500 ms; total process wall time is not used.
 
@@ -55,7 +55,7 @@ Formatting is deterministic and allocation-heavy relative to arithmetic, but har
 
 ## Pay only for the selected page
 
-The scheduler models hidden, presented-main, and selected-page demand from the production presentation leases. Hidden demand contains panel metrics, enabled notifications, and configured graph histories; main-tooltip and selected-page jobs are added only while at least one tooltip lease is live. Dismissal stops tooltip builds and writes immediately, leaves the last `tooltip.html` intact, and gives active tooltip-only work a one-second grace before cancellation.
+The scheduler models hidden, presented-main, and selected-page demand from the production presentation leases. Hidden demand contains panel metrics, enabled notifications, and configured graph histories; main-tooltip and selected-page jobs are added only while at least one tooltip lease is live. Dismissal stops tooltip builds and announcements immediately, the applet keeps its last tooltip, and active tooltip-only work gets a one-second grace before cancellation.
 
 - `processes` uses a page-owned `/proc` diff sample while selected; panel process data has a separate 15-second freshness budget.
 - `cpu_cores` sampling and history run only while that page is selected and presented by scheduler input.
@@ -63,7 +63,7 @@ The scheduler models hidden, presented-main, and selected-page demand from the p
 - `fastfetch` runs only while selected and has a 30-second freshness budget.
 - `graphs` rasterizes PNGs only while selected; required histories are sampled while the page is configured.
 
-Selected-page state is watched through nonblocking inotify with a 50 ms logical-source debounce. A page change updates demand and targets republished tooltip HTML in under 100 ms without waiting for `display.poll_interval` or running unrelated work.
+A `StepPage` call wakes the daemon loop at once. A page change updates demand and targets republished tooltip HTML in under 100 ms without waiting for `display.poll_interval` or running unrelated work.
 
 ## Current sample and freshness policy
 
@@ -102,12 +102,12 @@ Canonical tooltip width is recomputed from a bounded, maxed display snapshot on 
 
 PlasmaTop minimizes subprocess work but is not fork-free.
 
-- Plasma uses `cat` after watched HTML changes.
+- Plasma receives HTML over the session bus and starts the CLI only on middle-click or from an open settings dialog.
 - `nvidia-smi` is the retained fallback sample source when NVML is unavailable.
 - `ip`, `iw`, `ss`, and `fastfetch` run only when included in the current demand set.
 - system-update and server checks read files initially and after inotify changes rather than starting package managers or network probes.
 
-All daemon and diagnostic subprocesses use one bounded Tokio command service with two child slots. Each child owns a process group, stdout and stderr drain concurrently, final output retains no more than 1 MiB with deterministic stdout-first allocation, and timeout or shutdown kills the group and explicitly reaps the direct child. UPower, UDisks, desktop notifications, and sleep signals use persistent zbus connections instead of helper processes. Each bus permits two in-flight calls; disconnection fails waiting calls promptly and one serialized exponential reconnect loop is capped at two seconds, avoiding request-driven reconnect storms.
+All daemon and diagnostic subprocesses use one bounded Tokio command service with two child slots. Each child owns a process group, stdout and stderr drain concurrently, final output retains no more than 1 MiB with deterministic stdout-first allocation, and timeout or shutdown kills the group and explicitly reaps the direct child. UPower, UDisks, desktop notifications, and sleep signals use persistent zbus connections instead of helper processes; the applet service has its own session connection. Each bus permits two in-flight calls; disconnection fails waiting calls promptly and one serialized exponential reconnect loop is capped at two seconds, avoiding request-driven reconnect storms.
 
 Hardware presence uses sysfs instead of tools such as `lspci`. Historical measurement found NVIDIA detection through `lspci` took roughly 2000 ms while the equivalent sysfs walk took roughly 2 ms. Keep detection in-process.
 
@@ -131,18 +131,18 @@ Do not reintroduce `<table>` on any render path. Keep the 8 px inset in the plas
 
 `pidstat -h` reports `%CPU` in field 8; `$(NF-1)` is the CPU/core id, not the percentage.
 
-## Watch-driven applet and presentation leases
+## Pushed applet updates and presentation leases
 
-`FolderListModel` watches the runtime directory and coalesces the panel/tooltip rename burst with a 50 ms debounce. The 30-second lease heartbeat while presented is the only steady-state recurring QML timer introduced by the presentation protocol, and it stops while hidden; existing one-shot/debounce, bootstrap-until-first-frame, and wheel-gesture timers retain their separate roles. One display rate, `display.poll_interval`, avoids timer aliasing and stale frames.
+The daemon pushes panel and tooltip HTML as session-bus properties ([ADR 0003](adr/0003-applet-protocol-over-session-dbus.md)), and the applet's `Properties` binding receives them in-process. In steady state plasmashell starts no processes for display, paging, or presentation, and the applet runs no recurring timer of its own; the wheel-gesture timer runs only while scrolling. Leases end with the caller's bus connection, so there is no heartbeat. One display rate, `display.poll_interval`, avoids timer aliasing and stale frames.
 
-Reading still starts `cat`; the watch aligns that work with actual publication rather than a free-running display timer. Tooltip rendering, writes, and reads are gated by hover, pin, or planar/full representation, while panel work is not. On activation QML reads the retained tooltip immediately; the daemon's bounded activation refresh then replaces it when fresh demanded work completes or reaches its 100 ms deadline. Historical table-free measurements were:
+Tooltip rendering and announcements are gated by hover, pin, or planar/full representation, while panel work is not. A hidden widget ignores pushed tooltip text, so only a presented widget pays RichText layout; on presentation it shows the latest received tooltip at once, and the daemon's bounded activation refresh then replaces it when fresh demanded work completes or reaches its 100 ms deadline. The daemon publishes nothing in between: with no watcher debounce left to absorb it, an intermediate frame such as a graphs page without its charts would visibly shrink the tooltip for a moment. Tooltip HTML with graph PNGs can reach hundreds of KiB per signal, which is why it is announced only when its bytes change and only while presented. Historical table-free measurements, from the earlier file-watching applet, were:
 
 | plasmashell state | CPU |
 |---|---:|
 | tooltip closed, panel updating | ~1.1% |
 | tooltip pinned, reparsed every poll | ~4.9% |
 
-The hover/pin gate saved roughly 3.8% of one core on that machine. These are historical applet measurements, not current Rust daemon benchmarks; the applet contract remains unchanged.
+The hover/pin gate saved roughly 3.8% of one core on that machine. These are historical applet measurements, not current Rust daemon benchmarks.
 
 ## Historical Python baseline
 

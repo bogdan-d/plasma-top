@@ -64,13 +64,12 @@ fn presented_page_reorder_reconciles_graph_demand_and_publication() {
     assert!(actions.iter().any(|action| {
         matches!(action, SchedulerAction::StartJob { ticket } if ticket.job.kind == JobKind::PageRender)
     }));
-    assert!(actions.iter().any(|action| {
+    // The graph render's completion, or the activation timeout, publishes the new page rather than the page change itself.
+    assert!(!actions.iter().any(|action| {
         matches!(
             action,
             SchedulerAction::PublishDisplay {
                 reason: PublishReason::PageChanged,
-                panel: false,
-                tooltip: true,
                 ..
             }
         )

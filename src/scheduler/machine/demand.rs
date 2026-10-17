@@ -143,7 +143,9 @@ impl Scheduler {
         }
     }
 
-    /// Publishes the tooltip now and waits, bounded by the activation timeout, for fresh tooltip-only AMD samples.
+    /// Refreshes the tooltip for a presentation, waiting (bounded by the activation timeout) for fresh tooltip-only AMD samples and newly demanded jobs.
+    ///
+    /// The applet keeps showing its last tooltip meanwhile, so a frame is published now only when nothing is pending; otherwise the completion or the timeout publishes, and the applet never sees a page whose body is still being built.
     pub(super) fn refresh_activation(&mut self, actions: &mut Vec<SchedulerAction>) {
         for (id, runtime) in &mut self.jobs {
             if runtime
@@ -156,17 +158,18 @@ impl Scheduler {
                 self.activation_waiting.insert(id.clone());
             }
         }
-        if !self.activation_waiting.is_empty() {
+        if self.activation_waiting.is_empty() {
+            self.issue_publish(
+                PublishReason::TooltipActivated,
+                None,
+                0,
+                false,
+                true,
+                actions,
+            );
+        } else if self.activation_deadline.is_none() {
             self.activation_deadline = Some(self.now.saturating_add(ACTIVATION_REFRESH_TIMEOUT));
         }
-        self.issue_publish(
-            PublishReason::TooltipActivated,
-            None,
-            0,
-            false,
-            true,
-            actions,
-        );
     }
 
     pub(super) fn change_page(
@@ -183,7 +186,8 @@ impl Scheduler {
             let after = self.current_demand();
             self.cancel_demand_ended(&before, &after, actions);
             self.activate_jobs(&before, &after, true);
-            if self.presented {
+            // Like activation, a page whose jobs are pending is published by their completion or the timeout.
+            if self.presented && self.activation_waiting.is_empty() {
                 self.issue_publish(PublishReason::PageChanged, None, 0, false, true, actions);
             }
         }

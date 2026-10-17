@@ -8,4 +8,4 @@
 - Panel width and height mean different things by form factor. Verify horizontal and vertical behavior; `plasmawindowed` only proves application form.
 - Hidden anchored siblings and lazy representation items may have zero size or not exist. Do not use them as unconditional geometry authorities.
 
-PlasmaTop publishes usable panel geometry to `<runtime>/state/geom`. Changes to measurement, font sizing, wrapping, or preferred dimensions must preserve that daemon auto-fit contract.
+PlasmaTop sends usable panel geometry to the daemon with `SetGeometry`. Changes to measurement, font sizing, wrapping, or preferred dimensions must preserve that daemon auto-fit contract.

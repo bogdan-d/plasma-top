@@ -83,3 +83,11 @@ _Avoid_: Active page
 **Presented tooltip**:
 A tooltip surface currently visible because it is hovered, pinned, or shown as a planar/full representation. Page-owned metric samples are demanded only while the tooltip is presented.
 _Avoid_: Active tooltip, open tooltip
+
+**Applet client**:
+One bus connection calling the daemon's applet interface, identified by its unique bus name. A plasmashell process is one applet client however many PlasmaTop widgets it hosts.
+_Avoid_: Applet, widget connection
+
+**Presentation lease**:
+The daemon's record that one applet instance of one applet client presents the tooltip. It lives until `Dismiss`, the client's disconnect, or the daemon's own bus connection loss; the tooltip is presented while any lease exists.
+_Avoid_: Presentation file, heartbeat lease

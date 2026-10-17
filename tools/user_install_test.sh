@@ -124,8 +124,6 @@ UNIT="$XDG_DATA_HOME/systemd/user/plasma-top.service"
 [[ -f "$XDG_DATA_HOME/licenses/plasma-top/LICENSE" ]]
 grep -Fq 'ExecStart=%h/.local/bin/plasma-top daemon' "$UNIT"
 grep -Fq "&quot;$LAUNCHER&quot; click" "$FAKE_APPLET/contents/config/main.xml"
-grep -Fq "&quot;$LAUNCHER&quot; page prev" "$FAKE_APPLET/contents/config/main.xml"
-grep -Fq "&quot;$LAUNCHER&quot; page next" "$FAKE_APPLET/contents/config/main.xml"
 if grep -q -- '--global' "$FAKE_LOG"; then exit 1; fi
 if grep -q '^sudo ' "$FAKE_LOG"; then exit 1; fi
 grep -Fq 'systemctl --user restart plasma-top' "$FAKE_LOG"

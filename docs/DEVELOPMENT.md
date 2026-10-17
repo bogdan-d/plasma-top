@@ -6,7 +6,8 @@ Rust is the sole runtime implementation.
 
 - Rust 1.98.1 with Cargo, rustfmt, and Clippy
 - Python 3 for optional Qt/QML verification; PyQt6 and Qt SVG support for screenshot tools
-- `kpackagetool6` and `plasmawindowed` for isolated applet verification
+- `dbus-daemon` for the D-Bus tests and isolated applet verification, which run on private buses; `dbus-monitor` and `dbus-send` for the applet smoke
+- `kpackagetool6` and `plasmawindowed` (Plasma 6.8 or newer) for isolated applet verification
 
 `tools/plasma_live_matrix.sh` is temporarily disabled while its Plasma SDK integration is repaired under `.scratch/plasmoidviewer-validation/`. Use the automated application-form checks below and perform panel or desktop representation checks only in an explicitly approved real Plasma session.
 
@@ -34,7 +35,7 @@ Use the smallest check that exercises the changed behavior:
 | Change | Verification |
 |---|---|
 | Render, CSS, or Qt RichText | `tools/qt_render_matrix.sh --no-build` |
-| Applet/runtime integration | `tools/qml_verify.sh --smoke` |
+| Applet/daemon D-Bus integration | `tools/qml_verify.sh --smoke` |
 | Daemon settings page | `tools/qml_verify.sh --config-smoke` |
 | Main tooltip settings page | `tools/qml_verify.sh --tooltip-config-smoke` |
 | Graphs settings page | `tools/qml_verify.sh --graphs-config-smoke` |
@@ -42,7 +43,7 @@ Use the smallest check that exercises the changed behavior:
 | Panel orientation, geometry, hover, pinning, or wheel behavior | Manual real-session verification with explicit approval |
 | Desktop representation or appearance settings | Manual real-session verification with explicit approval |
 
-`plasmawindowed` cannot emulate panel form factors, so do not treat an application-form pass as panel evidence. The automated scripts use disposable XDG roots and do not modify the installed widget, production runtime, or real Plasma configuration.
+`plasmawindowed` cannot emulate panel form factors, so do not treat an application-form pass as panel evidence. The automated scripts use disposable XDG roots and a private session bus, and do not modify the installed widget, the live daemon, or real Plasma configuration. The `--smoke` run drives two widgets, one presented, through paging, geometry, and a daemon restart, and records the method calls Qt actually encodes.
 
 Run `tools/qt_render_matrix.sh --no-build` on a host with PyQt6 and Qt SVG support for render/QML changes or release verification. Set `PYTHON` when PyQt6 is not available through `python3`. On immutable hosts, run it without layering packages:
 
@@ -65,7 +66,7 @@ For a release candidate, perform a separate real-session pass only when modifyin
 ./plasma-top list-items
 ```
 
-Scheduler profiling keeps the existing cold/warm one-shot command and adds a runtime-file-free timed async mode:
+Scheduler profiling keeps the existing cold/warm one-shot command and adds a timed async mode that never exports the applet interface or owns its bus name:
 
 ```bash
 ./plasma-top profiling --config config/config.toml
@@ -74,7 +75,7 @@ Scheduler profiling keeps the existing cold/warm one-shot command and adds a run
 ./plasma-top profiling --config config/config.toml --duration 5 --scenario main --stimuli
 ```
 
-Timed mode without `--stimuli` is a steady scenario and performs no page, presentation, or config mutations. `--stimuli` explicitly opts into one serial bounded page/presentation/config sequence through the normal inotify, reload, scheduler, and in-memory publication paths; aggregate counters in that report include stimulus work. The user's config and runtime are not modified. Slow and short runs leave an action pending until its exact watcher/scheduler-observed state and correlated tooltip publication complete, then report timeout state separately as protocol-requested and watcher/scheduler-observed values.
+Timed mode without `--stimuli` is a steady scenario and performs no page, presentation, or config mutations. `--stimuli` explicitly opts into one serial bounded page/presentation/config sequence: page and presentation changes enter as typed applet requests through the in-process seam the D-Bus adapter feeds, and config changes go through the normal inotify and reload path; aggregate counters in that report include stimulus work. The user's config, the live daemon, and the live widget are not touched; ordinary I/O such as enabled desktop notifications stays active. Slow and short runs leave an action pending until its exact observed state and correlated tooltip publication complete, then report timeout state separately as requested and observed values.
 
 `install.sh` and `packaging/aur/PKGBUILD` both build with `--locked`; package launchers set `PLASMA_TOP_CODE_ROOT` and execute the installed native binary. `tools/package_layout_test.sh` verifies their shared manifest, legacy-layout upgrade, repeat upgrade, uninstall, and user-file preservation contracts.
 

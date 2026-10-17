@@ -3,12 +3,7 @@
 	<kcfgfile name=""/>
 
 	<group name="General">
-		<!-- No interval / command / tooltipCommand / waitForCompletion here: the applet
-		     has no clock of its own. It watches the daemon's runtime directory and reads
-		     when the daemon writes, so the only rate is the daemon's poll_interval. The
-		     two `cat`s and the runtime path are derived in main.qml (`config.runtimeDir`)
-		     rather than defaulted here — $XDG_RUNTIME_DIR/plasma-top isn't knowable when
-		     the package is built, and the daemon derives the same path independently. -->
+		<!-- No interval or display command here: the applet has no clock of its own. The daemon pushes panel and tooltip HTML over the session bus, so the only rate is the daemon's poll_interval. -->
 		<!-- PlasmaTop defaults: a Nerd Font mono is required for the glyphs;
 		     override any of these in the Appearance page. -->
 		<entry name="fontSize" type="int">
@@ -85,7 +80,7 @@
 		<entry name="desktopOutlineColor" type="string">
 			<default>#000000</default>
 		</entry>
-		<!-- Replaceable backend used by the applet's internal presentation protocol; tests override it with a disposable trace wrapper. -->
+		<!-- CLI used by the settings pages; tests override it with a disposable trace wrapper. -->
 		<entry name="backendCommand" type="string">
 			<default>/usr/bin/plasma-top</default>
 		</entry>
@@ -93,12 +88,6 @@
 		     PATH, and being explicit keeps it independent of the shell env. -->
 		<entry name="clickCommand" type="string">
 			<default>/usr/bin/plasma-top click</default>
-		</entry>
-		<entry name="mousewheelUpCommand" type="string">
-			<default>/usr/bin/plasma-top page prev</default>
-		</entry>
-		<entry name="mousewheelDownCommand" type="string">
-			<default>/usr/bin/plasma-top page next</default>
 		</entry>
 		<entry name="useFixedWidth" type="bool">
 			<default>false</default>
