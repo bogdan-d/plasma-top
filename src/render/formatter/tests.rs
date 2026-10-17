@@ -386,7 +386,7 @@ fn tooltip_and_panel_goldens_match_python_snapshots() {
         let formatter = PanelFormatter::with_now_unix(&cfg, &hw, 1_000_000);
         if !panel {
             let canonical = formatter.canonical_width(&readings) as i32;
-            apply_canonical_width(&mut cfg, canonical);
+            apply_canonical_width(&mut cfg, canonical, None);
         }
         let formatter = PanelFormatter::with_now_unix(&cfg, &hw, 1_000_000);
         let html = if panel {

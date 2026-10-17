@@ -1,7 +1,8 @@
-//! Process-level CLI and isolated runtime integration checks.
+//! Process-level CLI checks. Every real daemon process runs on a private session bus.
 
 use std::fs;
-use std::path::PathBuf;
+use std::io::{BufRead, BufReader};
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -15,6 +16,113 @@ fn binary() -> PathBuf {
 
 fn temp_root(label: &str) -> PathBuf {
     std::env::temp_dir().join(format!("plasma-top-cli-{label}-{}", std::process::id()))
+}
+
+const BUS_NAME: &str = "com.github.bogdan_d.PlasmaTop";
+
+/// Private `dbus-daemon` that never touches the live session.
+struct PrivateBus {
+    address: String,
+    daemon: Child,
+}
+
+impl PrivateBus {
+    fn start() -> Self {
+        let mut daemon = Command::new("dbus-daemon")
+            .args(["--session", "--nofork", "--print-address=1"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("dbus-daemon must be installed for daemon process tests");
+        let mut address = String::new();
+        BufReader::new(daemon.stdout.take().expect("bus stdout"))
+            .read_line(&mut address)
+            .expect("bus address");
+        Self {
+            address: address.trim().to_owned(),
+            daemon,
+        }
+    }
+
+    /// Runs `plasma-top` with this bus as its session bus and `home` as an isolated home.
+    fn command(&self, home: &Path) -> Command {
+        let mut command = Command::new(binary());
+        command
+            .current_dir(env!("CARGO_MANIFEST_DIR"))
+            .env("DBUS_SESSION_BUS_ADDRESS", &self.address)
+            .env("HOME", home);
+        command
+    }
+
+    fn name_owner(&self) -> Option<String> {
+        let output = Command::new("dbus-send")
+            .arg(format!("--bus={}", self.address))
+            .args([
+                "--print-reply=literal",
+                "--dest=org.freedesktop.DBus",
+                "/org/freedesktop/DBus",
+                "org.freedesktop.DBus.GetNameOwner",
+            ])
+            .arg(format!("string:{BUS_NAME}"))
+            .output()
+            .expect("query name owner");
+        output
+            .status
+            .success()
+            .then(|| String::from_utf8_lossy(&output.stdout).trim().to_owned())
+    }
+
+    fn panel_html(&self) -> String {
+        let output = Command::new("dbus-send")
+            .arg(format!("--bus={}", self.address))
+            .args([
+                "--print-reply=literal",
+                &format!("--dest={BUS_NAME}"),
+                "/com/github/bogdan_d/PlasmaTop",
+                "org.freedesktop.DBus.Properties.Get",
+                "string:com.github.bogdan_d.PlasmaTop1",
+                "string:PanelHtml",
+            ])
+            .output()
+            .expect("query panel property");
+        String::from_utf8_lossy(&output.stdout).into_owned()
+    }
+}
+
+impl Drop for PrivateBus {
+    fn drop(&mut self) {
+        let _ = self.daemon.kill();
+        let _ = self.daemon.wait();
+    }
+}
+
+/// Starts a daemon on `bus` and waits until it serves a panel.
+fn start_daemon(bus: &PrivateBus, home: &Path) -> Child {
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let mut child = bus
+        .command(home)
+        .args(["daemon", "--config"])
+        .arg(manifest.join("config/config.toml"))
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn daemon");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        if bus.panel_html().contains("class=\"panel") {
+            return child;
+        }
+        if child.try_wait().expect("query daemon startup").is_some() || Instant::now() >= deadline {
+            let _ = child.kill();
+            let output = child.wait_with_output().expect("collect failed startup");
+            panic!(
+                "daemon did not publish within startup bound: status={:?}, stderr={}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
 }
 
 fn wait_for_exit(child: &mut Child, timeout: Duration) -> bool {
@@ -36,7 +144,6 @@ fn no_command_prints_help_and_list_items_has_stable_order() {
     assert!(help.status.success());
     let help = String::from_utf8(help.stdout).expect("utf8 help");
     assert!(help.contains("daemon      Production loop"));
-    assert!(help.contains("page        Switch the tooltip page"));
 
     let items = Command::new(binary())
         .arg("list-items")
@@ -61,49 +168,18 @@ fn invalid_command_is_stderr_and_failure() {
     assert!(output.stdout.is_empty());
     assert_eq!(
         String::from_utf8(output.stderr).expect("utf8 error"),
-        "usage: plasma-top [-h] <command> ...\nplasma-top: error: argument <command>: invalid choice: 'unknown' (choose from 'daemon', 'render', 'probe', 'profiling', 'list-items', 'config', 'page', 'click', 'present', 'dismiss')\n"
+        "usage: plasma-top [-h] <command> ...\nplasma-top: error: argument <command>: invalid choice: 'unknown' (choose from 'daemon', 'render', 'probe', 'profiling', 'list-items', 'config', 'click')\n"
     );
 }
 
 #[test]
-fn sigterm_stops_daemon_with_zero_exit() {
+fn sigterm_stops_daemon_with_zero_exit_and_releases_its_name() {
     let root = temp_root("sigterm");
     let _ = fs::remove_dir_all(&root);
-    fs::create_dir_all(&root).expect("runtime fixture");
-    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let mut child = Command::new(binary())
-        .args(["daemon", "--config"])
-        .arg(manifest.join("config/config.toml"))
-        .current_dir(&manifest)
-        .env("XDG_RUNTIME_DIR", &root)
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("spawn daemon");
-
-    let panel = root.join("plasma-top/panel.html");
-    let startup_deadline = Instant::now() + Duration::from_secs(5);
-    let ready = loop {
-        if panel.is_file() {
-            break true;
-        }
-        if child.try_wait().expect("query daemon startup").is_some()
-            || Instant::now() >= startup_deadline
-        {
-            break false;
-        }
-        thread::sleep(Duration::from_millis(10));
-    };
-    if !ready {
-        let _ = child.kill();
-        let output = child.wait_with_output().expect("collect failed startup");
-        let _ = fs::remove_dir_all(&root);
-        panic!(
-            "daemon did not publish within startup bound: status={:?}, stderr={}",
-            output.status,
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
+    fs::create_dir_all(&root).expect("home fixture");
+    let bus = PrivateBus::start();
+    let mut child = start_daemon(&bus, &root);
+    assert!(bus.name_owner().is_some());
 
     let pid = i32::try_from(child.id()).expect("daemon pid fits pid_t");
     kill(Pid::from_raw(pid), Signal::SIGTERM).expect("send SIGTERM");
@@ -121,43 +197,61 @@ fn sigterm_stops_daemon_with_zero_exit() {
         output.status,
         String::from_utf8_lossy(&output.stderr)
     );
+    assert_eq!(bus.name_owner(), None);
 }
 
 #[test]
-fn page_command_only_touches_isolated_state_subtree() {
-    let root = temp_root("page");
-    let state = root.join("plasma-top/state");
-    fs::create_dir_all(&state).expect("state fixture");
-    fs::write(state.join("npages"), "3").expect("npages fixture");
-    fs::write(state.join("page"), "0").expect("page fixture");
+fn second_daemon_fails_clearly_and_diagnostics_run_beside_the_first() {
+    let root = temp_root("second-daemon");
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).expect("home fixture");
+    let bus = PrivateBus::start();
+    let mut first = start_daemon(&bus, &root);
+    let owner = bus.name_owner();
 
-    let output = Command::new(binary())
-        .args(["page", "next"])
-        .env("XDG_RUNTIME_DIR", &root)
+    let started = Instant::now();
+    let second = bus
+        .command(&root)
+        .args(["daemon", "--config", "config/config.toml"])
         .output()
-        .expect("spawn page");
+        .expect("spawn second daemon");
+    let render = bus
+        .command(&root)
+        .args(["render", "--config", "config/config.toml"])
+        .output()
+        .expect("spawn render");
+    let probe = bus
+        .command(&root)
+        .args(["probe", "--config", "config/config.toml"])
+        .output()
+        .expect("spawn probe");
+    let after = bus.name_owner();
+    let _ = first.kill();
+    let _ = first.wait();
+    let _ = fs::remove_dir_all(&root);
 
-    assert!(output.status.success(), "{:?}", output.stderr);
-    assert_eq!(
-        fs::read_to_string(state.join("page")).expect("read page"),
-        "1"
+    assert!(!second.status.success());
+    assert!(started.elapsed() < Duration::from_secs(10));
+    let stderr = String::from_utf8_lossy(&second.stderr);
+    assert!(
+        stderr.contains("another PlasmaTop daemon owns com.github.bogdan_d.PlasmaTop"),
+        "{stderr}"
     );
-    let root_entries = fs::read_dir(root.join("plasma-top"))
-        .expect("runtime root")
-        .map(|entry| entry.expect("runtime entry").file_name())
-        .collect::<Vec<_>>();
-    assert_eq!(root_entries, vec!["state"]);
-    fs::remove_dir_all(root).expect("cleanup fixture");
+    assert!(render.status.success(), "{:?}", render.stderr);
+    assert!(probe.status.success(), "{:?}", probe.stderr);
+    assert!(owner.is_some());
+    assert_eq!(after, owner, "nothing may replace the serving daemon");
 }
 
 #[test]
-fn timed_profiling_runs_async_scheduler_without_runtime_publications() {
+fn timed_profiling_runs_async_scheduler_without_owning_the_bus_name() {
     let root = temp_root("profiling");
     let _ = fs::remove_dir_all(&root);
-    fs::create_dir_all(&root).expect("runtime fixture");
-    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    fs::create_dir_all(&root).expect("home fixture");
 
-    let output = Command::new(binary())
+    let bus = PrivateBus::start();
+    let output = bus
+        .command(&root)
         .args([
             "profiling",
             "--config",
@@ -167,8 +261,6 @@ fn timed_profiling_runs_async_scheduler_without_runtime_publications() {
             "--scenario",
             "hidden",
         ])
-        .current_dir(&manifest)
-        .env("XDG_RUNTIME_DIR", &root)
         .output()
         .expect("spawn timed profiling");
 
@@ -210,7 +302,7 @@ fn timed_profiling_runs_async_scheduler_without_runtime_publications() {
     assert!(!report.contains("event_control_latency:"));
     assert!(!report.contains("render_tooltip_activated:"));
     assert!(!report.contains("render_page_changed:"));
-    assert!(!root.join("plasma-top").exists());
+    assert_eq!(bus.name_owner(), None, "profiling never owns the name");
     fs::remove_dir_all(root).expect("cleanup fixture");
 }
 
@@ -224,7 +316,9 @@ fn timed_profiling_stimuli_report_publication_latency_without_mutating_config() 
     let original = fs::read(manifest.join("config/config.toml")).expect("shipped config");
     fs::write(&config, &original).expect("isolated input config");
 
-    let output = Command::new(binary())
+    let bus = PrivateBus::start();
+    let output = bus
+        .command(&root)
         .args([
             "profiling",
             "--config",
@@ -235,8 +329,6 @@ fn timed_profiling_stimuli_report_publication_latency_without_mutating_config() 
             "main",
             "--stimuli",
         ])
-        .current_dir(&manifest)
-        .env("XDG_RUNTIME_DIR", &root)
         .output()
         .expect("spawn profiling stimuli");
 
@@ -261,7 +353,7 @@ fn timed_profiling_stimuli_report_publication_latency_without_mutating_config() 
         assert!(report.contains(field), "missing {field:?}: {report}");
     }
     assert_eq!(fs::read(&config).expect("input config remains"), original);
-    assert!(!root.join("plasma-top").exists());
+    assert_eq!(bus.name_owner(), None, "profiling never owns the name");
     fs::remove_dir_all(root).expect("cleanup fixture");
 }
 

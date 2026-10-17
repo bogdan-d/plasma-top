@@ -1,14 +1,14 @@
 //! Integration tests for the atomic publication primitive
-//! ([`plasma_top::runtime::atomic::write_atomic`]).
+//! ([`plasma_top::fs_atomic::write_atomic`]).
 //!
 //! These tests write to PID-and-nanos-unique targets under `std::env::temp_dir()`
-//! and never touch the live runtime directory, so they need no env mutation.
+//!, so they need no env mutation.
 
 use std::io;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
-use plasma_top::runtime::atomic::write_atomic;
+use plasma_top::fs_atomic::write_atomic;
 
 /// Returns a path that no other test in this binary or another process can
 /// collide with: PID + nanosecond timestamp + label.
@@ -18,7 +18,7 @@ fn unique_target(label: &str) -> PathBuf {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    std::env::temp_dir().join(format!("plasma-top-runtime-atomic-{label}-{pid}-{nanos}"))
+    std::env::temp_dir().join(format!("plasma-top-fs-atomic-{label}-{pid}-{nanos}"))
 }
 
 /// Returns the PID-unique tmp path `write_atomic` would create for `target`.

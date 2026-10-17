@@ -5,10 +5,10 @@ use crate::scheduler::{CancelReason, PublicationId, RescanKind};
 #[test]
 fn shutdown_preempts_pending_completion_and_stale_work() {
     let (root, paths) = test_paths("shutdown-preemption");
-    fs::create_dir_all(&paths.state).expect("state root");
+    fs::create_dir_all(&root).expect("test root");
     let cfg = Config::default();
     let active = build_pages(&cfg.pages.order);
-    let mut state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
+    let (mut state, sink) = recorded_state(&paths, cfg, HardwareInventory::default(), active);
     let mut scheduler = Scheduler::new();
     let initial = startup(&mut scheduler, vec![job(OwnerId::Cpu, JobKind::Cpu, false)]);
     let ticket = started_ticket(&initial);
@@ -103,7 +103,6 @@ fn shutdown_preempts_pending_completion_and_stale_work() {
         &mut scheduler,
         &mut state,
         &roots,
-        &paths,
         &clock,
         ClockSnapshot::default(),
         &notification_sender,
@@ -123,8 +122,7 @@ fn shutdown_preempts_pending_completion_and_stale_work() {
         notifications.try_recv(),
         Err(mpsc::error::TryRecvError::Empty)
     ));
-    assert!(!paths.panel.exists());
-    assert!(!paths.tooltip.exists());
+    assert!(sink.frames().is_empty());
     let _ = fs::remove_dir_all(root);
 }
 

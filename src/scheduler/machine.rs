@@ -217,6 +217,12 @@ impl Scheduler {
                 self.change_presentation(presented, &mut actions);
                 EventDisposition::Accepted
             }
+            SchedulerEvent::TooltipReactivated { .. } => {
+                if self.presented {
+                    self.refresh_activation(&mut actions);
+                }
+                EventDisposition::Accepted
+            }
             SchedulerEvent::SelectedPageChanged { page, .. } => {
                 self.change_page(page, &mut actions);
                 EventDisposition::Accepted

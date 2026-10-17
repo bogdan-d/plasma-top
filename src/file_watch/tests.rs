@@ -91,9 +91,9 @@ async fn recovery_masks_rearm_and_full_rescan() {
 async fn directory_target_watches_children_and_survives_delete_recreate() {
     let root = fixture("directory-recreate");
     let _ = std::fs::remove_dir_all(&root);
-    let target = root.join("state/presented");
+    let target = root.join("watched/dir");
     std::fs::create_dir_all(&target).expect("create target");
-    let mut watcher = FileWatcher::new(vec![WatchTarget::new(WatchSource::Presentation, &target)])
+    let mut watcher = FileWatcher::new(vec![WatchTarget::new(WatchSource::Updates, &target)])
         .expect("watch target and parent");
     let watched = watcher.directories.values().collect::<BTreeSet<_>>();
     assert!(watched.contains(&target));
@@ -104,20 +104,20 @@ async fn directory_target_watches_children_and_survives_delete_recreate() {
         .await
         .expect("delete deadline")
         .expect("delete event");
-    assert_eq!(deleted, BTreeSet::from([WatchSource::Presentation]));
+    assert_eq!(deleted, BTreeSet::from([WatchSource::Updates]));
 
     std::fs::create_dir(&target).expect("recreate target");
     let recreated = tokio::time::timeout(Duration::from_secs(1), watcher.changed())
         .await
         .expect("recreate deadline")
         .expect("recreate event");
-    assert_eq!(recreated, BTreeSet::from([WatchSource::Presentation]));
+    assert_eq!(recreated, BTreeSet::from([WatchSource::Updates]));
     std::fs::write(target.join("1"), []).expect("write child");
     let child = tokio::time::timeout(Duration::from_secs(1), watcher.changed())
         .await
         .expect("child deadline")
         .expect("child event");
-    assert_eq!(child, BTreeSet::from([WatchSource::Presentation]));
+    assert_eq!(child, BTreeSet::from([WatchSource::Updates]));
     let _ = std::fs::remove_dir_all(root);
 }
 

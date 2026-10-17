@@ -4,6 +4,8 @@ use std::time::{Instant, SystemTime};
 
 use crate::domain::boundary::ClockSnapshot;
 
+#[path = "adapters/applet.rs"]
+pub mod applet;
 #[path = "adapters/command.rs"]
 mod command;
 #[path = "adapters/dbus.rs"]

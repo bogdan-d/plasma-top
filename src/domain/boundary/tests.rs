@@ -4,12 +4,10 @@ use super::*;
 fn filesystem_roots_default_to_host_stubs() {
     let roots = FilesystemRoots::default();
 
-    assert_eq!(roots.runtime_root, None);
     assert_eq!(roots.cache_root, None);
     assert_eq!(roots.config_root, None);
     assert_eq!(roots.proc_root, PathBuf::from("/proc"));
     assert_eq!(roots.sys_root, PathBuf::from("/sys"));
-    assert_eq!(roots.state_root(), None);
 }
 
 #[test]

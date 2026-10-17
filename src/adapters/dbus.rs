@@ -84,13 +84,13 @@ const NOTIFICATIONS_NAME: &str = "org.freedesktop.Notifications";
 const NOTIFICATIONS_PATH: &str = "/org/freedesktop/Notifications";
 const NOTIFICATIONS_IFACE: &str = "org.freedesktop.Notifications";
 
-struct ReconnectBackoff {
+pub(super) struct ReconnectBackoff {
     delay: Duration,
     retry_at: Instant,
 }
 
 impl ReconnectBackoff {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self {
             delay: BACKOFF_MIN,
             retry_at: Instant::now(),
@@ -101,16 +101,16 @@ impl ReconnectBackoff {
         Instant::now() >= self.retry_at
     }
 
-    fn wait(&self) -> Duration {
+    pub(super) fn wait(&self) -> Duration {
         self.retry_at.saturating_duration_since(Instant::now())
     }
 
-    fn failed(&mut self) {
+    pub(super) fn failed(&mut self) {
         self.retry_at = Instant::now() + self.delay;
         self.delay = self.delay.saturating_mul(2).min(BACKOFF_MAX);
     }
 
-    fn connected(&mut self) {
+    pub(super) fn connected(&mut self) {
         self.delay = BACKOFF_MIN;
         self.retry_at = Instant::now();
     }

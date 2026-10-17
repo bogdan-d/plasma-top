@@ -7,7 +7,9 @@ use std::time::{Duration, Instant};
 
 use crate::adapters::{ProductionClock, ProductionCommandRunner, ProductionIo};
 use crate::cli::{PanelLayout, ProfilingCommand, RenderCommand, RenderComponent, RenderFormat};
-use crate::config::{Config, apply_canonical_width, load_config, resolve_style};
+use crate::config::{
+    Config, apply_canonical_width, geom_cache_path, load_config, read_geom_cache, resolve_style,
+};
 use crate::daemon::{
     executable_lookup, plasma_is_light, read_css, render_page_id, render_page_with_clock,
 };
@@ -130,7 +132,11 @@ fn collect_one_shot(
         || thread::sleep(Duration::from_secs(1)),
     );
     let width = PanelFormatter::new(&cfg, &hw).canonical_width(&readings);
-    apply_canonical_width(&mut cfg, i32::try_from(width).unwrap_or(i32::MAX));
+    apply_canonical_width(
+        &mut cfg,
+        i32::try_from(width).unwrap_or(i32::MAX),
+        cached_tooltip_advance(),
+    );
     Ok(OneShot {
         cfg,
         hw,
@@ -477,7 +483,11 @@ fn run_one_shot_profiling(config_path: Option<&Path>) -> Result<()> {
         );
         let total = start.elapsed();
         let width = PanelFormatter::new(&cfg, &hw).canonical_width(&readings);
-        apply_canonical_width(&mut cfg, i32::try_from(width).unwrap_or(i32::MAX));
+        apply_canonical_width(
+            &mut cfg,
+            i32::try_from(width).unwrap_or(i32::MAX),
+            cached_tooltip_advance(),
+        );
         println!("══════════════════════════════════════════════════════════════════════");
         println!("  {label}");
         println!("══════════════════════════════════════════════════════════════════════");
@@ -507,6 +517,11 @@ pub fn run_list_items() -> Result<()> {
         println!("  {token:<width$}  {placement}");
     }
     Ok(())
+}
+
+/// Diagnostics never talk to the applet, so they size graphs from the persistent geometry cache.
+fn cached_tooltip_advance() -> Option<f64> {
+    read_geom_cache(&geom_cache_path()).and_then(|geometry| geometry.tooltip_adv)
 }
 
 #[cfg(test)]

@@ -43,7 +43,6 @@ fn render_command_page_after_cold_and_warm(
 ) -> DiagnosticRenderResult {
     let fixture = FixtureRoot::from_env();
     let roots = FilesystemRoots {
-        runtime_root: None,
         cache_root: None,
         config_root: None,
         proc_root: fixture.proc(),

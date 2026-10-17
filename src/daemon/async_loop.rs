@@ -1,5 +1,4 @@
 use std::collections::VecDeque;
-use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -12,7 +11,8 @@ use crate::adapters::{
     ProductionClock, ProductionCommandRunner, ProductionDbusFacade, ProductionIoEvents,
     ProductionNotificationFacade,
 };
-use crate::config::{cache_live_geom, load_config};
+use crate::config::{load_config_with_geometry, read_geom_cache};
+use crate::domain::applet::{AppletEvent, ClientId, InstanceId, PublicationSink};
 use crate::domain::boundary::{
     ClockSnapshot, CommandRunner, DbusFacade, FilesystemRoots, NotificationFacade,
     NotificationPayload,
@@ -34,8 +34,10 @@ use crate::sensors::{discover_local_hardware, discover_local_hardware_attempt};
 mod dispatch;
 use dispatch::{drain_actions, flush_owner_messages, queue_owner_message};
 
-use super::{DaemonPaths, cleanup, publish_pages, write_atomic};
+use super::DaemonPaths;
 
+#[path = "async_loop/applet.rs"]
+mod applet;
 #[path = "async_loop/completion.rs"]
 mod completion;
 #[path = "async_loop/control.rs"]
@@ -82,6 +84,8 @@ pub(super) struct DaemonServices<
     pub(super) events: ProductionIoEvents,
     pub(super) clock: ProductionClock,
     pub(super) shutdown: tokio::sync::watch::Receiver<bool>,
+    pub(super) applet_events: mpsc::Receiver<AppletEvent>,
+    pub(super) sink: Box<dyn PublicationSink>,
     #[cfg(test)]
     pub(super) blocked_owner: Option<worker::TestOwnerBlock>,
 }
@@ -122,25 +126,18 @@ where
         events: mut io_events,
         clock,
         mut shutdown,
+        mut applet_events,
+        sink,
         #[cfg(test)]
         blocked_owner,
     } = services;
-    fs::create_dir_all(&paths.runtime)?;
-    fs::create_dir_all(&paths.state)?;
-    if profile_run.is_none() {
-        cleanup(paths);
-        write_atomic(&paths.page, "0")?;
-    }
 
     let boot = clock.snapshot();
-    let cfg = load_config(config_path, None)?;
+    let geometry = read_geom_cache(&paths.geom_cache);
+    let cfg = load_config_with_geometry(config_path, None, geometry)?;
     let cpu_count = std::thread::available_parallelism().map_or(1, std::num::NonZero::get);
     let hw = discover_local_hardware(&roots.sys_root, &roots.proc_root, &cfg, cpu_count);
-    let active = if profile_run.is_some() {
-        build_pages(&cfg.pages.order)
-    } else {
-        publish_pages(paths, &cfg)?
-    };
+    let active = build_pages(&cfg.pages.order);
     if let Some(profile) = &profile_run
         && profile.selected_page != PageId::Main
         && !active
@@ -158,19 +155,17 @@ where
             .position(|page| PageId::from_id(page.id) == profile.selected_page)
             .unwrap_or(0)
     });
-    if let Some(profile) = &profile_run {
-        write_atomic(&paths.page, &selected_index.to_string())?;
-        write_atomic(&paths.npages, &active.len().to_string())?;
-        let presented = paths.state.join("presented");
-        fs::create_dir_all(&presented)?;
-        if profile.presented {
-            write_atomic(&presented.join("1"), "")?;
-        }
-    }
-    let mut state = RuntimeState::new(paths, cfg, hw, active);
+    let mut state = RuntimeState::new(paths, cfg, hw, active, geometry, sink);
+    state.page_index = selected_index;
     if let Some(profile) = &profile_run {
         state.configure_profiling(Arc::clone(&profile.session));
+        if profile.presented {
+            let _ = state
+                .leases
+                .present(profiling_client(), profiling_instance());
+        }
     }
+    state.announce_selection();
     let (watch_path, machine_paths) = state::config_watch_paths(config_path);
     let mut file_watcher = FileWatcher::new(files::watch_targets(
         &watch_path,
@@ -179,7 +174,6 @@ where
         &state,
     ))
     .map_err(|error| Error::Runtime(format!("file watch installation failed: {error}")))?;
-    let mut presentation = files::presentation_status(paths, &clock)?;
     let mut stimuli = profile_run
         .as_ref()
         .filter(|profile| profile.stimuli)
@@ -245,7 +239,7 @@ where
         &mut actions,
         scheduler.handle(SchedulerEvent::TooltipPresented {
             at: now(&clock),
-            presented: presentation.leases.presented,
+            presented: state.leases.presented(),
         }),
     );
     let (_, selected) = state.selected_page();
@@ -256,9 +250,6 @@ where
             page: selected,
         }),
     );
-    if profile_run.is_none() {
-        cache_live_geom();
-    }
     if profile_run.is_none() {
         let armed_sources = file_watcher.rescan_sources();
         files::process_and_stabilize(
@@ -275,9 +266,15 @@ where
             &clock,
             &mut actions,
             &mut owner_messages,
-            &mut presentation,
         )?;
     }
+    let applet_context = applet::AppletContext {
+        config_path,
+        roots,
+        paths,
+        cpu_count,
+        clock: &clock,
+    };
     let profile_deadline = profile_run
         .as_ref()
         .map(|profile| boot.monotonic.saturating_add(profile.duration));
@@ -292,7 +289,7 @@ where
             if let Some(stimuli) = &stimuli {
                 let (page_index, page) = state.selected_page();
                 stimuli.time_out(ProfileStimulusState {
-                    presented: presentation.leases.presented,
+                    presented: state.leases.presented(),
                     page_index,
                     page,
                     config_generation: state.config_generation,
@@ -310,13 +307,23 @@ where
         }
         if !profile_shutdown_requested && let Some(stimuli) = &mut stimuli {
             let _ = stimuli.next_due(loop_now);
-            stimuli.inject_due(
+            if let Some(request) = stimuli.inject_due(
                 loop_now,
-                paths,
                 &clock,
                 state.config_generation,
                 state.cfg.display.overlay,
-            )?;
+                profiling_client(),
+                profiling_instance(),
+            )? {
+                applet::handle_event(
+                    AppletEvent::Request(request),
+                    &applet_context,
+                    &mut scheduler,
+                    &mut state,
+                    &mut actions,
+                    &mut owner_messages,
+                )?;
+            }
         }
         preempt_for_shutdown(
             stopped.load(Ordering::Acquire),
@@ -332,7 +339,6 @@ where
             &mut scheduler,
             &mut state,
             roots,
-            paths,
             &clock,
             boot,
             &notification_sender,
@@ -382,7 +388,6 @@ where
             &mut scheduler,
             &mut state,
             roots,
-            paths,
             &clock,
             boot,
             &notification_sender,
@@ -406,7 +411,6 @@ where
             &mut scheduler,
             &mut state,
             roots,
-            paths,
             &clock,
             boot,
             &notification_sender,
@@ -415,19 +419,6 @@ where
         if let Some(component) = flush_owner_messages(&mut owner_messages, &owner_senders) {
             critical_failure(component, &mut scheduler, &clock, &mut actions);
             continue;
-        }
-        if presentation
-            .deadline
-            .is_some_and(|expiry| expiry <= clock.snapshot().monotonic)
-        {
-            files::update_presentation(
-                &mut presentation,
-                paths,
-                &clock,
-                &mut scheduler,
-                &mut actions,
-                state.profile.as_deref(),
-            )?;
         }
         if state.first_paint_published && state.theme_reconciliation_pending {
             state.theme_reconciliation_pending = false;
@@ -450,7 +441,6 @@ where
             &mut scheduler,
             &mut state,
             roots,
-            paths,
             &clock,
             boot,
             &notification_sender,
@@ -464,13 +454,7 @@ where
         }
 
         let snapshot = clock.snapshot();
-        let mut sleep_for = presentation.deadline.map_or_else(
-            || sleep_duration(&scheduler, &state, boot, snapshot),
-            |expiry| {
-                sleep_duration(&scheduler, &state, boot, snapshot)
-                    .min(expiry.saturating_sub(snapshot.monotonic))
-            },
-        );
+        let mut sleep_for = sleep_duration(&scheduler, &state, boot, snapshot);
         if let Some(deadline) = profile_deadline {
             sleep_for = sleep_for.min(deadline.saturating_sub(snapshot.monotonic));
         }
@@ -487,6 +471,7 @@ where
             &mut shutdown,
             &mut completions,
             &mut file_watcher,
+            &mut applet_events,
             sleep_for,
         )
         .await
@@ -499,6 +484,19 @@ where
                 critical_failure("notification task", &mut scheduler, &clock, &mut actions);
             }
             LoopWake::Shutdown => {}
+            LoopWake::Applet(None) => {
+                critical_failure(applet::APPLET_SERVICE, &mut scheduler, &clock, &mut actions);
+            }
+            LoopWake::Applet(Some(event)) => {
+                applet::handle_event(
+                    event,
+                    &applet_context,
+                    &mut scheduler,
+                    &mut state,
+                    &mut actions,
+                    &mut owner_messages,
+                )?;
+            }
             LoopWake::Sleep => {
                 if let (Some(profile), Some(due)) = (&profile_run, scheduled_wake) {
                     let at = now(&clock);
@@ -524,7 +522,6 @@ where
                     &clock,
                     &mut actions,
                     &mut owner_messages,
-                    &mut presentation,
                 )?;
             }
             LoopWake::Completion(completion) => match completion {
@@ -548,8 +545,8 @@ where
 
     owner_tasks.abort_all();
     notification_task.abort();
-    if profile_run.is_none() {
-        cleanup(paths);
+    if let Some(reason) = state.service_error {
+        return Err(Error::Runtime(reason));
     }
     if let Some(component) = state.critical_component {
         return Err(Error::Runtime(format!(
@@ -585,6 +582,15 @@ fn request_selected_graph(
             }),
         );
     }
+}
+
+/// Identity of the in-process stimulus client used by timed profiling.
+fn profiling_client() -> ClientId {
+    ClientId::new("profiling")
+}
+
+fn profiling_instance() -> InstanceId {
+    InstanceId::MIN
 }
 
 fn critical_failure(

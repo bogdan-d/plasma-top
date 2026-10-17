@@ -1,5 +1,6 @@
 //! Domain contracts shared by config, collection, rendering, and adapters.
 
+pub mod applet;
 pub mod boundary;
 pub mod cadence;
 pub mod form;

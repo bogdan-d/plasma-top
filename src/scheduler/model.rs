@@ -410,6 +410,10 @@ pub(crate) enum SchedulerEvent {
         at: SchedulerTime,
         presented: bool,
     },
+    /// An already-presented applet asked to be shown again; refreshes the tooltip without changing demand.
+    TooltipReactivated {
+        at: SchedulerTime,
+    },
     SelectedPageChanged {
         at: SchedulerTime,
         page: PageId,
@@ -463,6 +467,7 @@ impl SchedulerEvent {
             | Self::InventoryChanged { at, .. }
             | Self::DemandChanged { at, .. }
             | Self::TooltipPresented { at, .. }
+            | Self::TooltipReactivated { at }
             | Self::SelectedPageChanged { at, .. }
             | Self::DisplayRefreshRequested { at }
             | Self::TooltipRefreshRequested { at }

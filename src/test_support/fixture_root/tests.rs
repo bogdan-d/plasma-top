@@ -21,7 +21,6 @@ fn boundary_subtrees_are_direct_children_of_root() {
 
     assert_eq!(root.proc(), PathBuf::from("/tmp/example/proc"));
     assert_eq!(root.sys(), PathBuf::from("/tmp/example/sys"));
-    assert_eq!(root.run(), PathBuf::from("/tmp/example/run"));
 }
 
 #[test]

@@ -2,32 +2,13 @@ use super::*;
 use std::collections::BTreeSet;
 
 #[test]
-fn profiling_selection_changes_only_after_the_watcher_observes_the_page_file() {
-    let (root, paths) = test_paths("profile-selection");
-    fs::create_dir_all(&paths.state).expect("state root");
-    fs::write(&paths.page, "0").expect("initial profiling page");
-    let mut cfg = Config::default();
-    cfg.pages.order = vec![String::from("graphs")];
-    let active = build_pages(&cfg.pages.order);
-    let mut runtime_state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
-    runtime_state.configure_profiling(Arc::new(ProfileSession::default()));
-    fs::write(&paths.page, "1").expect("requested profiling page");
-
-    assert_eq!(runtime_state.selected_page(), (0, PageId::Main));
-    assert_eq!(
-        runtime_state.observe_selected_page(&paths),
-        (1, PageId::Graphs)
-    );
-    let _ = fs::remove_dir_all(root);
-}
-
-#[test]
 fn suppressed_display_ticks_accumulate_on_deferred_first_paint() {
     let (root, paths) = test_paths("deferred-profile-ticks");
-    fs::create_dir_all(&paths.state).expect("state root");
+    fs::create_dir_all(&root).expect("test root");
     let cfg = Config::default();
     let active = build_pages(&cfg.pages.order);
-    let mut state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
+    let mut state = test_state(&paths, cfg, HardwareInventory::default(), active);
+    state.page_index = 1;
     state.deferred_first_paint = Some(SchedulerAction::PublishDisplay {
         publication: crate::scheduler::PublicationId(1),
         reason: PublishReason::FirstPaintReady,
@@ -57,11 +38,11 @@ fn suppressed_display_ticks_accumulate_on_deferred_first_paint() {
 #[test]
 fn stale_generation_completion_is_rejected_before_commit() {
     let (root, paths) = test_paths("stale");
-    fs::create_dir_all(&paths.state).expect("state root");
+    fs::create_dir_all(&root).expect("test root");
     let cfg = Config::default();
     let hw = HardwareInventory::default();
     let active = build_pages(&cfg.pages.order);
-    let runtime_state = RuntimeState::new(&paths, cfg, hw.clone(), active);
+    let runtime_state = test_state(&paths, cfg, hw.clone(), active);
     let mut scheduler = Scheduler::new();
     let initial = startup(&mut scheduler, vec![job(OwnerId::Cpu, JobKind::Cpu, false)]);
     let ticket = started_ticket(&initial);
@@ -97,14 +78,14 @@ fn stale_generation_completion_is_rejected_before_commit() {
 #[test]
 fn completion_merges_only_inventory_owned_by_its_job() {
     let (root, paths) = test_paths("inventory-merge");
-    fs::create_dir_all(&paths.state).expect("state root");
+    fs::create_dir_all(&root).expect("test root");
     let cfg = Config::default();
     let mut hw = HardwareInventory {
         has_nvidia: true,
         ..HardwareInventory::default()
     };
     let active = build_pages(&cfg.pages.order);
-    let mut runtime_state = RuntimeState::new(&paths, cfg, hw.clone(), active);
+    let mut runtime_state = test_state(&paths, cfg, hw.clone(), active);
     hw.net_device = Some(String::from("wlan0"));
     let completion = worker::JobCompletion {
         ticket: JobTicket {
@@ -139,10 +120,10 @@ fn completion_merges_only_inventory_owned_by_its_job() {
 #[test]
 fn intel_frequency_completion_cannot_replace_decoder_outcome() {
     let (root, paths) = test_paths("decoder-owner");
-    fs::create_dir_all(&paths.state).expect("state root");
+    fs::create_dir_all(&root).expect("test root");
     let cfg = Config::default();
     let active = build_pages(&cfg.pages.order);
-    let mut runtime_state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
+    let mut runtime_state = test_state(&paths, cfg, HardwareInventory::default(), active);
     runtime_state.nvidia_decoder_outcome = Some((
         SourceIdentity::Device(String::from("nvidia")),
         crate::sensors::gpu_history::DecoderOutcome::Value(37),
@@ -185,10 +166,10 @@ fn intel_frequency_completion_cannot_replace_decoder_outcome() {
 #[test]
 fn replaced_intel_source_cannot_feed_new_source_history() {
     let (root, paths) = test_paths("decoder-source");
-    fs::create_dir_all(&paths.state).expect("state root");
+    fs::create_dir_all(&root).expect("test root");
     let cfg = Config::default();
     let active = build_pages(&cfg.pages.order);
-    let mut runtime_state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
+    let mut runtime_state = test_state(&paths, cfg, HardwareInventory::default(), active);
     runtime_state.intel_decoder_outcome = Some((
         SourceIdentity::Device(String::from("intel:0000:00:02.0")),
         crate::sensors::gpu_history::DecoderOutcome::Value(42),
@@ -209,10 +190,10 @@ fn replaced_intel_source_cannot_feed_new_source_history() {
 #[test]
 fn intel_usage_completion_feeds_matching_history_source() {
     let (root, paths) = test_paths("decoder-matching-source");
-    fs::create_dir_all(&paths.state).expect("state root");
+    fs::create_dir_all(&root).expect("test root");
     let cfg = Config::default();
     let active = build_pages(&cfg.pages.order);
-    let mut runtime_state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
+    let mut runtime_state = test_state(&paths, cfg, HardwareInventory::default(), active);
     let pci = String::from("0000:00:02.0");
     let completion = worker::JobCompletion {
         ticket: JobTicket {
@@ -271,10 +252,10 @@ fn skipped_nvidia_fallback_preserves_nvml_decoder_outcome() {
 #[test]
 fn gpu_history_selects_sample_at_or_before_nominal_deadline() {
     let (root, paths) = test_paths("gpu-history-cutoff");
-    fs::create_dir_all(&paths.state).expect("state root");
+    fs::create_dir_all(&root).expect("test root");
     let cfg = Config::default();
     let active = build_pages(&cfg.pages.order);
-    let mut runtime_state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
+    let mut runtime_state = test_state(&paths, cfg, HardwareInventory::default(), active);
     let source = SourceIdentity::Device(String::from("nvidia"));
     let mut samples = RetainedMetricSample::default();
     samples.record_value(
@@ -335,17 +316,13 @@ fn gpu_history_selects_sample_at_or_before_nominal_deadline() {
 #[test]
 fn panel_only_publication_leaves_existing_tooltip_unchanged() {
     let (root, paths) = test_paths("panel-only-publication");
-    fs::create_dir_all(&paths.state).expect("state root");
-    write_atomic(&paths.page, "0").expect("page state");
-    fs::write(&paths.panel, "stale panel").expect("stale panel");
-    fs::write(&paths.tooltip, "existing tooltip").expect("existing tooltip");
+    fs::create_dir_all(&root).expect("test root");
     let cfg = Config::default();
     let active = build_pages(&cfg.pages.order);
-    let mut state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
+    let (mut state, sink) = recorded_state(&paths, cfg, HardwareInventory::default(), active);
     state.panel_html = Some(String::from("stale panel"));
     state.tooltip_html = Some(String::from("existing tooltip"));
     let roots = FilesystemRoots {
-        runtime_root: Some(paths.runtime.clone()),
         ..FilesystemRoots::default()
     };
     let mut scheduler = Scheduler::new();
@@ -376,19 +353,17 @@ fn panel_only_publication_leaves_existing_tooltip_unchanged() {
             tooltip,
             &mut scheduler,
             &roots,
-            &paths,
             ClockSnapshot::default(),
             ClockSnapshot::default(),
         )
-        .expect("publish panel")
         .expect("panel acknowledgement");
 
     assert_eq!(acknowledgement.disposition, EventDisposition::Accepted);
-    assert!(fs::read_to_string(&paths.panel).is_ok_and(|html| html.contains("class=\"panel")));
-    assert_eq!(
-        fs::read(&paths.tooltip).expect("tooltip bytes"),
-        b"existing tooltip"
+    assert!(
+        sink.last_panel()
+            .is_some_and(|html| html.contains("class=\"panel"))
     );
+    assert_eq!(sink.last_tooltip(), None);
     assert_eq!(state.tooltip_html.as_deref(), Some("existing tooltip"));
     let _ = fs::remove_dir_all(root);
 }
@@ -396,15 +371,12 @@ fn panel_only_publication_leaves_existing_tooltip_unchanged() {
 #[test]
 fn tooltip_only_publication_writes_tooltip_without_touching_panel() {
     let (root, paths) = test_paths("tooltip-only-publication");
-    fs::create_dir_all(&paths.state).expect("state root");
-    write_atomic(&paths.page, "0").expect("page state");
-    fs::write(&paths.panel, "existing panel").expect("existing panel");
+    fs::create_dir_all(&root).expect("test root");
     let cfg = Config::default();
     let active = build_pages(&cfg.pages.order);
-    let mut state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
+    let (mut state, sink) = recorded_state(&paths, cfg, HardwareInventory::default(), active);
     state.panel_html = Some(String::from("existing panel"));
     let roots = FilesystemRoots {
-        runtime_root: Some(paths.runtime.clone()),
         ..FilesystemRoots::default()
     };
     let mut scheduler = Scheduler::new();
@@ -429,28 +401,25 @@ fn tooltip_only_publication_writes_tooltip_without_touching_panel() {
         .expect("tooltip-only publication");
     assert!(!panel && tooltip);
 
-    let acknowledgement = state
-        .publish(
-            publication,
-            reason,
-            None,
-            0,
-            panel,
-            tooltip,
-            &mut scheduler,
-            &roots,
-            &paths,
-            ClockSnapshot::default(),
-            ClockSnapshot::default(),
-        )
-        .expect("publish tooltip");
+    let acknowledgement = state.publish(
+        publication,
+        reason,
+        None,
+        0,
+        panel,
+        tooltip,
+        &mut scheduler,
+        &roots,
+        ClockSnapshot::default(),
+        ClockSnapshot::default(),
+    );
 
     assert!(acknowledgement.is_none());
-    assert!(fs::read_to_string(&paths.tooltip).is_ok_and(|html| html.contains("class=\"tooltip")));
-    assert_eq!(
-        fs::read(&paths.panel).expect("panel bytes"),
-        b"existing panel"
+    assert!(
+        sink.last_tooltip()
+            .is_some_and(|html| html.contains("class=\"tooltip"))
     );
+    assert_eq!(sink.last_panel(), None);
     assert_eq!(state.panel_html.as_deref(), Some("existing panel"));
     let _ = fs::remove_dir_all(root);
 }
@@ -458,7 +427,7 @@ fn tooltip_only_publication_writes_tooltip_without_touching_panel() {
 #[test]
 fn forced_style_rescan_rereads_bytes_when_mtime_is_preserved() {
     let (root, paths) = test_paths("forced-style-rescan");
-    fs::create_dir_all(&paths.state).expect("state root");
+    fs::create_dir_all(&root).expect("test root");
     let style = root.join("style.css");
     fs::write(&style, ".old { color: red; }").expect("initial style");
     let preserved = fs::metadata(&style)
@@ -467,7 +436,7 @@ fn forced_style_rescan_rereads_bytes_when_mtime_is_preserved() {
         .expect("style mtime");
     let cfg = Config::default();
     let active = build_pages(&cfg.pages.order);
-    let mut state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
+    let mut state = test_state(&paths, cfg, HardwareInventory::default(), active);
     state.css_path = style.clone();
     state.overlay_path = None;
     state.css_stamp = Some(preserved);
@@ -488,7 +457,7 @@ fn forced_style_rescan_rereads_bytes_when_mtime_is_preserved() {
 #[test]
 fn forced_theme_rescan_reselects_style_when_mtime_is_preserved() {
     let (root, paths) = test_paths("forced-theme-rescan");
-    fs::create_dir_all(&paths.state).expect("state root");
+    fs::create_dir_all(&root).expect("test root");
     fs::write(
         &paths.kdeglobals,
         "[Colors:Window]\nBackgroundNormal=0,0,0\n",
@@ -500,7 +469,7 @@ fn forced_theme_rescan_reselects_style_when_mtime_is_preserved() {
         .expect("theme mtime");
     let cfg = Config::default();
     let active = build_pages(&cfg.pages.order);
-    let mut state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
+    let mut state = test_state(&paths, cfg, HardwareInventory::default(), active);
     assert_eq!(
         state.css_path.file_name().and_then(|name| name.to_str()),
         Some("style-dark.css")
@@ -529,10 +498,10 @@ fn forced_theme_rescan_reselects_style_when_mtime_is_preserved() {
 fn amd_history_commit_keeps_deadlines_and_slow_invalidation_independent() {
     use crate::sensors::gpu_history::DecoderOutcome;
     let (root, paths) = test_paths("amd-history-commit");
-    fs::create_dir_all(&paths.state).expect("state root");
+    fs::create_dir_all(&root).expect("test root");
     let cfg = Config::default();
     let active = build_pages(&cfg.pages.order);
-    let mut state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
+    let mut state = test_state(&paths, cfg, HardwareInventory::default(), active);
     let source = SourceIdentity::Device(String::from("amd:0000:c3:00.0"));
     let fast = JobId::with_source(OwnerId::AmdGpu, JobKind::AmdFast, source.clone());
     let mut history = JobTicket {
@@ -636,10 +605,10 @@ fn amd_history_commit_keeps_deadlines_and_slow_invalidation_independent() {
 #[test]
 fn npu_history_reaches_the_merged_snapshot_and_invalidation_clears_it() {
     let (root, paths) = test_paths("npu-history-commit");
-    fs::create_dir_all(&paths.state).expect("state root");
+    fs::create_dir_all(&root).expect("test root");
     let cfg = Config::default();
     let active = build_pages(&cfg.pages.order);
-    let mut state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
+    let mut state = test_state(&paths, cfg, HardwareInventory::default(), active);
     let source = SourceIdentity::Device(String::from("npu:0000:c4:00.1+0000:c3:00.0"));
     let fast = JobId::with_source(OwnerId::AmdNpu, JobKind::AmdNpu, source.clone());
     let history = JobId::with_source(OwnerId::AmdNpu, JobKind::AmdNpuHistory, source);

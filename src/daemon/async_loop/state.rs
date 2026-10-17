@@ -5,9 +5,10 @@ use std::time::Instant;
 use std::time::SystemTime;
 
 use crate::config::{
-    Config, apply_canonical_width, default_config_path, load_config, machine_source_paths,
-    resolve_style,
+    Config, PanelGeometry, apply_canonical_width, default_config_path, load_config_with_geometry,
+    machine_source_paths, resolve_style,
 };
+use crate::domain::applet::PublicationSink;
 use crate::domain::boundary::{ClockSnapshot, FilesystemRoots};
 use crate::domain::readings::{
     DisplaySnapshot, HardwareInventory, InventoryFamily, RetainedMetricSample,
@@ -23,10 +24,8 @@ use crate::scheduler::{
 };
 use crate::sensors::scheduler_config;
 
-use super::super::{
-    DaemonPaths, clock_unix, log_boot_ready, mtime, page_index, read_css, render_page_cached,
-    write_atomic,
-};
+use super::super::{DaemonPaths, clock_unix, log_boot_ready, mtime, read_css, render_page_cached};
+use super::applet::Leases;
 #[path = "state/merge.rs"]
 mod merge;
 use merge::{apply_inventory_completion, apply_owner_readings};
@@ -37,7 +36,12 @@ pub(super) struct RuntimeState {
     pub(super) cfg: Config,
     pub(super) hw: HardwareInventory,
     pub(super) active: Vec<Page>,
-    observed_page_index: usize,
+    pub(super) page_index: usize,
+    pub(super) announced_selection: Option<(u32, u32)>,
+    pub(super) leases: Leases,
+    pub(super) geometry: Option<PanelGeometry>,
+    pub(super) sink: Box<dyn PublicationSink>,
+    pub(super) service_error: Option<String>,
     pub(super) readings: DisplaySnapshot,
     pub(super) notifications: NotificationState,
     pub(super) notification_samples: BTreeMap<RunId, DisplaySnapshot>,
@@ -85,6 +89,8 @@ impl RuntimeState {
         cfg: Config,
         hw: HardwareInventory,
         active: Vec<Page>,
+        geometry: Option<PanelGeometry>,
+        sink: Box<dyn PublicationSink>,
     ) -> Self {
         let light = super::super::kdeglobals_background(&paths.kdeglobals)
             .is_some_and(super::super::is_light_rgb);
@@ -103,7 +109,12 @@ impl RuntimeState {
             css_stamp: mtime(&css_path),
             overlay_stamp: overlay_path.as_deref().and_then(mtime),
             theme_reconciliation_pending: true,
-            observed_page_index: page_index(paths, active.len()),
+            page_index: 0,
+            announced_selection: None,
+            leases: Leases::default(),
+            geometry,
+            sink,
+            service_error: None,
             cfg,
             hw,
             active,
@@ -164,7 +175,7 @@ impl RuntimeState {
     }
 
     pub(super) fn selected_page(&self) -> (usize, PageId) {
-        let index = self.observed_page_index % self.active.len().max(1);
+        let index = self.page_index.min(self.active.len().saturating_sub(1));
         (index, PageId::from_id(self.active[index].id))
     }
 
@@ -195,11 +206,6 @@ impl RuntimeState {
         {
             self.graph_render_requested = None;
         }
-    }
-
-    pub(super) fn observe_selected_page(&mut self, paths: &DaemonPaths) -> (usize, PageId) {
-        self.observed_page_index = page_index(paths, self.active.len());
-        self.selected_page()
     }
 
     pub(super) fn can_commit(&self, scheduler: &Scheduler, completion: &JobCompletion) -> bool {
@@ -549,10 +555,9 @@ impl RuntimeState {
         tooltip: bool,
         scheduler: &mut Scheduler,
         roots: &FilesystemRoots,
-        paths: &DaemonPaths,
         snapshot: ClockSnapshot,
         boot: ClockSnapshot,
-    ) -> Result<Option<Transition>> {
+    ) -> Option<Transition> {
         let render_started = self.profile.as_ref().map(|_| Instant::now());
         self.readings.assembled_at = snapshot;
         if matches!(
@@ -565,7 +570,11 @@ impl RuntimeState {
         if panel {
             let width = PanelFormatter::new(&self.cfg, &self.hw).canonical_width(&self.readings);
             let previous_width = self.cfg.display.tooltip_width;
-            apply_canonical_width(&mut self.cfg, i32::try_from(width).unwrap_or(i32::MAX));
+            apply_canonical_width(
+                &mut self.cfg,
+                i32::try_from(width).unwrap_or(i32::MAX),
+                self.geometry.and_then(|geometry| geometry.tooltip_adv),
+            );
             if self.cfg.display.tooltip_width != previous_width {
                 self.rendered_graph = None;
                 self.render_generation = self.render_generation.wrapping_add(1);
@@ -573,9 +582,7 @@ impl RuntimeState {
             let html = PanelFormatter::with_now_unix(&self.cfg, &self.hw, clock_unix(snapshot))
                 .format_panel(&self.readings, &self.css);
             if self.panel_html.as_ref() != Some(&html) {
-                if self.profile.is_none() {
-                    write_atomic(&paths.panel, &html)?;
-                }
+                self.sink.panel(&html);
                 self.panel_html = Some(html);
             }
             if self.profile.is_none() {
@@ -592,7 +599,7 @@ impl RuntimeState {
             }));
         }
         if tooltip {
-            self.publish_tooltip(reason, roots, paths)?;
+            self.publish_tooltip(reason, roots);
         }
         if let (Some(profile), Some(started)) = (&self.profile, render_started) {
             let render = started.elapsed();
@@ -608,15 +615,10 @@ impl RuntimeState {
                 skipped_display_deadlines,
             );
         }
-        Ok(acknowledgement)
+        acknowledgement
     }
 
-    fn publish_tooltip(
-        &mut self,
-        reason: PublishReason,
-        roots: &FilesystemRoots,
-        paths: &DaemonPaths,
-    ) -> Result<()> {
+    fn publish_tooltip(&mut self, reason: PublishReason, roots: &FilesystemRoots) {
         let (index, selected) = self.selected_page();
         let html = if selected == PageId::Graphs {
             self.rendered_graph
@@ -651,12 +653,9 @@ impl RuntimeState {
         if let Some(html) = html
             && self.tooltip_html.as_ref() != Some(&html)
         {
-            if self.profile.is_none() {
-                write_atomic(&paths.tooltip, &html)?;
-            }
+            self.sink.tooltip(&html);
             self.tooltip_html = Some(html);
         }
-        Ok(())
     }
 
     fn pending_page(&self, index: usize) -> String {
@@ -751,8 +750,11 @@ pub(super) fn config_watch_paths(config_path: Option<&Path>) -> (PathBuf, Vec<Pa
     )
 }
 
-pub(super) fn load_replacement(config_path: Option<&Path>) -> Result<Config> {
-    load_config(config_path, None).map_err(Into::into)
+pub(super) fn load_replacement(
+    config_path: Option<&Path>,
+    geometry: Option<PanelGeometry>,
+) -> Result<Config> {
+    load_config_with_geometry(config_path, None, geometry).map_err(Into::into)
 }
 
 pub(super) fn build_replacement_pages(cfg: &Config) -> Vec<Page> {

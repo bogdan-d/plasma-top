@@ -17,7 +17,7 @@ use toml::toml;
 fn apply_canonical_width_sets_resolved_width() {
     let mut cfg = Config::default();
 
-    apply_canonical_width(&mut cfg, TOOLTIP_WIDTH_FLOOR + 6);
+    apply_canonical_width(&mut cfg, TOOLTIP_WIDTH_FLOOR + 6, None);
 
     assert_eq!(cfg.display.tooltip_width, TOOLTIP_WIDTH_FLOOR + 6);
 }
@@ -25,8 +25,8 @@ fn apply_canonical_width_sets_resolved_width() {
 #[test]
 fn apply_canonical_width_does_not_ratchet() {
     let mut cfg = Config::default();
-    apply_canonical_width(&mut cfg, TOOLTIP_WIDTH_FLOOR + 12);
-    apply_canonical_width(&mut cfg, TOOLTIP_WIDTH_FLOOR + 4);
+    apply_canonical_width(&mut cfg, TOOLTIP_WIDTH_FLOOR + 12, None);
+    apply_canonical_width(&mut cfg, TOOLTIP_WIDTH_FLOOR + 4, None);
 
     // Follows down, not stuck on the previous max.
     assert_eq!(cfg.display.tooltip_width, TOOLTIP_WIDTH_FLOOR + 4);
@@ -35,7 +35,7 @@ fn apply_canonical_width_does_not_ratchet() {
 #[test]
 fn apply_canonical_width_floors_at_builtin_minimum() {
     let mut cfg = Config::default();
-    apply_canonical_width(&mut cfg, TOOLTIP_WIDTH_FLOOR - 10);
+    apply_canonical_width(&mut cfg, TOOLTIP_WIDTH_FLOOR - 10, None);
 
     assert_eq!(cfg.display.tooltip_width, TOOLTIP_WIDTH_FLOOR);
 }
@@ -44,7 +44,7 @@ fn apply_canonical_width_floors_at_builtin_minimum() {
 fn apply_canonical_width_ignores_nonpositive() {
     let mut cfg = Config::default();
     cfg.display.tooltip_width = 42;
-    apply_canonical_width(&mut cfg, 0);
+    apply_canonical_width(&mut cfg, 0, None);
 
     assert_eq!(cfg.display.tooltip_width, 42);
 }

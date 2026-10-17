@@ -29,6 +29,8 @@ fn runtime() -> tokio::runtime::Runtime {
         .expect("paused runtime")
 }
 
+#[path = "tests/applet.rs"]
+mod applet_tests;
 #[path = "tests/completion.rs"]
 mod completion_tests;
 #[path = "tests/control.rs"]
@@ -39,8 +41,11 @@ mod graph_render_tests;
 mod integration;
 #[path = "tests/reload.rs"]
 mod reload_tests;
+#[path = "tests/sink.rs"]
+mod sink;
 #[path = "tests/state.rs"]
 mod state_tests;
+use sink::{Frame, RecordingSink, recorded_state, test_state};
 
 fn job(owner: OwnerId, kind: JobKind, startup_panel: bool) -> JobSpec {
     let mut spec = JobSpec::fast(JobId::singleton(owner, kind), Duration::from_millis(250));
@@ -350,16 +355,12 @@ fn panicked_owner_is_classified_as_critical_task_exit() {
 #[test]
 fn first_paint_deadline_writes_real_panel_without_owner_completion() {
     let (root, paths) = test_paths("first-paint");
-    fs::create_dir_all(&paths.state).expect("state root");
-    write_atomic(&paths.page, "0").expect("page state");
+    fs::create_dir_all(&root).expect("test root");
     let cfg = Config::default();
     let hw = HardwareInventory::default();
     let active = build_pages(&cfg.pages.order);
-    let mut runtime_state = RuntimeState::new(&paths, cfg, hw, active);
-    let roots = FilesystemRoots {
-        runtime_root: Some(paths.runtime.clone()),
-        ..FilesystemRoots::default()
-    };
+    let (mut runtime_state, sink) = recorded_state(&paths, cfg, hw, active);
+    let roots = FilesystemRoots::default();
     let mut scheduler = Scheduler::new();
     let _ = startup(
         &mut scheduler,
@@ -387,53 +388,52 @@ fn first_paint_deadline_writes_real_panel_without_owner_completion() {
             true,
             &mut scheduler,
             &roots,
-            &paths,
             ClockSnapshot {
                 monotonic: Duration::from_millis(200),
                 wall: SystemTime::UNIX_EPOCH,
             },
             ClockSnapshot::default(),
         )
-        .expect("publish panel");
-    assert!(fs::read_to_string(&paths.panel).is_ok_and(|html| html.contains("class=\"panel")));
+        .expect("panel acknowledgement");
+    assert!(
+        sink.last_panel()
+            .is_some_and(|html| html.contains("class=\"panel"))
+    );
     let _ = fs::remove_dir_all(root);
 }
 
 #[test]
 fn graphs_page_change_publishes_selected_placeholder_not_previous_page() {
     let (root, paths) = test_paths("graph-placeholder");
-    fs::create_dir_all(&paths.state).expect("state root");
-    write_atomic(&paths.page, "1").expect("page state");
+    fs::create_dir_all(&root).expect("test root");
     let mut cfg = Config::default();
     cfg.pages.order = vec![String::from("graphs")];
     let active = build_pages(&cfg.pages.order);
-    let mut runtime_state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
+    let (mut runtime_state, sink) =
+        recorded_state(&paths, cfg, HardwareInventory::default(), active);
+    runtime_state.page_index = 1;
     runtime_state.tooltip_html = Some(String::from("OLD PAGE"));
     runtime_state.rendered_graph = Some((PageId::Graphs, 0, String::from("OLD GRAPH")));
     let roots = FilesystemRoots {
-        runtime_root: Some(paths.runtime.clone()),
         ..FilesystemRoots::default()
     };
     let mut scheduler = Scheduler::new();
     let _ = startup(&mut scheduler, Vec::new());
 
-    runtime_state
-        .publish(
-            crate::scheduler::PublicationId(1),
-            PublishReason::PageChanged,
-            None,
-            0,
-            false,
-            true,
-            &mut scheduler,
-            &roots,
-            &paths,
-            ClockSnapshot::default(),
-            ClockSnapshot::default(),
-        )
-        .expect("publish graph placeholder");
+    let _ = runtime_state.publish(
+        crate::scheduler::PublicationId(1),
+        PublishReason::PageChanged,
+        None,
+        0,
+        false,
+        true,
+        &mut scheduler,
+        &roots,
+        ClockSnapshot::default(),
+        ClockSnapshot::default(),
+    );
 
-    let html = fs::read_to_string(&paths.tooltip).expect("tooltip output");
+    let html = sink.last_tooltip().expect("tooltip output");
     assert!(html.contains("GRAPHS"));
     assert!(!html.contains("OLD PAGE"));
     assert!(!html.contains("OLD GRAPH"));
@@ -443,10 +443,10 @@ fn graphs_page_change_publishes_selected_placeholder_not_previous_page() {
 #[test]
 fn graph_completion_from_old_style_generation_is_rejected() {
     let (root, paths) = test_paths("stale-graph-style");
-    fs::create_dir_all(&paths.state).expect("state root");
+    fs::create_dir_all(&root).expect("test root");
     let cfg = Config::default();
     let active = build_pages(&cfg.pages.order);
-    let mut runtime_state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
+    let mut runtime_state = test_state(&paths, cfg, HardwareInventory::default(), active);
     runtime_state.style_generation = 2;
     let mut scheduler = Scheduler::new();
     let transition = startup(
@@ -592,10 +592,10 @@ fn suspend_resume_waits_for_cancellation_and_inventory_before_refresh() {
 #[test]
 fn suspend_preempts_start_actions_already_queued_for_dispatch() {
     let (root, paths) = test_paths("suspend-priority");
-    fs::create_dir_all(&paths.state).expect("state root");
+    fs::create_dir_all(&root).expect("test root");
     let cfg = Config::default();
     let active = build_pages(&cfg.pages.order);
-    let state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
+    let state = test_state(&paths, cfg, HardwareInventory::default(), active);
     let mut scheduler = Scheduler::new();
     let transition = startup(&mut scheduler, vec![job(OwnerId::Cpu, JobKind::Cpu, false)]);
     let mut actions = VecDeque::from(transition.actions);
@@ -621,10 +621,10 @@ fn suspend_preempts_start_actions_already_queued_for_dispatch() {
 #[test]
 fn final_suspend_prunes_intermediate_resume_rescan() {
     let (root, paths) = test_paths("sleep-burst");
-    fs::create_dir_all(&paths.state).expect("state root");
+    fs::create_dir_all(&root).expect("test root");
     let cfg = Config::default();
     let active = build_pages(&cfg.pages.order);
-    let state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
+    let state = test_state(&paths, cfg, HardwareInventory::default(), active);
     let mut scheduler = Scheduler::new();
     let _ = startup(&mut scheduler, Vec::new());
     let mut actions = VecDeque::new();
@@ -656,10 +656,10 @@ fn final_suspend_prunes_intermediate_resume_rescan() {
 #[test]
 fn rescan_completion_from_prior_lifecycle_is_rejected() {
     let (root, paths) = test_paths("stale-rescan-lifecycle");
-    fs::create_dir_all(&paths.state).expect("state root");
+    fs::create_dir_all(&root).expect("test root");
     let cfg = Config::default();
     let active = build_pages(&cfg.pages.order);
-    let mut state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
+    let mut state = test_state(&paths, cfg, HardwareInventory::default(), active);
     let mut scheduler = Scheduler::new();
     let _ = startup(&mut scheduler, Vec::new());
     let validity = DispatchValidity::default();
@@ -728,18 +728,10 @@ fn test_paths(label: &str) -> (PathBuf, DaemonPaths) {
         std::process::id(),
         std::thread::current().id()
     ));
-    let runtime = root.join("run/plasma-top");
-    let state = runtime.join("state");
     (
         root.clone(),
         DaemonPaths {
-            runtime: runtime.clone(),
-            state: state.clone(),
-            panel: runtime.join("panel.html"),
-            tooltip: runtime.join("tooltip.html"),
-            page: state.join("page"),
-            npages: state.join("npages"),
-            geom: state.join("geom"),
+            geom_cache: root.join("cache/geom"),
             plasma_config: root.join("appletsrc"),
             kdeglobals: root.join("kdeglobals"),
         },

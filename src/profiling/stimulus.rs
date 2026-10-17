@@ -1,11 +1,11 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
 use crate::adapters::ProductionClock;
-use crate::daemon::DaemonPaths;
+use crate::domain::applet::{AppletRequest, ClientId, InstanceId, PageStep};
 use crate::error::Result;
-use crate::runtime::atomic::write_atomic;
+use crate::fs_atomic::write_atomic;
 use crate::scheduler::{ConfigGeneration, PageId};
 
 use super::{
@@ -19,11 +19,11 @@ const NEXT_DELAY: Duration = Duration::from_millis(100);
 enum Action {
     Dismiss,
     Present,
-    Page(usize),
+    Page(PageStep, usize),
     Config(bool),
 }
 
-/// Serial, bounded external protocol mutations used only by opt-in timed profiling.
+/// Serial, bounded applet requests and config mutations used only by opt-in timed profiling.
 pub(crate) struct ProfileStimuli {
     actions: Vec<Action>,
     next: usize,
@@ -55,8 +55,11 @@ impl ProfileStimuli {
     pub(crate) fn new(config: ProfileStimulusConfig) -> Self {
         let mut measured = Vec::new();
         if config.page_count > 1 {
-            measured.push(Action::Page((config.selected_page + 1) % config.page_count));
-            measured.push(Action::Page(config.selected_page));
+            measured.push(Action::Page(
+                PageStep::Next,
+                (config.selected_page + 1) % config.page_count,
+            ));
+            measured.push(Action::Page(PageStep::Prev, config.selected_page));
         }
         measured.extend([Action::Config(true), Action::Config(false)]);
         let actions = if config.initially_presented {
@@ -103,28 +106,30 @@ impl ProfileStimuli {
         self.actions.get(self.next).map(|_| self.due)
     }
 
-    #[allow(clippy::too_many_arguments)]
+    /// Starts the next due stimulus, returning the applet request the caller must deliver through the applet seam.
     pub(crate) fn inject_due(
         &mut self,
         now: Duration,
-        paths: &DaemonPaths,
         clock: &ProductionClock,
         config_generation: ConfigGeneration,
         overlay: bool,
-    ) -> Result<()> {
+        client: ClientId,
+        instance: InstanceId,
+    ) -> Result<Option<AppletRequest>> {
         if self.pending.is_some() || self.due > now {
-            return Ok(());
+            return Ok(None);
         }
         let Some(&action) = self.actions.get(self.next) else {
-            return Ok(());
+            return Ok(None);
         };
+        let mut request = None;
         let sequence = u64::try_from(self.next)
             .unwrap_or(u64::MAX)
             .saturating_add(1);
         let id = StimulusId(sequence);
         let expectation = match action {
             Action::Dismiss => {
-                remove_if_present(&lease_path(paths))?;
+                request = Some(AppletRequest::Dismiss { client, instance });
                 self.requested_state.presented = false;
                 StimulusExpectation::Presentation {
                     presented: false,
@@ -132,15 +137,15 @@ impl ProfileStimuli {
                 }
             }
             Action::Present => {
-                write_atomic(&lease_path(paths), b"")?;
+                request = Some(AppletRequest::Present { client, instance });
                 self.requested_state.presented = true;
                 StimulusExpectation::Presentation {
                     presented: true,
                     html_publication: true,
                 }
             }
-            Action::Page(page) => {
-                write_atomic(&paths.page, page.to_string().as_bytes())?;
+            Action::Page(step, page) => {
+                request = Some(AppletRequest::StepPage(step));
                 self.requested_state.page_index = page;
                 self.requested_state.page = self.pages[page].clone();
                 StimulusExpectation::Page {
@@ -170,7 +175,7 @@ impl ProfileStimuli {
             clock.snapshot().monotonic,
         );
         self.pending = Some(id);
-        Ok(())
+        Ok(request)
     }
 
     pub(crate) fn time_out(&self, observed_state: ProfileStimulusState) {
@@ -189,19 +194,7 @@ impl ProfileStimuli {
 const fn event_kind(action: Action) -> ProfileEventKind {
     match action {
         Action::Dismiss | Action::Present => ProfileEventKind::Control,
-        Action::Page(_) => ProfileEventKind::Page,
+        Action::Page(..) => ProfileEventKind::Page,
         Action::Config(_) => ProfileEventKind::Config,
-    }
-}
-
-fn lease_path(paths: &DaemonPaths) -> PathBuf {
-    paths.state.join("presented").join("1")
-}
-
-fn remove_if_present(path: &Path) -> std::io::Result<()> {
-    match std::fs::remove_file(path) {
-        Ok(()) => Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(error),
     }
 }

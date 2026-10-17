@@ -442,11 +442,9 @@ impl Default for ClockSnapshot {
     }
 }
 
-/// Filesystem roots shared by runtime, config, sensors, and tests.
+/// Filesystem roots shared by config, sensors, and tests.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FilesystemRoots {
-    /// Runtime publication root.
-    pub runtime_root: Option<PathBuf>,
     /// Cache root.
     pub cache_root: Option<PathBuf>,
     /// Config root.
@@ -460,20 +458,11 @@ pub struct FilesystemRoots {
 impl Default for FilesystemRoots {
     fn default() -> Self {
         Self {
-            runtime_root: None,
             cache_root: None,
             config_root: None,
             proc_root: PathBuf::from("/proc"),
             sys_root: PathBuf::from("/sys"),
         }
-    }
-}
-
-impl FilesystemRoots {
-    /// Returns the future runtime `state/` directory when the runtime root is known.
-    #[must_use]
-    pub fn state_root(&self) -> Option<PathBuf> {
-        self.runtime_root.as_ref().map(|root| root.join("state"))
     }
 }
 

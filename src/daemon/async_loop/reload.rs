@@ -1,7 +1,8 @@
 use super::*;
 
+/// Reloads config after a watched input or applet geometry changed, then refreshes style when the reload took effect.
 #[allow(clippy::too_many_arguments)]
-pub(super) fn check(
+pub(super) fn apply_config_change(
     config_path: Option<&Path>,
     roots: &FilesystemRoots,
     paths: &DaemonPaths,
@@ -11,11 +12,35 @@ pub(super) fn check(
     clock: &ProductionClock,
     actions: &mut VecDeque<SchedulerAction>,
     owner_messages: &mut VecDeque<(OwnerId, OwnerMessage)>,
-) -> Result<bool> {
-    if state.profile.is_none() {
-        cache_live_geom();
+) -> Result<()> {
+    let config_changed = check(
+        config_path,
+        roots,
+        cpu_count,
+        scheduler,
+        state,
+        clock,
+        actions,
+        owner_messages,
+    )?;
+    if config_changed && state.update_style(paths, false) {
+        request_selected_graph(scheduler, state, clock, actions);
     }
-    let new_cfg = match state::load_replacement(config_path) {
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn check(
+    config_path: Option<&Path>,
+    roots: &FilesystemRoots,
+    cpu_count: usize,
+    scheduler: &mut Scheduler,
+    state: &mut RuntimeState,
+    clock: &ProductionClock,
+    actions: &mut VecDeque<SchedulerAction>,
+    owner_messages: &mut VecDeque<(OwnerId, OwnerMessage)>,
+) -> Result<bool> {
+    let new_cfg = match state::load_replacement(config_path, state.geometry) {
         Ok(cfg) => cfg,
         Err(error) => {
             eprintln!("[reload] config reload failed, keeping previous: {error}");
@@ -31,8 +56,7 @@ pub(super) fn check(
     }
     let hardware_changed = hw != state.hw;
     let pages = state::build_replacement_pages(&new_cfg);
-    write_atomic(&paths.npages, &pages.len().to_string())?;
-    state.active = pages.clone();
+    state.replace_pages(pages.clone());
     state.command_cache.retain_pages(&pages);
     for owner in [OwnerId::Page, OwnerId::Process] {
         if !queue_owner_message(
@@ -69,6 +93,7 @@ pub(super) fn check(
             page: selected_page,
         }),
     );
+    state.announce_selection();
     if hardware_changed {
         state.inventory_generation = state.inventory_generation.next();
         let config = state.scheduler_config();

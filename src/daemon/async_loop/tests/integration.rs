@@ -13,7 +13,7 @@ fn realtime_runtime() -> tokio::runtime::Runtime {
 #[test]
 fn production_async_loop_publishes_while_real_owner_task_is_blocked() {
     let (root, paths) = test_paths("production-blocked-owner");
-    fs::create_dir_all(&paths.state).expect("state root");
+    fs::create_dir_all(&root).expect("test root");
     let proc_root = root.join("proc");
     let sys_root = root.join("sys");
     fs::create_dir_all(&proc_root).expect("proc root");
@@ -25,7 +25,6 @@ fn production_async_loop_publishes_while_real_owner_task_is_blocked() {
     )
     .expect("config fixture");
     let roots = FilesystemRoots {
-        runtime_root: Some(paths.runtime.clone()),
         proc_root,
         sys_root,
         ..FilesystemRoots::default()
@@ -33,6 +32,8 @@ fn production_async_loop_publishes_while_real_owner_task_is_blocked() {
     let entered = Arc::new(AtomicBool::new(false));
     let release = Arc::new(Semaphore::new(0));
     let mut io = crate::adapters::ProductionIo::start_without_signals().expect("production I/O");
+    let sink = RecordingSink::default();
+    let (applet_sender, applet_events) = mpsc::channel(1);
     let services = DaemonServices {
         commands: io.commands(),
         dbus: io.dbus(),
@@ -41,27 +42,33 @@ fn production_async_loop_publishes_while_real_owner_task_is_blocked() {
         events: io.take_event_receiver().expect("I/O events"),
         clock: ProductionClock::default(),
         shutdown: io.shutdown_receiver(),
+        applet_events,
+        sink: Box::new(sink.clone()),
         blocked_owner: Some(worker::TestOwnerBlock {
             owner: OwnerId::Disk,
             entered: Arc::clone(&entered),
             release: Arc::clone(&release),
         }),
     };
-    let panel = paths.panel.clone();
     let stopped = Arc::clone(&services.stopped);
     let first_paint_started = Instant::now();
 
     let shutdown_started = realtime_runtime().block_on(async move {
-        let daemon =
-            tokio::spawn(async move { run(Some(&config), &roots, &paths, services, None).await });
+        let daemon = tokio::spawn(async move {
+            let _applet_sender = applet_sender;
+            run(Some(&config), &roots, &paths, services, None).await
+        });
         tokio::time::timeout(Duration::from_secs(1), async {
-            while !panel.exists() || !entered.load(Ordering::Acquire) {
+            while sink.last_panel().is_none() || !entered.load(Ordering::Acquire) {
                 tokio::time::sleep(Duration::from_millis(1)).await;
             }
         })
         .await
         .expect("panel publication while owner blocked");
-        assert!(fs::read_to_string(&panel).is_ok_and(|html| html.contains("class=\"panel")));
+        assert!(
+            sink.last_panel()
+                .is_some_and(|html| html.contains("class=\"panel"))
+        );
         let first_paint_elapsed = first_paint_started.elapsed();
         assert!(first_paint_elapsed >= Duration::from_millis(190));
         assert!(first_paint_elapsed <= Duration::from_millis(250));
@@ -89,7 +96,7 @@ fn production_async_loop_discovers_samples_and_publishes_amd_fields() {
     let driver = sys_root.join("bus/pci/drivers/amdgpu");
     let card = sys_root.join("class/drm/card17");
     let hwmon = device.join("hwmon/hwmon42");
-    for path in [&paths.state, &proc_root, &driver, &card, &hwmon] {
+    for path in [&root, &proc_root, &driver, &card, &hwmon] {
         fs::create_dir_all(path).expect("fixture directory");
     }
     symlink(&device, card.join("device")).expect("DRM device");
@@ -137,12 +144,13 @@ load_avg = false
 server_check = false
 "#).expect("AMD config");
     let roots = FilesystemRoots {
-        runtime_root: Some(paths.runtime.clone()),
         proc_root,
         sys_root,
         ..FilesystemRoots::default()
     };
     let mut io = crate::adapters::ProductionIo::start_without_signals().expect("production I/O");
+    let sink = RecordingSink::default();
+    let (applet_sender, applet_events) = mpsc::channel(1);
     let services = DaemonServices {
         commands: io.commands(),
         dbus: io.dbus(),
@@ -151,16 +159,19 @@ server_check = false
         events: io.take_event_receiver().expect("I/O events"),
         clock: ProductionClock::default(),
         shutdown: io.shutdown_receiver(),
+        applet_events,
+        sink: Box::new(sink.clone()),
         blocked_owner: None,
     };
-    let panel = paths.panel.clone();
     let stopped = Arc::clone(&services.stopped);
     realtime_runtime().block_on(async move {
-        let daemon =
-            tokio::spawn(async move { run(Some(&config), &roots, &paths, services, None).await });
+        let daemon = tokio::spawn(async move {
+            let _applet_sender = applet_sender;
+            run(Some(&config), &roots, &paths, services, None).await
+        });
         let published = tokio::time::timeout(Duration::from_secs(2), async {
             loop {
-                let html = fs::read_to_string(&panel).unwrap_or_default();
+                let html = sink.last_panel().unwrap_or_default();
                 if ["71", "23", "25", "2700", "63", "42", "1800"]
                     .iter()
                     .all(|value| html.contains(value))
@@ -179,6 +190,93 @@ server_check = false
             .expect("daemon result");
         let html = published.expect("all seven AMD fields published");
         assert!(html.contains("class=\"panel"));
+    });
+    io.shutdown();
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn rapid_page_steps_wake_the_idle_loop_and_apply_in_order() {
+    use crate::domain::applet::{AppletRequest, PageStep};
+    let (root, paths) = test_paths("production-rapid-steps");
+    let proc_root = root.join("proc");
+    let sys_root = root.join("sys");
+    for path in [&root, &proc_root, &sys_root] {
+        fs::create_dir_all(path).expect("fixture directory");
+    }
+    let config = root.join("config.toml");
+    fs::write(
+        &config,
+        "[display]\npoll_interval = 30\n[panel]\norder = []\n[tooltip]\norder = []\n[pages]\norder = [\"cpu_cores\", \"graphs\"]\n",
+    )
+    .expect("config fixture");
+    let roots = FilesystemRoots {
+        proc_root,
+        sys_root,
+        ..FilesystemRoots::default()
+    };
+    let sink = RecordingSink::default();
+    let (applet_sender, applet_events) = mpsc::channel(4);
+    let mut io = crate::adapters::ProductionIo::start_without_signals().expect("production I/O");
+    let services = DaemonServices {
+        commands: io.commands(),
+        dbus: io.dbus(),
+        notifications: io.notifications(),
+        stopped: io.stopped(),
+        events: io.take_event_receiver().expect("I/O events"),
+        clock: ProductionClock::default(),
+        shutdown: io.shutdown_receiver(),
+        applet_events,
+        sink: Box::new(sink.clone()),
+        blocked_owner: None,
+    };
+    let stopped = Arc::clone(&services.stopped);
+    let selections = || {
+        sink.frames()
+            .into_iter()
+            .filter_map(|frame| match frame {
+                Frame::Selection(page, count) => Some((page, count)),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    realtime_runtime().block_on(async {
+        let daemon =
+            tokio::spawn(async move { run(Some(&config), &roots, &paths, services, None).await });
+        // Let first paint pass so the loop is idle with nothing due for a long time.
+        tokio::time::sleep(Duration::from_millis(400)).await;
+        let sent = Instant::now();
+        for step in [
+            PageStep::Next,
+            PageStep::Next,
+            PageStep::Next,
+            PageStep::Prev,
+            PageStep::Next,
+            PageStep::Prev,
+        ] {
+            applet_sender
+                .send(AppletEvent::Request(AppletRequest::StepPage(step)))
+                .await
+                .expect("deliver step");
+        }
+        tokio::time::timeout(Duration::from_millis(200), async {
+            while selections().len() < 7 {
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+        })
+        .await
+        .expect("every step applied promptly");
+        assert!(sent.elapsed() < Duration::from_millis(200));
+        assert_eq!(
+            selections(),
+            vec![(0, 3), (1, 3), (2, 3), (0, 3), (2, 3), (0, 3), (2, 3)]
+        );
+        stopped.store(true, Ordering::Release);
+        tokio::time::timeout(Duration::from_secs(1), daemon)
+            .await
+            .expect("bounded shutdown")
+            .expect("daemon task")
+            .expect("daemon result");
     });
     io.shutdown();
     let _ = fs::remove_dir_all(root);

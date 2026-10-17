@@ -19,6 +19,7 @@ use toml::Table;
 use super::Config;
 use super::assets::{home_dir, parent_or_dot};
 use super::{BAR_SAFETY_PX, COLUMN_DIGIT_RATIO, CSS_ADVANCE_RATIO};
+use crate::domain::applet::AppletGeometry;
 
 /// Default location of the live Plasma appletsrc (matches Python
 /// `PLASMA_APPLETSRC`).
@@ -29,10 +30,9 @@ pub fn plasma_appletsrc_path() -> PathBuf {
         .join("plasma-org.kde.plasma.desktop-appletsrc")
 }
 
-/// Persistent geom cache (matches Python `GEOM_CACHE`).
+/// Persistent geometry cache.
 ///
-/// The runtime dir is tmpfs, wiped at logout; this cache survives reboots so
-/// the first paint after a cold start is already width-fitted.
+/// The applet reports geometry only after it starts; this cache survives reboots so the first paint after a cold start is already width-fitted.
 #[must_use]
 pub fn geom_cache_path() -> PathBuf {
     home_dir().join(".cache").join("plasma-top").join("geom")
@@ -41,8 +41,8 @@ pub fn geom_cache_path() -> PathBuf {
 /// Panel facts used at load time.
 ///
 /// Orientation is always resolvable (defaults vertical); the measured
-/// `usable_px` and `glyph_adv` are present only when the plasmoid has
-/// published a geometry file. `tooltip_adv` is orientation-independent and
+/// `usable_px` and `glyph_adv` are present only once the applet has
+/// measured the panel. `tooltip_adv` is orientation-independent and
 /// sizes the graphs-page PNGs to the tooltip's real text width.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PanelGeometry {
@@ -194,16 +194,11 @@ pub fn detect_vertical_from_appletsrc() -> bool {
     detect_vertical_from_appletsrc_at(&plasma_appletsrc_path())
 }
 
-// ── Geom file parsing ───────────────────────────────────────────────────────
+// ── Geometry cache ──────────────────────────────────────────────────────────
 
-/// Parses a geom line.
+/// Parses a geometry cache line: `<usable_px> <glyph_adv_px> <vertical 0|1> [tooltip_adv_px]`.
 ///
-/// Mirrors Python's `_parse_geom`: `<usable_px> <glyph_adv_px> <vertical 0|1>
-/// [tooltip_adv_px]`. Returns `None` when malformed or degenerate so a
-/// half-written or startup-zero file falls back to the config's own values
-/// rather than producing a nonsensical fit. The tooltip advance is optional
-/// (absent on geoms from the pre-tooltip-metrics plasmoid); a non-positive
-/// tooltip advance is dropped to `None`.
+/// Returns `None` when malformed or degenerate so a damaged cache falls back to the config's own values. Caches written before tooltip metrics existed lack the fourth field; a non-positive tooltip advance is dropped to `None`.
 #[must_use]
 pub fn parse_geom(text: &str) -> Option<PanelGeometry> {
     let parts: Vec<&str> = text.split_whitespace().collect();
@@ -233,84 +228,55 @@ pub fn parse_geom(text: &str) -> Option<PanelGeometry> {
     })
 }
 
-/// Reads the live geom file or the persisted cache when live is absent.
-///
-/// Mirrors Python's `_read_geom_file`. At session start tmpfs is wiped, so
-/// only the cache carries a fit until the plasmoid republishes — this is
-/// what lets the boot paint be width-fitted from the previous session. The
-/// cache write-back is the daemon's job ([`cache_live_geom_at`]), not this
-/// read path, so config stays side-effect-free.
-#[must_use]
-#[expect(
-    clippy::collapsible_if,
-    reason = "the live read and parse stages precede the cache fallback"
-)]
-pub fn read_geom_file_at(live: &Path, cache: &Path) -> Option<PanelGeometry> {
-    if let Ok(text) = std::fs::read_to_string(live) {
-        if let Some(geo) = parse_geom(&text) {
-            return Some(geo);
+impl From<AppletGeometry> for PanelGeometry {
+    fn from(geometry: AppletGeometry) -> Self {
+        Self {
+            vertical: geometry.vertical(),
+            usable_px: Some(geometry.usable_px()),
+            glyph_adv: Some(geometry.glyph_advance()),
+            tooltip_adv: Some(geometry.tooltip_advance()),
         }
     }
+}
+
+/// Reads the last applet-measured geometry persisted across reboots.
+#[must_use]
+pub fn read_geom_cache(cache: &Path) -> Option<PanelGeometry> {
     std::fs::read_to_string(cache)
         .ok()
         .and_then(|text| parse_geom(&text))
 }
 
-/// Reads the live geom file from its default locations.
-#[must_use]
-pub fn read_geom_file() -> Option<PanelGeometry> {
-    read_geom_file_at(&crate::runtime::geom_file(), &geom_cache_path())
-}
-
-/// Persists a valid live geom file to the cache.
+/// Persists measured geometry so the first paint after a reboot is width-fitted.
 ///
-/// Mirrors Python's `cache_live_geom`. Best-effort: a read/write failure or
-/// a degenerate file is silently ignored — never disturbs a render. Called
-/// by the daemon when the plasmoid publishes a fresh geometry.
-#[expect(
-    clippy::collapsible_if,
-    reason = "parent discovery and best-effort directory creation are separate stages"
-)]
-pub fn cache_live_geom_at(live: &Path, cache: &Path) {
-    let text = match std::fs::read_to_string(live) {
-        Ok(text) => text,
-        Err(_) => return,
+/// Best-effort: a write failure never disturbs a render.
+pub fn write_geom_cache(cache: &Path, geometry: &PanelGeometry) {
+    let (Some(usable), Some(adv)) = (geometry.usable_px, geometry.glyph_adv) else {
+        return;
     };
-    if parse_geom(&text).is_none() {
+    let mut text = format!("{usable} {adv} {}", u8::from(geometry.vertical));
+    if let Some(tip) = geometry.tooltip_adv {
+        text.push_str(&format!(" {tip}"));
+    }
+    if let Some(parent) = cache.parent()
+        && std::fs::create_dir_all(parent).is_err()
+    {
         return;
     }
-    if let Some(parent) = cache.parent() {
-        if std::fs::create_dir_all(parent).is_err() {
-            return;
-        }
-    }
-    let _ = std::fs::write(cache, text);
-}
-
-/// Persists the live geom file from its default locations.
-pub fn cache_live_geom() {
-    cache_live_geom_at(&crate::runtime::geom_file(), &geom_cache_path());
+    let _ = crate::fs_atomic::write_atomic(cache, text.as_bytes());
 }
 
 /// Resolves the panel geometry for [`super::load_config`].
 ///
-/// Mirrors Python's `detect_panel_geometry`: orientation comes from
-/// appletsrc (Plasma updates it synchronously when the panel moves); the
-/// measured width/advance come from the geom file when its own orientation
-/// flag matches the resolved one (a stale geom still describing the old edge
-/// was measured on the wrong axis, so we keep the orientation but skip its
-/// numbers). The tooltip advance is orientation-independent, so it survives
-/// the stale check.
+/// Orientation comes from appletsrc, which Plasma updates synchronously when the panel moves. The measured width and advance apply only when their own orientation matches: a measurement still describing the old edge was taken on the wrong axis. The tooltip advance is orientation-independent, so it survives that check.
 #[must_use]
 pub fn detect_panel_geometry_at(
     appletsrc: &Path,
-    live_geom: &Path,
-    cache_geom: &Path,
+    measured: Option<PanelGeometry>,
 ) -> PanelGeometry {
     let vertical = detect_vertical_from_appletsrc_at(appletsrc);
-    let geo = read_geom_file_at(live_geom, cache_geom);
-    let tooltip_adv = geo.and_then(|g| g.tooltip_adv);
-    match geo {
+    let tooltip_adv = measured.and_then(|g| g.tooltip_adv);
+    match measured {
         Some(g) if g.vertical == vertical => PanelGeometry {
             vertical,
             usable_px: g.usable_px,
@@ -324,22 +290,6 @@ pub fn detect_panel_geometry_at(
             tooltip_adv,
         },
     }
-}
-
-/// Resolves panel geometry from the default locations.
-#[must_use]
-pub fn detect_panel_geometry() -> PanelGeometry {
-    detect_panel_geometry_at(
-        &plasma_appletsrc_path(),
-        &crate::runtime::geom_file(),
-        &geom_cache_path(),
-    )
-}
-
-/// Orientation alone (see [`detect_panel_geometry`]).
-#[must_use]
-pub fn detect_vertical_layout() -> bool {
-    detect_panel_geometry().vertical
 }
 
 // ── Auto-fit ────────────────────────────────────────────────────────────────

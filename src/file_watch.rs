@@ -28,13 +28,10 @@ pub(crate) enum WatchSource {
     Config,
     MachineConfig,
     PlasmaConfig,
-    Geometry,
     Theme,
     Style,
-    Page,
     Updates,
     Server,
-    Presentation,
 }
 
 /// One exact path assigned to a logical source.

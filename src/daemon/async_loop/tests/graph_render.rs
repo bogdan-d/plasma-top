@@ -34,12 +34,12 @@ fn graph_fixture(
     Vec<JobTicket>,
 ) {
     let (root, paths) = test_paths(label);
-    fs::create_dir_all(&paths.state).expect("state root");
-    write_atomic(&paths.page, "1").expect("graph page state");
+    fs::create_dir_all(&root).expect("test root");
     let mut cfg = Config::default();
     cfg.pages.order = vec![String::from("graphs")];
     let active = build_pages(&cfg.pages.order);
-    let mut state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
+    let mut state = test_state(&paths, cfg, HardwareInventory::default(), active);
+    state.page_index = 1;
     let mut scheduler = Scheduler::new();
     let started = scheduler.handle(SchedulerEvent::Startup {
         at: SchedulerTime::ZERO,
@@ -111,7 +111,6 @@ fn retained_activation_graph_stays_visible_until_fresh_render_publishes() {
     state.render_generation = 2;
     state.graph_render_requested = None;
     state.tooltip_html = Some(retained.clone());
-    write_atomic(&paths.tooltip, &retained).expect("retained tooltip");
     let roots = FilesystemRoots::default();
     let clock = ProductionClock::default();
     let validity = DispatchValidity::default();
@@ -137,7 +136,6 @@ fn retained_activation_graph_stays_visible_until_fresh_render_publishes() {
         &mut scheduler,
         &mut state,
         &roots,
-        &paths,
         &clock,
         ClockSnapshot::default(),
         &notification_sender,
@@ -145,10 +143,6 @@ fn retained_activation_graph_stays_visible_until_fresh_render_publishes() {
     )
     .expect("drain activation");
     assert_eq!(state.tooltip_html.as_deref(), Some(retained.as_str()));
-    assert_eq!(
-        fs::read_to_string(&paths.tooltip).expect("tooltip frame"),
-        retained
-    );
     assert_eq!(
         owner_messages
             .iter()
@@ -232,7 +226,7 @@ fn render_generation_rollover_keeps_new_graph_input_requestable() {
 
 #[test]
 fn invalidated_cpu_graph_inputs_become_requestable_but_unrelated_input_does_not() {
-    let (root, paths, mut state, mut scheduler, _) = graph_fixture("graph-invalidation");
+    let (root, _paths, mut state, mut scheduler, _) = graph_fixture("graph-invalidation");
     state.readings.cpu_usage = Some(42);
     state.readings.cpu_history = vec![30, 42];
     state.rendered_graph = Some((PageId::Graphs, 1, String::from("current graph")));
@@ -259,7 +253,6 @@ fn invalidated_cpu_graph_inputs_become_requestable_but_unrelated_input_does_not(
             &mut scheduler,
             &mut state,
             &roots,
-            &paths,
             &clock,
             ClockSnapshot::default(),
             &notification_sender,
@@ -290,7 +283,6 @@ fn invalidated_cpu_graph_inputs_become_requestable_but_unrelated_input_does_not(
         &mut scheduler,
         &mut state,
         &roots,
-        &paths,
         &clock,
         ClockSnapshot::default(),
         &notification_sender,
@@ -386,7 +378,6 @@ fn cancelled_dirty_graph_reservation_allows_newest_replacement_render() {
         &mut scheduler,
         &mut state,
         &roots,
-        &paths,
         &clock,
         ClockSnapshot::default(),
         &notification_sender,
@@ -426,7 +417,6 @@ fn cancelled_dirty_graph_reservation_allows_newest_replacement_render() {
         &mut scheduler,
         &mut state,
         &roots,
-        &paths,
         &clock,
         ClockSnapshot::default(),
         &notification_sender,
@@ -443,7 +433,6 @@ fn cancelled_dirty_graph_reservation_allows_newest_replacement_render() {
         &mut scheduler,
         &mut state,
         &roots,
-        &paths,
         &clock,
         ClockSnapshot::default(),
         &notification_sender,
@@ -581,7 +570,6 @@ fn graph_input_burst_rejects_stale_render_and_dispatches_one_newest_follow_up() 
         &mut scheduler,
         &mut state,
         &roots,
-        &paths,
         &clock,
         ClockSnapshot::default(),
         &notification_sender,

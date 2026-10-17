@@ -1,7 +1,7 @@
 //! Filesystem root for fixture-based tests.
 //!
 //! [`FixtureRoot`] is the virtual `/` for every test that needs to read procfs,
-//! sysfs, or runtime-equivalent files. Tests build a [`FixtureRoot`] from a
+//! or sysfs files. Tests build a [`FixtureRoot`] from a
 //! fixture directory under `tests/fixtures/` and pass it to the production
 //! filesystem readers (the future `sensors/source.rs`) so no test ever touches
 //! the host `/proc` or `/sys`.
@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 /// Resolved root of a fixture tree, typically under `tests/fixtures/`.
 ///
 /// Acts as a virtual `/` for fixture-based tests: every host boundary (`proc/`,
-/// `sys/`, `run/`) is mapped under this root so no test ever touches the real
+/// `sys/`) is mapped under this root so no test ever touches the real
 /// filesystem.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FixtureRoot {
@@ -65,16 +65,6 @@ impl FixtureRoot {
     #[must_use]
     pub fn sys(&self) -> PathBuf {
         self.root.join("sys")
-    }
-
-    /// Returns the `run/` subtree (the runtime-equivalent fixture directory).
-    ///
-    /// Production code reads its runtime files from `$XDG_RUNTIME_DIR/plasma-top`;
-    /// tests stage the same layout under `<fixture_root>/run/plasma-top` and
-    /// point the runtime lane at this path.
-    #[must_use]
-    pub fn run(&self) -> PathBuf {
-        self.root.join("run")
     }
 }
 

@@ -45,11 +45,10 @@ pub use self::schema::{
     ServerCheckConfig, SparkConfig, Surface, SystemUpdatesConfig, ThresholdConfig,
 };
 pub use geometry::{
-    PanelGeometry, auto_fit_panel, cache_live_geom, cache_live_geom_at, detect_machine,
-    detect_machine_with_dmi, detect_panel_geometry, detect_panel_geometry_at,
-    detect_vertical_from_appletsrc, detect_vertical_from_appletsrc_at,
-    detect_vertical_from_appletsrc_text, detect_vertical_layout, dmi_paths, geom_cache_path,
-    parse_geom, parse_kde_ini, plasma_appletsrc_path, read_geom_file, read_geom_file_at,
+    PanelGeometry, auto_fit_panel, detect_machine, detect_machine_with_dmi,
+    detect_panel_geometry_at, detect_vertical_from_appletsrc, detect_vertical_from_appletsrc_at,
+    detect_vertical_from_appletsrc_text, dmi_paths, geom_cache_path, parse_geom, parse_kde_ini,
+    plasma_appletsrc_path, read_geom_cache, write_geom_cache,
 };
 
 // ── Constants ───────────────────────────────────────────────────────────────
@@ -195,9 +194,24 @@ impl From<toml::de::Error> for ConfigError {
 /// path) fall back to an empty `Config`, matching Python — they are not
 /// errors.
 pub fn load_config(path: Option<&Path>, vertical: Option<bool>) -> Result<Config, ConfigError> {
+    load_config_with_geometry(path, vertical, read_geom_cache(&geom_cache_path()))
+}
+
+/// Same as [`load_config`], but auto-fits from `measured` instead of the persistent geometry cache.
+///
+/// The daemon holds the applet's latest measurement in memory and passes it here.
+///
+/// # Errors
+///
+/// Same failure modes as [`load_config`].
+pub fn load_config_with_geometry(
+    path: Option<&Path>,
+    vertical: Option<bool>,
+    measured: Option<PanelGeometry>,
+) -> Result<Config, ConfigError> {
     let machines = load_machines(path);
     let machine = detect_machine(&machines);
-    load_config_with_machine(path, vertical, &machines, machine.as_deref())
+    load_config_with_machine(path, vertical, measured, &machines, machine.as_deref())
 }
 
 /// Test-friendly entry point: takes the DMI board/product strings
@@ -219,7 +233,8 @@ pub fn load_config_with_dmi(
 ) -> Result<Config, ConfigError> {
     let machines = load_machines(path);
     let machine = detect_machine_with_dmi(&machines, board, product);
-    load_config_with_machine(path, vertical, &machines, machine.as_deref())
+    let measured = read_geom_cache(&geom_cache_path());
+    load_config_with_machine(path, vertical, measured, &machines, machine.as_deref())
 }
 
 /// The full resolution pipeline once the machine block (if any) is known.
@@ -248,6 +263,7 @@ pub fn load_config_with_dmi(
 fn load_config_with_machine(
     path: Option<&Path>,
     vertical: Option<bool>,
+    measured: Option<PanelGeometry>,
     machines: &Table,
     machine: Option<&str>,
 ) -> Result<Config, ConfigError> {
@@ -289,21 +305,11 @@ fn load_config_with_machine(
         .join(format!("{language}.toml"));
     let labels = load_toml_at(&labels_path);
 
-    let geo = if let Some(vertical_forced) = vertical {
-        // Skip the live appletsrc read when the caller forces orientation:
-        // the geom file may briefly disagree right after a panel move, and
-        // tests pass `vertical = Some(_)` precisely to avoid that.
-        // We still consult the geom file for the auto-fit measurements.
-        let mut g = detect_panel_geometry_at(
-            &plasma_appletsrc_path(),
-            &crate::runtime::geom_file(),
-            &geom_cache_path(),
-        );
-        g.vertical = vertical_forced;
-        g
-    } else {
-        detect_panel_geometry()
-    };
+    let mut geo = detect_panel_geometry_at(&plasma_appletsrc_path(), measured);
+    if let Some(vertical_forced) = vertical {
+        // A forced orientation wins over appletsrc, which may briefly disagree right after a panel move.
+        geo.vertical = vertical_forced;
+    }
     let is_vertical = vertical.unwrap_or(geo.vertical);
 
     let raw_panel_value = raw
@@ -377,31 +383,18 @@ where
     T::deserialize(value).map_err(ConfigError::from)
 }
 
-/// Resolves the tooltip width every page renders to, then re-derives the
-/// graphs PNG width from it.
+/// Resolves the tooltip width every page renders to, then re-derives the graphs PNG width from it.
 ///
-/// Mirrors `src/config.py::apply_canonical_width` (lines 719–735).
-/// `canonical` comes from the formatter (which needs readings, so this
-/// can't run inside [`load_config`]); the daemon/render call it once a
-/// readings snapshot exists. `0` = skip (nothing to measure), leaving the
-/// default.
+/// `canonical` comes from the formatter, which needs readings, so this cannot run inside [`load_config`]; the daemon and `render` call it once a readings snapshot exists. `0` skips (nothing to measure), leaving the default.
 ///
-/// `tooltip_width` is written fresh from the floor each call (not read
-/// back), so a shrinking canonical — a disk unmounted, the interface
-/// shortened — lowers the width again instead of the field ratcheting up
-/// against its own previous max.
-///
-/// To avoid hitting the live Plasma appletsrc from a hot reload path, the
-/// tooltip-advance lookup uses [`geometry::geom_cache_path`] as the
-/// fallback when the live geom file is absent (matches Python's
-/// `_read_geom_file` behavior via [`geometry::read_geom_file`]).
-pub fn apply_canonical_width(cfg: &mut Config, canonical: i32) {
+/// `tooltip_width` is written fresh from the floor each call rather than read back, so a shrinking canonical width (a disk unmounted, an interface name shortened) lowers it again instead of ratcheting against its own previous maximum. `tooltip_adv` is the applet-measured tooltip glyph advance, when known.
+pub fn apply_canonical_width(cfg: &mut Config, canonical: i32, tooltip_adv: Option<f64>) {
     if canonical <= 0 {
         return;
     }
     let tooltip_width = TOOLTIP_WIDTH_FLOOR.max(canonical);
     cfg.display.tooltip_width = tooltip_width;
-    if let Some(tip) = read_geom_file().and_then(|geo| geo.tooltip_adv) {
+    if let Some(tip) = tooltip_adv {
         cfg.pages.graph_width = (f64::from(tooltip_width) * tip).round() as i32;
     }
 }

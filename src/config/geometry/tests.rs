@@ -217,7 +217,7 @@ fn parse_geom_returns_none_for_short_or_malformed() {
     assert!(parse_geom("42 6 1 0\n").is_some_and(|g| g.tooltip_adv.is_none()));
 }
 
-// ── read_geom_file_at + cache_live_geom_at ──────────────────────────────
+// ── geometry cache ──────────────────────────────────────────────────────
 
 fn write_tmp(name: &str, contents: &str) -> PathBuf {
     let path = std::env::temp_dir().join(format!("plasma-top-geom-{name}-{}", std::process::id()));
@@ -226,75 +226,19 @@ fn write_tmp(name: &str, contents: &str) -> PathBuf {
 }
 
 #[test]
-fn read_geom_falls_back_to_cache_when_live_absent() {
-    let cache = write_tmp("cache-1", "42 6.59375 1\n");
-    let live =
-        std::env::temp_dir().join(format!("plasma-top-geom-absent-1-{}", std::process::id()));
-
-    let geo = read_geom_file_at(&live, &cache).unwrap();
-
-    assert_eq!(geo.usable_px, Some(42.0));
-    assert_eq!(geo.glyph_adv, Some(6.59375));
-    let _ = std::fs::remove_file(&cache);
-}
-
-#[test]
-fn read_geom_prefers_live_over_cache() {
-    let live = write_tmp("live-2", "100 5 1\n");
-    let cache = write_tmp("cache-2", "42 6.59375 1\n");
-
-    let geo = read_geom_file_at(&live, &cache).unwrap();
-
-    assert_eq!(geo.usable_px, Some(100.0));
-    let _ = std::fs::remove_file(&live);
-    let _ = std::fs::remove_file(&cache);
-}
-
-#[test]
-fn read_geom_none_when_live_absent_and_no_cache() {
-    let live =
-        std::env::temp_dir().join(format!("plasma-top-geom-absent-2-{}", std::process::id()));
-    let cache =
-        std::env::temp_dir().join(format!("plasma-top-geom-absent-3-{}", std::process::id()));
-
-    assert!(read_geom_file_at(&live, &cache).is_none());
-}
-
-#[test]
-fn cache_live_geom_persists_valid_live() {
-    let live = write_tmp("live-3", "100 5 1\n");
-    let cache_parent =
+fn geometry_cache_round_trips_and_ignores_damage() {
+    let parent =
         std::env::temp_dir().join(format!("plasma-top-geom-cache-sub-{}", std::process::id()));
-    let cache = cache_parent.join("geom_cache");
+    let cache = parent.join("geom");
+    let measured = PanelGeometry::from(AppletGeometry::new(100.0, 5.5, true, 7.25).unwrap());
 
-    cache_live_geom_at(&live, &cache);
+    write_geom_cache(&cache, &measured);
 
-    assert_eq!(std::fs::read_to_string(&cache).unwrap(), "100 5 1\n");
-    let _ = std::fs::remove_file(&live);
-    let _ = std::fs::remove_dir_all(&cache_parent);
-}
-
-#[test]
-fn cache_live_geom_ignores_degenerate_and_absent() {
-    let cache = std::env::temp_dir().join(format!(
-        "plasma-top-geom-cache-degenerate-{}",
-        std::process::id()
-    ));
-    let live = write_tmp("live-4", "0 0 1\n");
-
-    cache_live_geom_at(&live, &cache);
-    assert!(
-        !cache.exists(),
-        "degenerate live geom must not be persisted"
-    );
-
-    let absent =
-        std::env::temp_dir().join(format!("plasma-top-geom-absent-4-{}", std::process::id()));
-    cache_live_geom_at(&absent, &cache);
-    assert!(!cache.exists(), "absent live geom must not create a cache");
-
-    let _ = std::fs::remove_file(&live);
-    let _ = std::fs::remove_file(&cache);
+    assert_eq!(read_geom_cache(&cache), Some(measured));
+    std::fs::write(&cache, "0 0 1\n").unwrap();
+    assert_eq!(read_geom_cache(&cache), None, "degenerate cache");
+    let _ = std::fs::remove_dir_all(&parent);
+    assert_eq!(read_geom_cache(&cache), None, "absent cache");
 }
 
 // ── detect_panel_geometry_at ────────────────────────────────────────────
@@ -307,99 +251,32 @@ fn appletsrc(location: u32) -> String {
 }
 
 #[test]
-fn detect_panel_geometry_reads_geom_file() {
+fn detect_panel_geometry_uses_matching_measurement() {
     let appletsrc_path = write_tmp("appletsrc-v", &appletsrc(5));
-    let geom_path = write_tmp("geom-v", "42 6.59375 1\n");
-    let cache_path = std::env::temp_dir().join(format!(
-        "plasma-top-geom-cache-absent-{}",
-        std::process::id()
-    ));
 
-    let geo = detect_panel_geometry_at(&appletsrc_path, &geom_path, &cache_path);
+    let geo = detect_panel_geometry_at(&appletsrc_path, parse_geom("42 6.59375 1\n"));
 
     assert!(geo.vertical);
     assert_eq!(geo.usable_px, Some(42.0));
     assert_eq!(geo.glyph_adv, Some(6.59375));
-    let _ = std::fs::remove_file(&appletsrc_path);
-    let _ = std::fs::remove_file(&geom_path);
-}
-
-#[test]
-fn detect_panel_geometry_falls_back_to_appletsrc_orientation() {
-    let appletsrc_path = write_tmp("appletsrc-nogeo", &appletsrc(5));
-    let geom_path =
-        std::env::temp_dir().join(format!("plasma-top-geom-nogeo-{}", std::process::id()));
-    let cache_path =
-        std::env::temp_dir().join(format!("plasma-top-geom-nocache-{}", std::process::id()));
-
-    let geo = detect_panel_geometry_at(&appletsrc_path, &geom_path, &cache_path);
-
-    assert!(geo.vertical);
-    assert!(geo.usable_px.is_none());
-    assert!(geo.glyph_adv.is_none());
+    let unmeasured = detect_panel_geometry_at(&appletsrc_path, None);
+    assert!(unmeasured.vertical);
+    assert!(unmeasured.usable_px.is_none());
     let _ = std::fs::remove_file(&appletsrc_path);
 }
 
 #[test]
-fn detect_panel_geometry_ignores_degenerate_geom_file() {
-    let appletsrc_path = write_tmp("appletsrc-zero", &appletsrc(5));
-    let geom_zero = write_tmp("geom-zero", "0 0 1\n");
-    let geom_garbage = write_tmp("geom-garbage", "garbage\n");
-    let cache_absent = std::env::temp_dir().join(format!(
-        "plasma-top-geom-cache-absent2-{}",
-        std::process::id()
-    ));
-
-    for bad in [geom_zero.clone(), geom_garbage.clone()] {
-        let geo = detect_panel_geometry_at(&appletsrc_path, &bad, &cache_absent);
-        assert!(
-            geo.usable_px.is_none(),
-            "degenerate geom `{}` should not produce a fit",
-            bad.display(),
-        );
-    }
-    let _ = std::fs::remove_file(&appletsrc_path);
-    let _ = std::fs::remove_file(&geom_zero);
-    let _ = std::fs::remove_file(&geom_garbage);
-}
-
-#[test]
-fn detect_panel_geometry_stale_geom_orientation_uses_appletsrc() {
-    // Vertical panel (location=5), but the geom file still reports the
-    // old horizontal edge (vertical=0). The orientation stays the
-    // appletsrc's; the measurements for the wrong axis are ignored.
+fn detect_panel_geometry_drops_stale_edge_but_keeps_tooltip_advance() {
+    // Vertical panel (location=5) while the measurement still reports the old horizontal edge: the orientation stays appletsrc's and the wrong-axis numbers are ignored, but the orientation-independent tooltip advance survives.
     let appletsrc_path = write_tmp("appletsrc-stale", &appletsrc(5));
-    let geom_path = write_tmp("geom-stale", "42 6.59375 0\n");
-    let cache_path = std::env::temp_dir().join(format!(
-        "plasma-top-geom-cache-stale-{}",
-        std::process::id()
-    ));
 
-    let geo = detect_panel_geometry_at(&appletsrc_path, &geom_path, &cache_path);
+    let geo = detect_panel_geometry_at(&appletsrc_path, parse_geom("42 6.59375 0 8.0\n"));
 
     assert!(geo.vertical);
     assert!(geo.usable_px.is_none());
     assert!(geo.glyph_adv.is_none());
-    let _ = std::fs::remove_file(&appletsrc_path);
-    let _ = std::fs::remove_file(&geom_path);
-}
-
-#[test]
-fn detect_panel_geometry_keeps_tooltip_adv_across_stale_edge() {
-    // The tooltip advance is orientation-independent; even when the panel
-    // geom's edge is stale, the tooltip advance survives the stale drop.
-    let appletsrc_path = write_tmp("appletsrc-tip", &appletsrc(5));
-    let geom_path = write_tmp("geom-tip", "42 6.59375 0 8.0\n");
-    let cache_path =
-        std::env::temp_dir().join(format!("plasma-top-geom-cache-tip-{}", std::process::id()));
-
-    let geo = detect_panel_geometry_at(&appletsrc_path, &geom_path, &cache_path);
-
-    assert!(geo.vertical);
-    assert!(geo.usable_px.is_none());
     assert_eq!(geo.tooltip_adv, Some(8.0));
     let _ = std::fs::remove_file(&appletsrc_path);
-    let _ = std::fs::remove_file(&geom_path);
 }
 
 #[test]
@@ -408,12 +285,8 @@ fn detect_panel_geometry_defaults_when_unreadable() {
         "plasma-top-appletsrc-absent-{}",
         std::process::id()
     ));
-    let geom_absent =
-        std::env::temp_dir().join(format!("plasma-top-geom-absent-5-{}", std::process::id()));
-    let cache_absent =
-        std::env::temp_dir().join(format!("plasma-top-cache-absent-5-{}", std::process::id()));
 
-    let geo = detect_panel_geometry_at(&appletsrc_absent, &geom_absent, &cache_absent);
+    let geo = detect_panel_geometry_at(&appletsrc_absent, None);
 
     assert_eq!(geo, PanelGeometry::default());
 }

@@ -9,72 +9,32 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::adapters::{ProductionClock, ProductionIo};
-use crate::cli::{PageDirection as CliPageDirection, RenderPage};
-use crate::config::{Config, default_config_path, load_config, load_machines};
+use crate::cli::RenderPage;
+use crate::config::{Config, default_config_path, geom_cache_path, load_config, load_machines};
+use crate::domain::applet::DiscardSink;
 use crate::domain::boundary::{ClockSnapshot, CommandRunner, FilesystemRoots};
-#[cfg(test)]
-use crate::domain::boundary::{DbusFacade, IoEvent, NotificationFacade};
 use crate::domain::readings::{DisplaySnapshot, HardwareInventory};
 use crate::error::{CriticalService, Error, Result};
 use crate::page_commands::{
     CommandLookup, Page, PageCommandCache, PageCommandContext, PageEnvironment, PageRenderKind,
-    PageSource, build_pages, default_click, page_inner_cached, page_inner_with_clock, pager_html,
-    title_html,
+    PageSource, default_click, page_inner_cached, page_inner_with_clock, pager_html, title_html,
 };
-use crate::render::{PageFormatter, PanelFormatter};
-use crate::runtime::{self, atomic::write_atomic as write_atomic_bytes};
-use crate::scheduler::PageId;
-#[cfg(test)]
-use crate::sensors::gpu_nvidia::NvmlFacade;
-#[cfg(test)]
-use crate::sensors::power::BoltBatteryFacade;
-#[cfg(test)]
-use crate::sensors::process::ProcessState;
-#[cfg(test)]
-use crate::sensors::process::read_top_process_page;
-mod async_loop;
-#[cfg(test)]
-mod scheduled_loop;
-#[cfg(test)]
-use crate::sensors::gpu_nvidia;
-#[cfg(test)]
-use std::thread;
-
-#[cfg(test)]
-use crate::domain::state::NotificationState;
-#[cfg(test)]
-use crate::notify::check_and_notify;
 use crate::profiling::{
     ProfileSession, ProfilingCommandRunner, ProfilingDbusFacade, ProfilingNotificationFacade,
 };
-#[cfg(test)]
-use crate::sensors::{
-    CollectCtx, OwnerRefs, collect_with_notifications, cpu, disk, external, gpu_history, gpu_intel,
-    memory, network, power,
-};
+use crate::render::{PageFormatter, PanelFormatter};
+use crate::scheduler::PageId;
 
-/// Page counter check cadence while sleeping between polls.
-pub const PAGE_WAKE_INTERVAL: Duration = Duration::from_millis(100);
+mod async_loop;
+
 /// Bounded startup readiness logging window.
 pub const BOOT_WATCH_WINDOW: Duration = Duration::from_secs(90);
 
-/// Paths owned by one daemon instance. Tests construct these under a temp root.
+/// Files one daemon instance reads or persists outside its config. Tests construct these under a temp root.
 #[derive(Debug, Clone)]
 pub struct DaemonPaths {
-    /// Watched runtime root.
-    pub runtime: PathBuf,
-    /// Runtime state subtree.
-    pub state: PathBuf,
-    /// Panel publication target.
-    pub panel: PathBuf,
-    /// Tooltip publication target.
-    pub tooltip: PathBuf,
-    /// Page counter.
-    pub page: PathBuf,
-    /// Published page count.
-    pub npages: PathBuf,
-    /// Geometry publication.
-    pub geom: PathBuf,
+    /// Persistent applet geometry cache.
+    pub geom_cache: PathBuf,
     /// Plasma applet configuration.
     pub plasma_config: PathBuf,
     /// KDE color scheme configuration.
@@ -82,54 +42,18 @@ pub struct DaemonPaths {
 }
 
 impl DaemonPaths {
-    /// Resolves production paths from XDG/home/runtime contracts.
+    /// Resolves production paths from XDG and home contracts.
     #[must_use]
     pub fn production() -> Self {
         let home = std::env::var_os("HOME").map_or_else(PathBuf::new, PathBuf::from);
         Self {
-            runtime: runtime::runtime_dir(),
-            state: runtime::state_dir(),
-            panel: runtime::panel_file(),
-            tooltip: runtime::tooltip_file(),
-            page: runtime::page_file(),
-            npages: runtime::npages_file(),
-            geom: runtime::geom_file(),
+            geom_cache: geom_cache_path(),
             plasma_config: home
                 .join(".config")
                 .join("plasma-org.kde.plasma.desktop-appletsrc"),
             kdeglobals: home.join(".config").join("kdeglobals"),
         }
     }
-}
-
-/// Clock/sleep/shutdown seam used by deterministic daemon tests.
-#[cfg(test)]
-pub trait LoopControl {
-    /// Samples current clocks.
-    fn snapshot(&mut self) -> ClockSnapshot;
-    /// Sleeps or advances a fake clock.
-    fn sleep(&mut self, duration: Duration);
-    /// Whether shutdown was requested.
-    fn should_stop(&self) -> bool;
-    /// Drains async service signals available at this scheduler wake.
-    fn drain_io_events(&mut self) -> Vec<IoEvent> {
-        Vec::new()
-    }
-}
-
-/// Production/test boundary bundle retained across daemon polls.
-#[cfg(test)]
-pub struct DaemonBoundaries<'a> {
-    /// Subprocess adapter.
-    pub commands: &'a mut dyn CommandRunner,
-    /// System/session D-Bus adapter.
-    pub dbus: &'a mut dyn DbusFacade,
-    /// Desktop notifications.
-    pub notifications: &'a mut dyn NotificationFacade,
-    /// Optional runtime-loaded NVML adapter.
-    pub nvml: Option<&'a mut (dyn NvmlFacade + 'a)>,
-    /// Optional Bolt HID adapter.
-    pub bolt: Option<&'a mut (dyn BoltBatteryFacade + 'a)>,
 }
 
 /// Parses KDE's `r,g,b` value. Extra alpha fields are ignored.
@@ -221,47 +145,6 @@ pub fn read_css(base: &Path, overlay: Option<&Path>) -> String {
 
 fn mtime(path: &Path) -> Option<SystemTime> {
     path.metadata().and_then(|meta| meta.modified()).ok()
-}
-
-fn write_atomic(path: &Path, content: &str) -> std::io::Result<()> {
-    write_atomic_bytes(path, content.as_bytes())
-}
-
-fn page_index(paths: &DaemonPaths, count: usize) -> usize {
-    let raw = fs::read_to_string(&paths.page)
-        .ok()
-        .and_then(|text| text.trim().parse::<i64>().ok())
-        .unwrap_or(0);
-    usize::try_from(raw.rem_euclid(i64::try_from(count.max(1)).unwrap_or(i64::MAX))).unwrap_or(0)
-}
-
-fn publish_pages(paths: &DaemonPaths, cfg: &Config) -> Result<Vec<Page>> {
-    let pages = build_pages(&cfg.pages.order);
-    write_atomic(&paths.npages, &pages.len().to_string())?;
-    Ok(pages)
-}
-
-#[cfg(test)]
-fn replace_page_registry(
-    paths: &DaemonPaths,
-    cfg: &Config,
-    active: &mut Vec<Page>,
-    command_cache: &mut PageCommandCache,
-    process: &mut ProcessState,
-) -> Result<()> {
-    let pages = publish_pages(paths, cfg)?;
-    command_cache.retain_pages(&pages);
-    let removed_process_page = active
-        .iter()
-        .any(|page| page.render() == Some(PageRenderKind::TopProcess))
-        && !pages
-            .iter()
-            .any(|page| page.render() == Some(PageRenderKind::TopProcess));
-    if removed_process_page {
-        process.reset_page();
-    }
-    *active = pages;
-    Ok(())
 }
 
 pub(crate) fn executable_lookup() -> CommandLookup {
@@ -419,12 +302,6 @@ fn insert_before_tooltip_close(mut html: String, footer: &str) -> String {
     html
 }
 
-fn cleanup(paths: &DaemonPaths) {
-    for path in [&paths.panel, &paths.page, &paths.npages] {
-        let _ = fs::remove_file(path);
-    }
-}
-
 fn clock_unix(snapshot: ClockSnapshot) -> u64 {
     snapshot
         .wall
@@ -469,46 +346,6 @@ fn log_boot_ready(
     }
 }
 
-/// Merges one selected process-page sample and stamps the completed display snapshot afterward.
-#[cfg(test)]
-pub(crate) fn merge_process_page_sample(
-    readings: &mut DisplaySnapshot,
-    proc_root: &Path,
-    process: &mut ProcessState,
-    clock: &mut dyn FnMut() -> ClockSnapshot,
-) {
-    let captured_at = clock();
-    readings.top_process_full = read_top_process_page(proc_root, process, captured_at);
-    readings.assembled_at = clock();
-}
-
-/// Runs daemon against explicit roots and adapters. `poll_limit` bounds post-first-paint scheduled display publications in tests; production passes `None`.
-#[cfg(test)]
-#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
-pub fn run_daemon_with(
-    config_path: Option<&Path>,
-    roots: &FilesystemRoots,
-    paths: &DaemonPaths,
-    boundaries: &mut DaemonBoundaries<'_>,
-    control: &mut dyn LoopControl,
-    poll_limit: Option<usize>,
-) -> Result<()> {
-    scheduled_loop::run(config_path, roots, paths, boundaries, control, poll_limit)
-}
-
-#[cfg(test)]
-struct DynNotification<'a>(&'a mut dyn NotificationFacade);
-
-#[cfg(test)]
-impl NotificationFacade for DynNotification<'_> {
-    fn send(
-        &mut self,
-        payload: &crate::domain::boundary::NotificationPayload,
-    ) -> std::result::Result<(), crate::domain::boundary::NotificationError> {
-        self.0.send(payload)
-    }
-}
-
 /// Runs production daemon until SIGINT/SIGTERM.
 pub fn run_daemon(config_path: Option<&Path>) -> Result<()> {
     let clock = ProductionClock::default();
@@ -523,6 +360,13 @@ pub fn run_daemon(config_path: Option<&Path>) -> Result<()> {
     let events = io.take_event_receiver().ok_or_else(|| {
         Error::Runtime("async I/O event receiver was already transferred".to_owned())
     })?;
+    let applet = match crate::adapters::applet::start(&runtime, io.shutdown_receiver(), None) {
+        Ok(applet) => applet,
+        Err(error) => {
+            io.shutdown();
+            return Err(error);
+        }
+    };
     let roots = FilesystemRoots::default();
     let paths = DaemonPaths::production();
     let config_path = config_path.map(Path::to_path_buf);
@@ -540,6 +384,8 @@ pub fn run_daemon(config_path: Option<&Path>) -> Result<()> {
                 events,
                 clock,
                 shutdown,
+                applet_events: applet.events,
+                sink: Box::new(applet.publisher),
                 #[cfg(test)]
                 blocked_owner: None,
             },
@@ -593,6 +439,8 @@ pub(crate) fn run_timed_profiling(
     let prepared_config = prepare_profiling_config(config_path, &root)?;
     let (result_sender, result_receiver) = std::sync::mpsc::sync_channel(1);
     let orchestration_done = io.orchestration_done();
+    // Stimuli reach the loop directly; the held sender only keeps the idle applet channel open.
+    let (applet_sender, applet_events) = tokio::sync::mpsc::channel(1);
     let services = async_loop::DaemonServices {
         commands: ProfilingCommandRunner::new(io.commands(), Arc::clone(&session)),
         dbus: ProfilingDbusFacade::new(io.dbus(), Arc::clone(&session)),
@@ -603,6 +451,8 @@ pub(crate) fn run_timed_profiling(
         })?,
         clock,
         shutdown: io.shutdown_receiver(),
+        applet_events,
+        sink: Box::new(DiscardSink),
         #[cfg(test)]
         blocked_owner: None,
     };
@@ -621,6 +471,7 @@ pub(crate) fn run_timed_profiling(
     };
     let config_path = prepared_config.config_path;
     runtime.spawn(async move {
+        let _applet_sender = applet_sender;
         let result = async_loop::run(
             Some(config_path.as_path()),
             &roots,
@@ -768,18 +619,11 @@ impl Drop for ProfilingCleanup {
 }
 
 fn profiling_paths(root: &Path) -> DaemonPaths {
-    let runtime = root.join("runtime");
-    let state = runtime.join("state");
+    // Profiling sizes from the real geometry cache but never writes it: its stimuli send no geometry.
     DaemonPaths {
-        panel: runtime.join("panel.html"),
-        tooltip: runtime.join("tooltip.html"),
-        page: state.join("page"),
-        npages: state.join("npages"),
-        geom: state.join("geom"),
+        geom_cache: geom_cache_path(),
         plasma_config: root.join("plasma-config"),
         kdeglobals: root.join("kdeglobals"),
-        runtime,
-        state,
     }
 }
 
@@ -795,17 +639,6 @@ fn complete_daemon_run(
     if shutdown_timed_out {
         return Err(Error::CriticalShutdownTimeout);
     }
-    Ok(())
-}
-
-/// Fast page-counter command.
-pub fn run_page(direction: CliPageDirection) -> Result<()> {
-    let direction = match direction {
-        CliPageDirection::Next => runtime::page::PageDirection::Next,
-        CliPageDirection::Prev => runtime::page::PageDirection::Prev,
-    };
-    runtime::ensure_dirs()?;
-    runtime::page::step_page(direction)?;
     Ok(())
 }
 

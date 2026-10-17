@@ -5,6 +5,7 @@ use tokio::sync::{mpsc, watch};
 use tokio::task::{JoinError, JoinHandle, JoinSet};
 
 use crate::adapters::ProductionClock;
+use crate::domain::applet::AppletEvent;
 use crate::domain::boundary::{ClockSnapshot, IoEvent};
 use crate::file_watch::{FileWatcher, WatchSource};
 use crate::scheduler::{
@@ -19,6 +20,7 @@ pub(super) enum LoopWake {
     OwnerExit(Option<Result<OwnerId, JoinError>>),
     NotificationExit,
     Shutdown,
+    Applet(Option<AppletEvent>),
     Completion(Option<OwnerCompletion>),
     Files(std::io::Result<std::collections::BTreeSet<WatchSource>>),
     Sleep,
@@ -48,6 +50,7 @@ pub(super) async fn wait_for_wake_with_files(
     shutdown: &mut watch::Receiver<bool>,
     completions: &mut mpsc::Receiver<OwnerCompletion>,
     file_watcher: &mut FileWatcher,
+    applet_events: &mut mpsc::Receiver<AppletEvent>,
     sleep_for: Duration,
 ) -> LoopWake {
     tokio::select! {
@@ -55,6 +58,7 @@ pub(super) async fn wait_for_wake_with_files(
         exit = owner_tasks.join_next(), if !owner_tasks.is_empty() => LoopWake::OwnerExit(exit),
         _ = notification_task => LoopWake::NotificationExit,
         _ = shutdown.changed() => LoopWake::Shutdown,
+        event = applet_events.recv() => LoopWake::Applet(event),
         completion = completions.recv() => LoopWake::Completion(completion),
         changed = file_watcher.changed() => LoopWake::Files(changed),
         () = tokio::time::sleep(sleep_for) => LoopWake::Sleep,

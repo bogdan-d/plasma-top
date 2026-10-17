@@ -3,8 +3,7 @@ use super::*;
 #[test]
 fn presented_page_reorder_reconciles_graph_demand_and_publication() {
     let (root, paths) = test_paths("reload-page-reorder");
-    fs::create_dir_all(&paths.state).expect("state root");
-    write_atomic(&paths.page, "2").expect("selected page index");
+    fs::create_dir_all(&root).expect("test root");
     let config_path = root.join("config.toml");
     fs::write(
         &config_path,
@@ -15,7 +14,8 @@ fn presented_page_reorder_reconciles_graph_demand_and_publication() {
     let mut cfg = Config::default();
     cfg.pages.order = vec![String::from("graphs"), String::from("processes")];
     let active = build_pages(&cfg.pages.order);
-    let mut state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
+    let mut state = test_state(&paths, cfg, HardwareInventory::default(), active);
+    state.page_index = 2;
     state.configure_profiling(Arc::new(ProfileSession::default()));
     assert_eq!(state.selected_page(), (2, PageId::Processes));
 
@@ -47,20 +47,18 @@ fn presented_page_reorder_reconciles_graph_demand_and_publication() {
     let clock = ProductionClock::default();
     let mut actions = VecDeque::new();
     let mut owner_messages = VecDeque::new();
-    assert!(
-        reload::check(
-            Some(&config_path),
-            &roots,
-            &paths,
-            1,
-            &mut scheduler,
-            &mut state,
-            &clock,
-            &mut actions,
-            &mut owner_messages,
-        )
-        .expect("reload config")
-    );
+    reload::apply_config_change(
+        Some(&config_path),
+        &roots,
+        &paths,
+        1,
+        &mut scheduler,
+        &mut state,
+        &clock,
+        &mut actions,
+        &mut owner_messages,
+    )
+    .expect("reload config");
 
     assert_eq!(state.selected_page(), (2, PageId::Graphs));
     assert!(actions.iter().any(|action| {

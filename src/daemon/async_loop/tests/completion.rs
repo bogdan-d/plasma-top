@@ -46,12 +46,12 @@ fn graph_completion_actions(
     activation_timed_out: bool,
 ) -> (PathBuf, RuntimeState, VecDeque<SchedulerAction>) {
     let (root, paths) = test_paths(label);
-    fs::create_dir_all(&paths.state).expect("state root");
-    write_atomic(&paths.page, "1").expect("graph page state");
+    fs::create_dir_all(&root).expect("test root");
     let mut cfg = Config::default();
     cfg.pages.order = vec![String::from("graphs")];
     let active = build_pages(&cfg.pages.order);
-    let mut state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
+    let mut state = test_state(&paths, cfg, HardwareInventory::default(), active);
+    state.page_index = 1;
     let graph = JobId::singleton(OwnerId::Page, JobKind::PageRender);
     let demand = DemandPlan {
         pages: [(PageId::Graphs, [graph.clone()].into_iter().collect())]
@@ -257,10 +257,10 @@ fn graph_completion_requests_one_tooltip_only_refresh_when_none_is_queued() {
 #[test]
 fn completion_after_deadline_publication_uses_non_regressing_time_and_releases_owner() {
     let (root, paths) = test_paths("completion-after-publication");
-    fs::create_dir_all(&paths.state).expect("state root");
+    fs::create_dir_all(&root).expect("test root");
     let cfg = Config::default();
     let active = build_pages(&cfg.pages.order);
-    let mut state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
+    let mut state = test_state(&paths, cfg, HardwareInventory::default(), active);
     let mut scheduler = Scheduler::new();
     let initial = startup(&mut scheduler, vec![job(OwnerId::Cpu, JobKind::Cpu, true)]);
     let ticket = started_ticket(&initial);
@@ -350,10 +350,10 @@ fn completion_after_deadline_publication_uses_non_regressing_time_and_releases_o
 #[test]
 fn deferred_first_paint_suppresses_inventory_display_refresh() {
     let (root, paths) = test_paths("inventory-first-paint");
-    fs::create_dir_all(&paths.state).expect("state root");
+    fs::create_dir_all(&root).expect("test root");
     let cfg = Config::default();
     let active = build_pages(&cfg.pages.order);
-    let mut state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
+    let mut state = test_state(&paths, cfg, HardwareInventory::default(), active);
     state.deferred_first_paint = Some(SchedulerAction::PublishDisplay {
         publication: PublicationId(99),
         reason: PublishReason::FirstPaintReady,
@@ -401,10 +401,10 @@ fn deferred_first_paint_suppresses_inventory_display_refresh() {
 #[test]
 fn inventory_refresh_replaces_queued_tooltip_only_with_one_full_publication() {
     let (root, paths) = test_paths("inventory-tooltip-coalescing");
-    fs::create_dir_all(&paths.state).expect("state root");
+    fs::create_dir_all(&root).expect("test root");
     let cfg = Config::default();
     let active = build_pages(&cfg.pages.order);
-    let mut state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
+    let mut state = test_state(&paths, cfg, HardwareInventory::default(), active);
     let clock = ProductionClock::default();
     let boot = clock.snapshot();
     let mut scheduler = Scheduler::new();
@@ -483,10 +483,10 @@ fn inventory_refresh_replaces_queued_tooltip_only_with_one_full_publication() {
 #[test]
 fn inventory_refresh_preserves_one_existing_panel_publication_unchanged() {
     let (root, paths) = test_paths("inventory-panel-coalescing");
-    fs::create_dir_all(&paths.state).expect("state root");
+    fs::create_dir_all(&root).expect("test root");
     let cfg = Config::default();
     let active = build_pages(&cfg.pages.order);
-    let mut state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
+    let mut state = test_state(&paths, cfg, HardwareInventory::default(), active);
     let clock = ProductionClock::default();
     let boot = clock.snapshot();
     let mut scheduler = Scheduler::new();
@@ -531,10 +531,10 @@ fn inventory_refresh_preserves_one_existing_panel_publication_unchanged() {
 #[test]
 fn deferred_first_paint_limits_sleep_to_original_deadline() {
     let (root, paths) = test_paths("deferred-first-paint-sleep");
-    fs::create_dir_all(&paths.state).expect("state root");
+    fs::create_dir_all(&root).expect("test root");
     let cfg = Config::default();
     let active = build_pages(&cfg.pages.order);
-    let mut state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
+    let mut state = test_state(&paths, cfg, HardwareInventory::default(), active);
     state.deferred_first_paint = Some(SchedulerAction::PublishDisplay {
         publication: PublicationId(99),
         reason: PublishReason::FirstPaintReady,
@@ -576,10 +576,10 @@ fn deferred_first_paint_limits_sleep_to_original_deadline() {
 #[test]
 fn stale_resume_rescan_retry_preserves_acknowledgement_until_accepted() {
     let (root, paths) = test_paths("resume-rescan-retry");
-    fs::create_dir_all(&paths.state).expect("state root");
+    fs::create_dir_all(&root).expect("test root");
     let cfg = Config::default();
     let active = build_pages(&cfg.pages.order);
-    let mut state = RuntimeState::new(&paths, cfg, HardwareInventory::default(), active);
+    let mut state = test_state(&paths, cfg, HardwareInventory::default(), active);
     let mut scheduler = Scheduler::new();
     let _ = startup(&mut scheduler, Vec::new());
     let _ = scheduler.handle(SchedulerEvent::Suspend {

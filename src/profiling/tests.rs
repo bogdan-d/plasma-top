@@ -1,6 +1,7 @@
 #![allow(clippy::expect_used)]
 
 use super::*;
+use crate::domain::applet::{AppletRequest, ClientId, InstanceId, PageStep};
 use crate::scheduler::{JobKind, OwnerId};
 
 fn publish_transition(publication: PublicationId, reason: PublishReason) -> Transition {
@@ -299,21 +300,6 @@ fn stimuli_wait_for_slow_publication_then_schedule_relative_to_completion() {
         "plasma-top-profile-stimulus-test-{}",
         std::process::id()
     ));
-    let _ = std::fs::remove_dir_all(&root);
-    let runtime = root.join("runtime");
-    let state = runtime.join("state");
-    std::fs::create_dir_all(state.join("presented")).expect("stimulus state");
-    let paths = crate::daemon::DaemonPaths {
-        panel: runtime.join("panel.html"),
-        tooltip: runtime.join("tooltip.html"),
-        page: state.join("page"),
-        npages: state.join("npages"),
-        geom: state.join("geom"),
-        plasma_config: root.join("plasma-config"),
-        kdeglobals: root.join("kdeglobals"),
-        runtime,
-        state,
-    };
     let config_path = root.join("config.toml");
     let session = Arc::new(ProfileSession::default());
     let mut stimuli = ProfileStimuli::new(ProfileStimulusConfig {
@@ -335,15 +321,23 @@ fn stimuli_wait_for_slow_publication_then_schedule_relative_to_completion() {
         stimuli.next_due(Duration::ZERO),
         Some(Duration::from_millis(100))
     );
-    stimuli
-        .inject_due(
-            Duration::from_millis(100),
-            &paths,
-            &clock,
-            ConfigGeneration(1),
-            false,
-        )
-        .expect("inject presentation");
+    let client = ClientId::new("profiling");
+    assert_eq!(
+        stimuli
+            .inject_due(
+                Duration::from_millis(100),
+                &clock,
+                ConfigGeneration(1),
+                false,
+                client.clone(),
+                InstanceId::MIN,
+            )
+            .expect("inject presentation"),
+        Some(AppletRequest::Present {
+            client: client.clone(),
+            instance: InstanceId::MIN,
+        })
+    );
     assert_eq!(stimuli.next_due(Duration::from_secs(2)), None);
 
     let transition = publish_transition(PublicationId(1), PublishReason::TooltipActivated);
@@ -362,18 +356,32 @@ fn stimuli_wait_for_slow_publication_then_schedule_relative_to_completion() {
         stimuli.next_due(Duration::from_secs(2)),
         Some(Duration::from_millis(2_100))
     );
-    stimuli
-        .inject_due(
-            Duration::from_millis(2_099),
-            &paths,
-            &clock,
-            ConfigGeneration(1),
-            false,
-        )
-        .expect("action remains pending until relative due");
-    assert!(!paths.page.exists());
-
-    std::fs::remove_dir_all(root).expect("cleanup stimulus state");
+    assert_eq!(
+        stimuli
+            .inject_due(
+                Duration::from_millis(2_099),
+                &clock,
+                ConfigGeneration(1),
+                false,
+                client.clone(),
+                InstanceId::MIN,
+            )
+            .expect("action remains pending until relative due"),
+        None
+    );
+    assert_eq!(
+        stimuli
+            .inject_due(
+                Duration::from_millis(2_100),
+                &clock,
+                ConfigGeneration(1),
+                false,
+                client,
+                InstanceId::MIN,
+            )
+            .expect("page stimulus"),
+        Some(AppletRequest::StepPage(PageStep::Next))
+    );
 }
 
 #[test]

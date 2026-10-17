@@ -123,59 +123,6 @@ fn parses_render_overrides() {
 }
 
 #[test]
-fn parses_page_direction() {
-    let cli = parse(&["plasma-top", "page", "prev"]);
-
-    assert_eq!(
-        cli,
-        Ok(Cli {
-            command: Command::Page(PageCommand {
-                direction: PageDirection::Prev,
-            }),
-        })
-    );
-}
-
-#[test]
-fn parses_strict_presentation_instance() {
-    for command in ["present", "dismiss"] {
-        let cli = parse(&["plasma-top", command, "42"]).expect("valid lease command");
-        assert_eq!(cli.command.name(), command);
-    }
-}
-
-#[test]
-fn rejects_invalid_presentation_instances_and_trailing_arguments() {
-    for value in ["0", "-1", "+1", "abc"] {
-        assert!(matches!(
-            parse(&["plasma-top", "present", value]),
-            Err(CliError::InvalidInstanceId { .. })
-        ));
-    }
-    assert!(matches!(
-        parse(&["plasma-top", "dismiss", "1", "extra"]),
-        Err(CliError::UnknownArgument { .. })
-    ));
-}
-
-#[test]
-fn page_fast_path_treats_missing_and_unknown_as_previous() {
-    for arguments in [
-        &["plasma-top", "page"][..],
-        &["plasma-top", "page", "unknown", "ignored"][..],
-    ] {
-        assert!(matches!(
-            parse(arguments),
-            Ok(Cli {
-                command: Command::Page(PageCommand {
-                    direction: PageDirection::Prev
-                })
-            })
-        ));
-    }
-}
-
-#[test]
 fn subcommand_help_resolves_to_its_own_help() {
     let cli = parse(&["plasma-top", "render", "--help"]);
 

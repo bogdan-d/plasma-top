@@ -7,7 +7,6 @@ pub(super) fn drain_actions(
     scheduler: &mut Scheduler,
     state: &mut RuntimeState,
     roots: &FilesystemRoots,
-    paths: &DaemonPaths,
     clock: &ProductionClock,
     boot: ClockSnapshot,
     notification_sender: &mpsc::Sender<NotificationPayload>,
@@ -129,10 +128,9 @@ pub(super) fn drain_actions(
                     tooltip,
                     scheduler,
                     roots,
-                    paths,
                     snapshot,
                     boot,
-                )? {
+                ) {
                     prepend(actions, acknowledgement);
                 }
                 let graph_start_queued = actions.iter().any(|action| {

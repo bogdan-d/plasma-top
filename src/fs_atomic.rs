@@ -1,11 +1,6 @@
-//! Atomic file publication: write to a PID-unique tmp sibling, then rename.
+//! Atomic file replacement: write a PID-unique tmp sibling, then rename.
 //!
-//! Ported from `src/daemon.py::_write_atomic` and `src/pagestate.py::set_page`.
-//! `std::fs::rename` is atomic on the same filesystem (POSIX rename(2)
-//! guarantee), so a reader sees either the previous file or the new one,
-//! never a torn write. The tmp name embeds the PID so overlapping writers —
-//! concurrent `plasma-top page next` processes fired by a fast scroll — never
-//! clobber a shared tmp mid-rename.
+//! `std::fs::rename` is atomic on one filesystem, so a reader sees either the previous file or the new one, never a torn write. The PID-qualified tmp name keeps overlapping writer processes from clobbering each other mid-rename.
 
 use std::io;
 use std::path::Path;
