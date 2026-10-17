@@ -4,6 +4,8 @@ PlasmaTop is a Rust daemon with current-thread Tokio orchestration plus a bundle
 
 Run commands from repository root. Development setup and full gates live in `docs/DEVELOPMENT.md`.
 
+Put throwaway work in the gitignored `.tmp/` at repository root, not `/tmp`: downloads, hardware captures, helper scripts, review reports, and repo-local tools such as FastFlowLM. It survives reboots and is never committed. Give each download its own subdirectory, and copy anything tests need into tracked fixtures. Tracked specs and issues stay in `.scratch/`.
+
 ## Architecture boundaries
 
 - Item identity is `metric[:form]`: domain rules live in `src/domain/{metric,form,item,registry}.rs`; render dispatch lives in `src/render/registry.rs`.
