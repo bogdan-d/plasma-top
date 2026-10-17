@@ -30,7 +30,7 @@ done
 mapfile -t python_files < <(
     find . -type f -name '*.py' \
         -not -path './.git/*' -not -path './.venv/*' \
-        -not -path './target/*' -not -path './.agents/*' \
+        -not -path './target/*' -not -path './.agents/*' -not -path './.tmp/*' \
         -printf '%P\n' | sort
 )
 expected_python='tools/qt_shot.py'
