@@ -56,6 +56,22 @@ _Avoid_: AMDGPU instantaneous power, AMDGPU energy
 The selected AMDGPU device's current graphics-core clock frequency.
 _Avoid_: AMDGPU memory clock, AMDGPU fabric clock, AMDGPU SoC clock
 
+**AMD NPU**:
+An AMD XDNA neural processing unit bound to the Linux `amdxdna` driver. PlasmaTop reads its telemetry from the NPU fields of the APU's AMDGPU `gpu_metrics` table, never from the NPU device itself. This is the only place PlasmaTop parses binary `gpu_metrics`, because no text source exposes NPU telemetry and opening the NPU device would wake it.
+_Avoid_: IPU, XDNA device, AI engine
+
+**NPU busy**:
+The mean of the AMD NPU's per-column busy percentages, time-filtered by firmware. A suspended NPU reads zero.
+_Avoid_: NPU load, NPU utilization per process
+
+**NPU power**:
+The AMD NPU's firmware time-filtered power. It is part of the APU's package power, not an addition to it.
+_Avoid_: NPU package power, NPU energy
+
+**NPU frequency**:
+The AMD NPU's firmware time-filtered clock. Zero, shown as `off`, means the NPU is suspended; an idle but awake NPU keeps a clock.
+_Avoid_: NPU memory clock, MP-IPU clock
+
 **Display snapshot**:
 The latest completed metric samples selected together for one display publication. A display snapshot may carry an older sample when no newer sample completed before its publication deadline.
 _Avoid_: Collection snapshot, coherent sample

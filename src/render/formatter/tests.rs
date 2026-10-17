@@ -18,6 +18,7 @@ use super::super::mono::global_width_of;
 use super::PanelFormatter;
 
 mod amd;
+mod npu;
 
 fn bare_hw() -> HardwareInventory {
     HardwareInventory {
@@ -43,6 +44,7 @@ fn full_hw() -> HardwareInventory {
         battery_sys_ids: vec![String::from("/BAT0")],
         has_nvidia: true,
         amd_gpu: Some(amd::source()),
+        amd_npu: Some(npu::source()),
         intel_gpu_freq_path: Some(PathBuf::from("/x")),
         intel_gpu_pci: Some(String::from("0000:00:02.0")),
         net_device: Some(String::from("wlan0")),
@@ -166,6 +168,9 @@ fn full_readings() -> DisplaySnapshot {
         gpu_amd_temp: Some(65),
         gpu_amd_power: Some(120),
         gpu_amd_fan_speed: Some(1800),
+        npu_amd_usage: Some(96),
+        npu_amd_power_mw: Some(3352),
+        npu_amd_freq: Some(1810),
         gpu_temp: Some(60),
         gpu_usage: Some(30),
         gpu_mem: Some(40),
@@ -360,10 +365,11 @@ fn available_sections_collapse_and_panel_omits_titles() {
 
 #[test]
 fn tooltip_and_panel_goldens_match_python_snapshots() {
-    // Historical snapshots describe an NVIDIA/Intel machine without AMDGPU.
+    // Historical snapshots describe an NVIDIA/Intel machine without AMDGPU or an AMD NPU.
     let shipped_config = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("config/config.toml");
     let hw = HardwareInventory {
         amd_gpu: None,
+        amd_npu: None,
         ..full_hw()
     };
     let readings = full_readings();

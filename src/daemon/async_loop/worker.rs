@@ -247,7 +247,7 @@ where
     OwnerSenders { senders }
 }
 
-const ALL_OWNERS: [OwnerId; 13] = [
+const ALL_OWNERS: [OwnerId; 14] = [
     OwnerId::Cpu,
     OwnerId::Process,
     OwnerId::Memory,
@@ -256,6 +256,7 @@ const ALL_OWNERS: [OwnerId; 13] = [
     OwnerId::Power,
     OwnerId::Nvidia,
     OwnerId::AmdGpu,
+    OwnerId::AmdNpu,
     OwnerId::IntelGpu,
     OwnerId::GpuHistory,
     OwnerId::External,

@@ -31,6 +31,8 @@ mod power;
 use power::execute_peripheral;
 #[path = "scheduled/invalidation.rs"]
 mod invalidation;
+#[path = "scheduled/npu.rs"]
+mod npu;
 #[path = "scheduled/profiling.rs"]
 mod profiling;
 
@@ -544,6 +546,7 @@ pub(crate) fn execute_scheduled_job(
             readings,
             &mut notifications,
         ),
+        JobKind::AmdNpu => npu::execute(job, owners.amd_npu, hw, ctx, readings),
         JobKind::NvidiaNvml
         | JobKind::NvidiaFallback
         | JobKind::IntelFrequency
@@ -666,6 +669,7 @@ pub(crate) fn reset_counter_baseline(job: &JobId, owners: OwnerRefs<'_>) {
         | JobKind::PeripheralBattery
         | JobKind::AmdFast
         | JobKind::AmdSlow
+        | JobKind::AmdNpu
         | JobKind::NvidiaNvml
         | JobKind::NvidiaFallback
         | JobKind::IntelFrequency
@@ -704,6 +708,7 @@ fn reconcile(
         .nvidia
         .reconcile_source(caps.contains(&Capability::GpuNvidia) && hw.has_nvidia);
     gpu::reconcile_amd(owners.amd_gpu, hw, caps);
+    npu::reconcile(owners.amd_npu, hw, caps);
     owners.intel_gpu.reconcile_sources(
         hw.intel_gpu_pci.as_deref(),
         hw.intel_gpu_freq_path.as_ref(),

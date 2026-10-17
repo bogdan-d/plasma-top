@@ -49,6 +49,7 @@ pub(super) fn apply_inventory_family(
         }
         InventoryFamily::Nvidia => target.has_nvidia = source.has_nvidia,
         InventoryFamily::Amd => target.amd_gpu.clone_from(&source.amd_gpu),
+        InventoryFamily::AmdNpu => target.amd_npu.clone_from(&source.amd_npu),
         InventoryFamily::Intel => {
             target
                 .intel_gpu_freq_path
@@ -144,6 +145,11 @@ pub(super) fn apply_owner_readings(
             target.gpu_amd_temp = source.gpu_amd_temp;
             target.gpu_amd_power = source.gpu_amd_power;
             target.gpu_amd_fan_speed = source.gpu_amd_fan_speed;
+        }
+        OwnerId::AmdNpu => {
+            target.npu_amd_usage = source.npu_amd_usage;
+            target.npu_amd_power_mw = source.npu_amd_power_mw;
+            target.npu_amd_freq = source.npu_amd_freq;
         }
         OwnerId::IntelGpu => {
             target.gpu_intel_freq = source.gpu_intel_freq;

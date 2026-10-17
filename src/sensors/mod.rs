@@ -4,7 +4,7 @@
 //!
 //! ## State ownership
 //!
-//! Domain-specific state structs ([`cpu::CpuState`], [`memory::MemoryState`], [`network::NetworkState`], [`disk::DiskState`], [`process::ProcessState`], [`gpu_intel::IntelGpuState`], [`power::PowerState`], [`gpu_nvidia::NvidiaState`], [`gpu_history::GpuHistoryState`], and [`external::ExternalState`]) own mutable metric-sample and attempt state. Daemon and diagnostic composition store these owners separately and construct [`OwnerRefs`] only for one serial job. Source reconciliation and invalidation remain encapsulated by the matching owner.
+//! Domain-specific state structs ([`cpu::CpuState`], [`memory::MemoryState`], [`network::NetworkState`], [`disk::DiskState`], [`process::ProcessState`], [`gpu_intel::IntelGpuState`], [`npu_amd::AmdNpuState`], [`power::PowerState`], [`gpu_nvidia::NvidiaState`], [`gpu_history::GpuHistoryState`], and [`external::ExternalState`]) own mutable metric-sample and attempt state. Daemon and diagnostic composition store these owners separately and construct [`OwnerRefs`] only for one serial job. Source reconciliation and invalidation remain encapsulated by the matching owner.
 
 pub mod cpu;
 pub mod disk;
@@ -17,6 +17,7 @@ pub mod hid;
 pub mod hwmon;
 pub mod memory;
 pub mod network;
+pub mod npu_amd;
 pub mod power;
 pub mod process;
 

@@ -201,6 +201,8 @@ pub struct ThresholdConfig {
     pub gpu_nvidia_mem_usage: Vec<i32>,
     /// AMDGPU color thresholds.
     pub gpu_amd_mem_usage: [i32; 2],
+    /// AMD NPU busy color thresholds.
+    pub npu_amd_usage: [i32; 2],
     /// gpu_intel_usage thresholds.
     pub gpu_intel_usage: Vec<i32>,
     /// hd_temp thresholds.
@@ -245,6 +247,7 @@ impl Default for ThresholdConfig {
             gpu_amd_usage: [50, 70],
             gpu_nvidia_mem_usage: vec![50, 70],
             gpu_amd_mem_usage: [50, 70],
+            npu_amd_usage: [50, 70],
             gpu_intel_usage: vec![50, 70],
             hd_temp: vec![50, 55],
             battery_sys: vec![20, 80],

@@ -17,6 +17,10 @@ impl PanelFormatter<'_> {
         widened.gpu_amd_freq = Some(u32::MAX);
         widened.gpu_amd_power = Some(u32::MAX);
         widened.gpu_amd_fan_speed = Some(u32::MAX);
+        // 0xFFFF is the table's unavailable sentinel, so 65534 is the widest stored reading.
+        widened.npu_amd_usage = Some(100);
+        widened.npu_amd_power_mw = Some(65_534);
+        widened.npu_amd_freq = Some(65_534);
         widened.gpu_amd_mem_usage = Some(crate::domain::readings::AmdGpuMemoryReading {
             used_bytes: u64::MAX,
             total_bytes: u64::MAX,

@@ -525,7 +525,11 @@ impl RuntimeState {
                     || self.readings.disk_read_history != readings.disk_read_history
                     || self.readings.disk_write_history != readings.disk_write_history
             }
-            OwnerId::Process | OwnerId::Power | OwnerId::External | OwnerId::Page => false,
+            OwnerId::Process
+            | OwnerId::Power
+            | OwnerId::AmdNpu
+            | OwnerId::External
+            | OwnerId::Page => false,
         }
     }
 

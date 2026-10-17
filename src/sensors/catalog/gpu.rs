@@ -69,6 +69,18 @@ impl Catalog<'_> {
         vec![self.insert(spec)]
     }
 
+    pub(super) fn amd_npu_jobs(&mut self) -> Vec<JobId> {
+        let Some(source) = self.hw.amd_npu.as_ref() else {
+            return Vec::new();
+        };
+        let id = JobId::with_source(
+            OwnerId::AmdNpu,
+            JobKind::AmdNpu,
+            SourceIdentity::Device(source.identity()),
+        );
+        vec![self.insert(JobSpec::fast(id, self.cfg.display.poll_interval.duration()))]
+    }
+
     pub(super) fn finish_amd_jobs(&mut self) {
         use crate::sensors::gpu_amd::{
             FAST_METRICS, SLOW_METRICS, source_for_metrics, supported_metrics,

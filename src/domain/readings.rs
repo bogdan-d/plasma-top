@@ -322,6 +322,27 @@ impl AmdGpuMemoryReading {
     }
 }
 
+/// AMD NPU telemetry source: the `amdxdna` accel device and the APU `amdgpu` device whose `gpu_metrics` table carries the NPU fields.
+///
+/// Both PCI identities form the source identity, so replacing either device invalidates samples.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AmdNpuSource {
+    /// Canonical PCI identity of the `amdxdna` accel device.
+    pub accel_pci: String,
+    /// Canonical PCI identity of the `amdgpu` device publishing the table.
+    pub metrics_pci: String,
+    /// The `gpu_metrics` file read once per sample.
+    pub metrics_path: PathBuf,
+}
+
+impl AmdNpuSource {
+    /// Stable scheduler identity combining both devices.
+    #[must_use]
+    pub fn identity(&self) -> String {
+        format!("npu:{}+{}", self.accel_pci, self.metrics_pci)
+    }
+}
+
 /// Discoverable hardware family reconciled independently according to demand.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) enum InventoryFamily {
@@ -331,6 +352,7 @@ pub(crate) enum InventoryFamily {
     Smart,
     Nvidia,
     Amd,
+    AmdNpu,
     Intel,
     Backlight,
     Network,
@@ -361,6 +383,8 @@ pub struct HardwareInventory {
     pub has_nvidia: bool,
     /// Selected AMDGPU device and its independent capabilities.
     pub amd_gpu: Option<AmdGpuSource>,
+    /// Detected AMD NPU telemetry source, independent of the selected AMDGPU device.
+    pub amd_npu: Option<AmdNpuSource>,
     /// Intel GPU active-frequency sysfs file.
     pub intel_gpu_freq_path: Option<PathBuf>,
     /// PCI address used to attribute Intel DRM fdinfo counters.
@@ -398,6 +422,7 @@ impl Default for HardwareInventory {
             battery_sys_ids: Vec::new(),
             has_nvidia: false,
             amd_gpu: None,
+            amd_npu: None,
             intel_gpu_freq_path: None,
             intel_gpu_pci: None,
             net_device: None,
@@ -508,6 +533,12 @@ pub struct DisplaySnapshot {
     pub gpu_amd_power: Option<u32>,
     /// AMDGPU fan tachometer speed in RPM.
     pub gpu_amd_fan_speed: Option<u32>,
+    /// Mean AMD NPU column busy percentage.
+    pub npu_amd_usage: Option<i32>,
+    /// AMD NPU power in milliwatts.
+    pub npu_amd_power_mw: Option<u16>,
+    /// AMD NPU clock in MHz; zero once the suspended NPU's filtered clock decays.
+    pub npu_amd_freq: Option<u16>,
     /// Intel GPU active frequency in MHz.
     pub gpu_intel_freq: Option<i32>,
     /// Intel GPU render usage percentage.

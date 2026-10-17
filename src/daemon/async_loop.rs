@@ -612,6 +612,7 @@ fn owner_name(owner: OwnerId) -> &'static str {
         OwnerId::Power => "power owner",
         OwnerId::Nvidia => "NVIDIA owner",
         OwnerId::AmdGpu => "AMDGPU owner",
+        OwnerId::AmdNpu => "AMD NPU owner",
         OwnerId::IntelGpu => "Intel GPU owner",
         OwnerId::GpuHistory => "GPU history owner",
         OwnerId::External => "external owner",

@@ -55,6 +55,7 @@ struct TestOwners {
     disk: disk::DiskState,
     process: process::ProcessState,
     amd_gpu: crate::sensors::gpu_amd::AmdGpuState,
+    amd_npu: crate::sensors::npu_amd::AmdNpuState,
     intel_gpu: gpu_intel::IntelGpuState,
     power: PowerState,
     nvidia: TestNvidiaState,
@@ -71,6 +72,7 @@ impl TestOwners {
             disk: &mut self.disk,
             process: &mut self.process,
             amd_gpu: &mut self.amd_gpu,
+            amd_npu: &mut self.amd_npu,
             intel_gpu: &mut self.intel_gpu,
             power: &mut self.power,
             nvidia: &mut self.nvidia,
@@ -401,6 +403,7 @@ mod external_collection;
 mod histories;
 mod intel_collection;
 mod network_collection;
+mod npu_scheduled;
 mod nvidia_collection;
 mod sampling;
 mod scheduled_execution;

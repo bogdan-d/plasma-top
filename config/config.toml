@@ -71,6 +71,7 @@ items = ["disk_usage", "disk_smart:pair"]
 title = "GPU"
 items = ["gpu_nvidia_usage", "gpu_nvidia_mem_usage", "gpu_nvidia_dec_usage",
          "gpu_amd_usage", "gpu_amd_codec_usage", "gpu_amd_mem_usage", "gpu_amd_freq", "gpu_amd_temp", "gpu_amd_power", "gpu_amd_fan_speed",
+         "npu_amd_usage", "npu_amd_power", "npu_amd_freq",
          "gpu_intel_usage", "gpu_intel_freq", "gpu_intel_dec_usage", "screen_brightness"]
 
 [tooltip.thermal]
@@ -158,6 +159,7 @@ gpu_nvidia_temp      = [50, 70]
 gpu_amd_usage = [50, 70]
 gpu_amd_mem_usage = [50, 70]
 gpu_amd_temp = [50, 70]
+npu_amd_usage = [50, 70]
 gpu_intel_usage      = [50, 70]
 battery_sys          = [20, 80]
 battery_mouse        = [20, 80]

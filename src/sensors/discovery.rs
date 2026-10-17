@@ -4,9 +4,13 @@ use std::path::Path;
 
 use crate::config::Config;
 use crate::domain::boundary::{CommandRunner, CommandStatus, DbusFacade};
-use crate::domain::readings::{AmdGpuSource, HardwareInventory, InventoryFamily, SmartDisk};
+use crate::domain::readings::{
+    AmdGpuSource, AmdNpuSource, HardwareInventory, InventoryFamily, SmartDisk,
+};
 
-use super::{NETWORK_COMMAND_TIMEOUT, cpu, disk, gpu_amd, gpu_intel, gpu_nvidia, network, power};
+use super::{
+    NETWORK_COMMAND_TIMEOUT, cpu, disk, gpu_amd, gpu_intel, gpu_nvidia, network, npu_amd, power,
+};
 
 /// Items whose formatter hardware gate reads `hw.net_device`; as long as one is
 /// configured and the device is `None`, peripheral rescan is worth retrying.
@@ -74,6 +78,7 @@ pub struct HardwareDiscovery {
     system_batteries: DiscoveryOutcome<Vec<String>>,
     nvidia: DiscoveryOutcome<bool>,
     amd: DiscoveryOutcome<Option<AmdGpuSource>>,
+    amd_npu: DiscoveryOutcome<Option<AmdNpuSource>>,
     intel: DiscoveryOutcome<(Option<std::path::PathBuf>, Option<String>)>,
     route: DiscoveryOutcome<Option<String>>,
     disk_io: DiscoveryOutcome<Option<String>>,
@@ -101,6 +106,7 @@ impl HardwareDiscovery {
         apply(&mut inventory.battery_sys_ids, self.system_batteries);
         apply(&mut inventory.has_nvidia, self.nvidia);
         apply(&mut inventory.amd_gpu, self.amd);
+        apply(&mut inventory.amd_npu, self.amd_npu);
         if let DiscoveryOutcome::Confirmed((frequency, pci)) = self.intel {
             inventory.intel_gpu_freq_path = frequency;
             inventory.intel_gpu_pci = pci;
@@ -235,6 +241,7 @@ fn local_hardware_attempt(
         battery_sys_ids: Vec::new(),
         has_nvidia: false,
         amd_gpu: None,
+        amd_npu: None,
         intel_gpu_freq_path: None,
         intel_gpu_pci: None,
         net_device: None,
@@ -262,6 +269,7 @@ fn local_hardware_attempt(
         system_batteries: DiscoveryOutcome::Failed,
         nvidia: has_nvidia,
         amd: DiscoveryOutcome::from_result(gpu_amd::detect_amd_gpu(sys_root)),
+        amd_npu: DiscoveryOutcome::from_result(npu_amd::detect_amd_npu(sys_root)),
         intel: intel.map(|paths| (paths.freq_path, paths.pci)),
         route: DiscoveryOutcome::Failed,
         disk_io: disk_io_device,
@@ -336,6 +344,10 @@ pub(crate) fn reconcile_inventory_family(
         InventoryFamily::Amd => apply(
             &mut hw.amd_gpu,
             DiscoveryOutcome::from_result(gpu_amd::detect_amd_gpu(sys_root)),
+        ),
+        InventoryFamily::AmdNpu => apply(
+            &mut hw.amd_npu,
+            DiscoveryOutcome::from_result(npu_amd::detect_amd_npu(sys_root)),
         ),
         InventoryFamily::Intel => match gpu_intel::detect_intel_gpu_outcome(sys_root) {
             Ok(paths) => {

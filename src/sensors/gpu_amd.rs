@@ -249,7 +249,7 @@ pub fn detect_amd_gpu(sys_root: &Path) -> io::Result<Option<AmdGpuSource>> {
     Ok(selected)
 }
 
-fn invalid_data(message: &'static str) -> io::Error {
+pub(super) fn invalid_data(message: &'static str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message)
 }
 
@@ -262,7 +262,7 @@ fn read_pci_value(path: &Path, maximum: u32) -> io::Result<u32> {
         .ok_or_else(|| invalid_data("malformed PCI value"))
 }
 
-fn pci_identity(device: &Path) -> io::Result<String> {
+pub(super) fn pci_identity(device: &Path) -> io::Result<String> {
     let name = device
         .file_name()
         .and_then(|name| name.to_str())
@@ -289,7 +289,7 @@ fn numbered(name: &str, prefix: &str) -> bool {
         .is_some_and(|suffix| !suffix.is_empty() && suffix.bytes().all(|b| b.is_ascii_digit()))
 }
 
-fn numbered_entries(root: &Path, prefix: &str) -> io::Result<Vec<PathBuf>> {
+pub(super) fn numbered_entries(root: &Path, prefix: &str) -> io::Result<Vec<PathBuf>> {
     let mut paths = Vec::new();
     for entry in fs::read_dir(root)? {
         let entry = entry?;
@@ -306,7 +306,7 @@ fn numbered_entries(root: &Path, prefix: &str) -> io::Result<Vec<PathBuf>> {
 }
 
 // Unlike Path::exists, a dangling symlink is an incomplete inspection, not confirmed absence.
-fn entry_exists(path: &Path) -> io::Result<bool> {
+pub(super) fn entry_exists(path: &Path) -> io::Result<bool> {
     match fs::symlink_metadata(path) {
         Ok(_) => Ok(true),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
@@ -314,7 +314,7 @@ fn entry_exists(path: &Path) -> io::Result<bool> {
     }
 }
 
-fn optional_file(path: PathBuf) -> io::Result<Option<PathBuf>> {
+pub(super) fn optional_file(path: PathBuf) -> io::Result<Option<PathBuf>> {
     if !entry_exists(&path)? {
         return Ok(None);
     }

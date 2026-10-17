@@ -269,6 +269,9 @@ impl<'a> Catalog<'a> {
             | Metric::GpuAmdTemp
             | Metric::GpuAmdPower
             | Metric::GpuAmdFanSpeed => Some(InventoryFamily::Amd),
+            Metric::NpuAmdUsage | Metric::NpuAmdPower | Metric::NpuAmdFreq => {
+                Some(InventoryFamily::AmdNpu)
+            }
             Metric::ScreenBrightness => Some(InventoryFamily::Backlight),
             Metric::BatterySystem => Some(InventoryFamily::SystemBattery),
             Metric::BatteryMouse
@@ -315,6 +318,7 @@ impl<'a> Catalog<'a> {
             | InventoryFamily::Smart
             | InventoryFamily::Nvidia
             | InventoryFamily::Amd
+            | InventoryFamily::AmdNpu
             | InventoryFamily::Intel
             | InventoryFamily::Backlight
             | InventoryFamily::Network
@@ -353,6 +357,7 @@ impl<'a> Catalog<'a> {
             | Metric::GpuAmdTemp
             | Metric::GpuAmdPower
             | Metric::GpuAmdFanSpeed => self.amd_jobs(metric),
+            Metric::NpuAmdUsage | Metric::NpuAmdPower | Metric::NpuAmdFreq => self.amd_npu_jobs(),
             Metric::GpuIntelFreq => self.intel_frequency_jobs(),
             Metric::GpuIntelUsage | Metric::GpuIntelDecoderUsage => self.intel_usage_jobs(),
             Metric::ScreenBrightness => self.brightness_jobs(),
@@ -435,6 +440,9 @@ impl<'a> Catalog<'a> {
             Capability::GpuAmdTemperature => self.amd_jobs(Metric::GpuAmdTemp),
             Capability::GpuAmdPower => self.amd_jobs(Metric::GpuAmdPower),
             Capability::GpuAmdFanSpeed => self.amd_jobs(Metric::GpuAmdFanSpeed),
+            Capability::NpuAmdUsage | Capability::NpuAmdPower | Capability::NpuAmdFrequency => {
+                self.amd_npu_jobs()
+            }
             Capability::GpuIntelFrequency => self.intel_frequency_jobs(),
             Capability::GpuIntelUsage | Capability::GpuIntelDecoder => self.intel_usage_jobs(),
             Capability::ScreenBrightness => self.brightness_jobs(),

@@ -177,6 +177,12 @@ pub(crate) fn invalidate_scheduled_job(
             readings.gpu_amd_power = None;
             readings.gpu_amd_fan_speed = None;
         }
+        JobKind::AmdNpu => {
+            owners.amd_npu.invalidate();
+            readings.npu_amd_usage = None;
+            readings.npu_amd_power_mw = None;
+            readings.npu_amd_freq = None;
+        }
         JobKind::IntelFrequency => {
             owners.intel_gpu.frequency.invalidate();
             readings.gpu_intel_freq = None;

@@ -4,6 +4,7 @@ mod amd;
 mod battery;
 mod connectivity;
 mod metrics;
+mod npu;
 mod storage;
 mod system;
 mod width;
@@ -267,6 +268,9 @@ impl<'a> PanelFormatter<'a> {
             | Metric::GpuAmdPower
             | Metric::GpuAmdFanSpeed => {
                 self.render_amd(metric, resolved.form_token, readings, tooltip)
+            }
+            Metric::NpuAmdUsage | Metric::NpuAmdPower | Metric::NpuAmdFreq => {
+                self.render_npu(metric, resolved.form_token, readings, tooltip)
             }
             Metric::GpuIntelFreq => self.render_freq_row(
                 metric.as_str(),

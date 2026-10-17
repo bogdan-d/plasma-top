@@ -56,6 +56,9 @@ A token is **bare** when the metric has one intrinsic rendering. Generic forms u
 | `gpu_amd_temp` | panel · tooltip | Edge temperature only. | `AMD GPU temperature: 65°C` |
 | `gpu_amd_power` | panel · tooltip | Average package/PPT power in watts. | `AMD GPU power: 120 W` |
 | `gpu_amd_fan_speed` | panel · tooltip | Measured fan tachometer speed in RPM; `off` at zero. | `AMD GPU fan: 1800 RPM` |
+| `npu_amd_usage` | panel · tooltip | Mean busy of the AMD NPU's columns, %. | `AMD NPU usage: 93%` |
+| `npu_amd_power` | panel · tooltip | AMD NPU power in watts, one decimal. | `AMD NPU power: 3.3 W` |
+| `npu_amd_freq` | panel · tooltip | AMD NPU clock in MHz; `off` at zero. | `AMD NPU frequency: 1810 MHz` |
 | `gpu_intel_usage` | panel · tooltip | Intel iGPU utilization, %. | `Igpu usage:  0%` |
 | `gpu_intel_freq` | panel · tooltip | Intel iGPU clock frequency. | `Igpu freq:  300 MHz` |
 | `gpu_intel_dec_usage` | panel · tooltip | Intel iGPU video-decoder utilization, %. | `Igpu decoder:  0%` |
@@ -64,6 +67,10 @@ A token is **bare** when the metric has one intrinsic rendering. Generic forms u
 AMDGPU rows require the selected device to expose the corresponding capability and a valid reading. Missing capabilities omit only their own rows. Usage, codec, VRAM, and graphics-clock readings follow `display.poll_interval`; temperature, power, and fan readings have a 30-second freshness budget. Each group reads only demanded fields. Failed reads retain prior valid values; confirmed capability or device removal clears them. The graphs page selects one GPU by presence, in NVIDIA, AMDGPU, then Intel order. AMD history shows usage and combined codec activity, and resets when the selected device or vendor changes. Enable `notifications.gpu_amd_temp` for independent AMD edge-temperature alerts; it defaults to disabled with an 80°C threshold in `notify_thresholds.gpu_amd_temp`. Alerts use the shared temperature sustain and hysteresis settings and only advance on fresh temperature captures.
 
 On unified-memory AMD APUs, VRAM allocation counters describe the driver's allocation domain, not dedicated physical VRAM or all GPU-accessible system memory. GTT is not added. Codec activity does not distinguish decoding from encoding. Temperature never substitutes hotspot, junction, or memory sensors, and RPM never substitutes PWM duty.
+
+AMD NPU rows read the NPU fields of the APU's `amdgpu` `gpu_metrics` table (format 3.0, at least 264 bytes) while an `amdxdna` accel device is present. They appear only when both are detected, independently of the selected AMDGPU device. One read per `display.poll_interval` updates all three rows, and only while an NPU item is configured. Reading the table never opens the NPU device, so polling never wakes a suspended NPU.
+
+The firmware time-filters busy, power, and clock, so readings lag NPU work by a few seconds. A suspended NPU reads 0% and 0.0 W. `off` means the NPU is suspended: the filtered clock decays to zero over several seconds after suspend. An idle NPU kept awake by another process, such as a monitor that opens the accel device, shows its real clock at 0%. NPU power is part of the APU's PPT power (`gpu_amd_power`), not added to it. A failed read keeps the last values; a table with another layout clears them, and only a later table passing the same version check shows values again, while rediscovery drops a source whose layout stays unsupported. Support is validated on Strix Halo only.
 
 To bound tooltip width, AMD scalar values above 99,999 display as `99999+` with their unit, and allocation sizes above 999,999 MiB display as `999999+`. Allocation counters remain exact in the display snapshot and determine the percentage before formatting.
 

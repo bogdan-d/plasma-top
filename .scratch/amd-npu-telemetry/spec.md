@@ -68,7 +68,7 @@ PlasmaTop detects the AMD NPU and shows its busy percentage, power, and clock as
 | I/O error, short read, or bytes fewer than the declared size on a retained source | Failed attempt: inventory, values, capture times, and history are retained |
 | Complete enumeration confirms the accel or metrics device is gone | Confirmed absence: NPU capabilities, values, and history are cleared |
 | At discovery, a complete readable table with an unsupported revision or `structure_size` below 264 | No NPU source is detected |
-| A retained source later returns a complete readable table with an unsupported revision or size | Treated as source change: values and history are cleared and the source is dropped until rediscovery qualifies it |
+| A retained source later returns a complete readable table with an unsupported revision or size | Treated as source change: values and history are cleared and every metric records absence; only a later table passing the discovery version check shows values again, and rediscovery drops the source while the layout stays unsupported (the owner cannot observe rediscovery, so it re-qualifies with the same header check) |
 | Valid table, a field is `0xFFFF` | That metric records valid absence; others update normally. Any unavailable busy column makes busy unavailable |
 | Valid table, a busy column above 100 | Busy records a failed attempt and keeps its previous sample; power and clock still update |
 

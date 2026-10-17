@@ -99,6 +99,7 @@ Relevant code: `src/sensors/power.rs`, `src/sensors/hid.rs`, and `src/adapters.r
 | AMDGPU temperature | AMDGPU hwmon `temp*_input` labeled `edge` | Direct millidegree read, integer division by 1,000 to Celsius | 30-second freshness budget; no junction/hotspot substitution |
 | AMDGPU average power | AMDGPU hwmon `power1_average` | Direct microwatt read, integer division by 1,000,000 to watts | 30-second freshness budget; no instantaneous-power substitution |
 | AMDGPU fan | AMDGPU hwmon `fan1_input` | Direct RPM read; zero renders as `off` | 30-second freshness budget; missing tachometer omits the row |
+| AMD NPU busy, power, and clock | NPU fields of the APU `amdgpu` `gpu_metrics` v3.0 table: `average_ipu_activity[8]`, `average_ipu_power`, `average_ipuclk_frequency` | One binary read per sample, explicit little-endian fields at fixed offsets; busy is the rounded column mean; `0xFFFF` is unavailable | Every requested poll; firmware time-filtered; never opens the NPU device |
 | Selected GPU history | Retained NVIDIA, AMDGPU, or Intel samples, in that priority order | In-memory usage and secondary-utilization vectors; AMD secondary is codec usage | Sampled at `display.history_interval`; selected vendor or PCI identity change resets history |
 | Intel GPU frequency | Discovered DRM/sysfs frequency file | Direct Rust file read | Every requested poll |
 | Intel GPU render/decoder utilization | `/proc/[pid]/fd/*/fdinfo` DRM engine counters associated with the Intel PCI device | Direct procfs scan and consecutive counter diff | 30-second freshness budget; a locally discovered configured panel source is a real startup blocker |
@@ -107,9 +108,11 @@ The default Cargo feature set does not enable NVML. Packaging must build with th
 
 AMDGPU discovery inspects numeric DRM cards, requires AMD vendor ID, display PCI class, and the `amdgpu` driver, then selects the lowest canonical PCI identity. Source paths are rediscovered every 60 seconds while AMD items, notification temperature, or configured graphs demand them. The fast and slow jobs share one serialized owner and read only demanded fields. Each field retains its last successful value after a read failure; confirmed capability loss clears that field, and confirmed device removal clears the owner. Incomplete discovery retains the previous inventory. Temperature alerts consume fresh successful temperature captures only.
 
-AMDGPU sampling and discovery start no subprocess and do not use binary `gpu_metrics`, DPM controls, fdinfo, or `amdgpu_top`. Live Strix Halo evidence and its limits are recorded in the [AMDGPU validation report](../.scratch/amdgpu-support/validation.md). Legacy `radeon` hardware is outside this implementation.
+AMDGPU sampling and discovery start no subprocess and do not use binary `gpu_metrics` (only the AMD NPU source reads it), DPM controls, fdinfo, or `amdgpu_top`. Live Strix Halo evidence and its limits are recorded in the [AMDGPU validation report](../.scratch/amdgpu-support/validation.md). Legacy `radeon` hardware is outside this implementation.
 
-Relevant code: `src/sensors/gpu_nvidia.rs`, `src/sensors/gpu_amd.rs`, `src/sensors/gpu_intel.rs`, `src/sensors/gpu_history.rs`, and the `nvml` feature in `Cargo.toml`.
+AMD NPU discovery pairs the lowest-identity `amdxdna` accel device with the lowest-identity `amdgpu` device whose `gpu_metrics` header reports format 3, content 0, and a declared size of at least 264 bytes, independently of the selected AMDGPU device. Both PCI identities form the source identity. A truncated or unreadable table makes discovery incomplete, so the previous inventory is retained. Each sample bounds-checks the bytes read against the declared size; a short read keeps the last values, and a complete table with another layout clears them and records absence. Values return only from a later table that passes the discovery version check, and the 60-second rediscovery drops a source whose layout stays unsupported.
+
+Relevant code: `src/sensors/gpu_nvidia.rs`, `src/sensors/gpu_amd.rs`, `src/sensors/npu_amd.rs`, `src/sensors/gpu_intel.rs`, `src/sensors/gpu_history.rs`, and the `nvml` feature in `Cargo.toml`.
 
 ### Other panel and tooltip readings
 

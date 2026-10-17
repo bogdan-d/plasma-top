@@ -86,6 +86,7 @@ fn collect_one_shot(
     let mut disk_owner = disk::DiskState::default();
     let mut process_owner = ProcessState::default();
     let mut amd_gpu_owner = crate::sensors::gpu_amd::AmdGpuState::default();
+    let mut amd_npu_owner = crate::sensors::npu_amd::AmdNpuState::default();
     let mut intel_gpu_owner = gpu_intel::IntelGpuState::default();
     let mut power_owner = power::PowerState::default();
     let mut nvidia_owner = gpu_nvidia::NvidiaState::default();
@@ -112,6 +113,7 @@ fn collect_one_shot(
                     disk: &mut disk_owner,
                     process: &mut process_owner,
                     amd_gpu: &mut amd_gpu_owner,
+                    amd_npu: &mut amd_npu_owner,
                     intel_gpu: &mut intel_gpu_owner,
                     power: &mut power_owner,
                     nvidia: &mut nvidia_owner,
@@ -310,7 +312,8 @@ pub fn run_probe(config_path: Option<&Path>) -> Result<()> {
         one.hw.intel_gpu_pci.as_deref().unwrap_or("(not found)")
     );
     println!("has_nvidia:      {}\n", one.hw.has_nvidia);
-    println!("amd_gpu:         {:?}\n", one.hw.amd_gpu);
+    println!("amd_gpu:         {:?}", one.hw.amd_gpu);
+    println!("amd_npu:         {:?}\n", one.hw.amd_npu);
     println!("── Readings ────────────────────────────────────────────────");
     print_readings(&one.readings);
     println!();
@@ -370,6 +373,9 @@ fn print_readings(r: &DisplaySnapshot) {
     reading!(r, gpu_amd_temp);
     reading!(r, gpu_amd_power);
     reading!(r, gpu_amd_fan_speed);
+    reading!(r, npu_amd_usage);
+    reading!(r, npu_amd_power_mw);
+    reading!(r, npu_amd_freq);
     reading!(r, gpu_intel_freq);
     reading!(r, gpu_intel_usage);
     reading!(r, gpu_intel_dec_usage);
@@ -430,6 +436,7 @@ fn run_one_shot_profiling(config_path: Option<&Path>) -> Result<()> {
     let mut disk_owner = disk::DiskState::default();
     let mut process_owner = ProcessState::default();
     let mut amd_gpu_owner = crate::sensors::gpu_amd::AmdGpuState::default();
+    let mut amd_npu_owner = crate::sensors::npu_amd::AmdNpuState::default();
     let mut intel_gpu_owner = gpu_intel::IntelGpuState::default();
     let mut power_owner = power::PowerState::default();
     let mut nvidia_owner = gpu_nvidia::NvidiaState::default();
@@ -455,6 +462,7 @@ fn run_one_shot_profiling(config_path: Option<&Path>) -> Result<()> {
                 disk: &mut disk_owner,
                 process: &mut process_owner,
                 amd_gpu: &mut amd_gpu_owner,
+                amd_npu: &mut amd_npu_owner,
                 intel_gpu: &mut intel_gpu_owner,
                 power: &mut power_owner,
                 nvidia: &mut nvidia_owner,

@@ -85,6 +85,7 @@ pub(crate) fn item_gate(
             .amd_gpu
             .as_ref()
             .is_some_and(|source| source.fan_speed_path.is_some()),
+        Metric::NpuAmdUsage | Metric::NpuAmdPower | Metric::NpuAmdFreq => hw.amd_npu.is_some(),
         Metric::GpuIntelFreq => hw.intel_gpu_freq_path.is_some(),
         Metric::GpuIntelUsage | Metric::GpuIntelDecoderUsage => hw.intel_gpu_pci.is_some(),
         Metric::BatterySystem => !hw.battery_sys_ids.is_empty(),

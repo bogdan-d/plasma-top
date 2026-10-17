@@ -25,6 +25,8 @@ pub struct OwnerRefs<'a> {
     pub process: &'a mut process::ProcessState,
     /// AMDGPU independently retained samples.
     pub amd_gpu: &'a mut crate::sensors::gpu_amd::AmdGpuState,
+    /// AMD NPU retained samples.
+    pub amd_npu: &'a mut crate::sensors::npu_amd::AmdNpuState,
     /// Intel GPU sample and counter owner.
     pub intel_gpu: &'a mut IntelGpuState,
     /// System and peripheral power owner.
@@ -46,6 +48,7 @@ impl OwnerRefs<'_> {
             disk: self.disk,
             process: self.process,
             amd_gpu: self.amd_gpu,
+            amd_npu: self.amd_npu,
             intel_gpu: self.intel_gpu,
             power: self.power,
             nvidia: self.nvidia,
