@@ -70,6 +70,12 @@ PlasmoidItem {
 		onTriggered: widget.wheelInGesture = false
 	}
 
+	// QQuickPixmap creates the engine's image reader thread on the first load. If that first load is a tooltip graph <img>, it happens on the scene-graph render thread and the reader cannot be parented to the engine, so a 1x1 PNG forces it onto the GUI thread first.
+	Image {
+		visible: false
+		source: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAACklEQVR4nGNgAAAAAgABSK+kcQAAAABJRU5ErkJggg=="
+	}
+
 	Item {
 		id: config
 		readonly property bool clickEnabled: !!plasmoid.configuration.clickCommand
@@ -455,7 +461,7 @@ PlasmoidItem {
 			if (isOnDesktop) {
 				return Math.ceil(output.contentWidth)
 			} else if (isHorizontal && plasmoid.configuration.useFixedWidth) {
-				return plasmoid.configuration.fixedWidth * Kirigami.Units.devicePixelRatio
+				return plasmoid.configuration.fixedWidth
 			} else { // isHorizontal || isVertical
 				return Math.ceil(output.implicitWidth)
 			}
@@ -470,7 +476,7 @@ PlasmoidItem {
 			if (isOnDesktop) {
 				return Math.ceil(output.contentHeight)
 			} else if (isVertical && plasmoid.configuration.useFixedHeight) {
-				return plasmoid.configuration.fixedHeight * Kirigami.Units.devicePixelRatio
+				return plasmoid.configuration.fixedHeight
 			} else { // isHorizontal || isVertical
 				return Math.ceil(output.implicitHeight)
 			}
