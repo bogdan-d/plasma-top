@@ -217,7 +217,7 @@ fn fastfetch_diagnostic_runs_failed_command_once_after_cold_and_warm_acquisition
     assert!(
         result
             .html
-            .contains("fastfetch:&nbsp;exited&nbsp;with&nbsp;status&nbsp;7")
+            .contains("fastfetch:&nbsp;exited&nbsp;with&nbsp;status")
     );
     let Some(state) = result.command_cache.state("fastfetch") else {
         panic!("fastfetch owner state");

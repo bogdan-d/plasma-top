@@ -9,6 +9,9 @@ use std::time::Duration;
 use crate::domain::boundary::{BoundaryError, CommandRunner, CommandStatus};
 use crate::domain::readings::MetricSample;
 
+mod terminal;
+use terminal::{strip_sgr, strip_terminal_noise, wrap_visible};
+
 const CLICK_SYSTEM_MONITOR: &[&str] = &["plasma-systemmonitor"];
 const PROCESS_PAGE_ROWS: usize = 15;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
@@ -538,6 +541,21 @@ pub fn text_to_mono_html(text: &str) -> String {
         .join("<br>")
 }
 
+/// Formats plain command output, word-wrapping lines to the canonical tooltip width so paging to this page never widens the tooltip.
+///
+/// A `min_width` of 0 means the width is not yet known and leaves lines unwrapped.
+fn format_plain(text: &str, min_width: usize) -> (String, usize) {
+    let fitted = if min_width == 0 {
+        text.to_owned()
+    } else {
+        text.split('\n')
+            .map(|line| wrap_visible(line, min_width))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    (text_to_mono_html(&fitted), text_width(&fitted))
+}
+
 /// Returns the visible width, in monospace characters, of a text page.
 #[must_use]
 pub fn text_width(text: &str) -> usize {
@@ -681,8 +699,7 @@ pub fn page_inner_with_clock(
         );
     }
 
-    let width = text_width(&text);
-    let inner = text_to_mono_html(&text);
+    let (inner, width) = format_plain(&text, min_width);
     format!(
         r#"<div class="page">{inner}</div>{}"#,
         pager_html(idx, width, total)
@@ -708,8 +725,7 @@ pub(crate) fn page_inner_cached(
             pager_html(idx, width, total)
         );
     }
-    let width = text_width(&text);
-    let inner = text_to_mono_html(&text);
+    let (inner, width) = format_plain(&text, min_width);
     format!(
         r#"<div class="page">{inner}</div>{}"#,
         pager_html(idx, width, total)
@@ -771,91 +787,6 @@ fn shell_join(argv: &[&str]) -> String {
         })
         .collect::<Vec<_>>()
         .join(" ")
-}
-
-fn strip_terminal_noise(text: &str) -> String {
-    let bytes = text.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut index = 0;
-    while index < bytes.len() {
-        match bytes[index] {
-            b'\r' => {
-                index += 1;
-            }
-            0x1b => {
-                if let Some(next) = bytes.get(index + 1).copied() {
-                    match next {
-                        b']' => {
-                            index = skip_osc(bytes, index + 2);
-                        }
-                        b'[' => {
-                            let (next_index, keep) = skip_csi(bytes, index);
-                            if keep {
-                                out.extend_from_slice(&bytes[index..next_index]);
-                            }
-                            index = next_index;
-                        }
-                        b'=' | b'>' | b'N' | b'O' | b'P' | b'X' | b'^' | b'_' | b'c' => {
-                            index += 2;
-                        }
-                        _ => {
-                            out.push(bytes[index]);
-                            index += 1;
-                        }
-                    }
-                } else {
-                    out.push(bytes[index]);
-                    index += 1;
-                }
-            }
-            byte => {
-                out.push(byte);
-                index += 1;
-            }
-        }
-    }
-    String::from_utf8_lossy(&out).into_owned()
-}
-
-fn skip_osc(bytes: &[u8], mut index: usize) -> usize {
-    while index < bytes.len() {
-        match bytes[index] {
-            0x07 => return index + 1,
-            0x1b if bytes.get(index + 1) == Some(&b'\\') => return index + 2,
-            _ => index += 1,
-        }
-    }
-    bytes.len()
-}
-
-fn skip_csi(bytes: &[u8], start: usize) -> (usize, bool) {
-    let mut index = start + 2;
-    while index < bytes.len() {
-        let byte = bytes[index];
-        if (0x40..=0x7e).contains(&byte) {
-            return (index + 1, byte == b'm');
-        }
-        index += 1;
-    }
-    (bytes.len(), false)
-}
-
-fn strip_sgr(text: &str) -> String {
-    let bytes = text.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut index = 0;
-    while index < bytes.len() {
-        if bytes[index] == 0x1b && bytes.get(index + 1) == Some(&b'[') {
-            let (next_index, keep) = skip_csi(bytes, index);
-            if keep {
-                index = next_index;
-                continue;
-            }
-        }
-        out.push(bytes[index]);
-        index += 1;
-    }
-    String::from_utf8_lossy(&out).into_owned()
 }
 
 fn escape_html(text: &str) -> String {
