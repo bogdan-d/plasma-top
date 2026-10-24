@@ -41,6 +41,9 @@ LibConfig.FormKCM {
 	// desktop (Planar); in a panel the panel owns the background and the widget
 	// never shows its full representation there, so hide it.
 	readonly property bool onDesktop: plasmoid.formFactor === PlasmaCore.Types.Planar
+	// A panel fixes only its length; the cross axis follows the panel's thickness.
+	readonly property bool inHorizontalPanel: plasmoid.formFactor === PlasmaCore.Types.Horizontal
+	readonly property bool inVerticalPanel: plasmoid.formFactor === PlasmaCore.Types.Vertical
 
 
 	// ── Font: shared by both surfaces ─────────────────────────
@@ -80,6 +83,38 @@ LibConfig.FormKCM {
 		minimumValue: 0.5
 		maximumValue: 3.0
 		stepSize: 5
+	}
+	RowLayout {
+		visible: root.inHorizontalPanel
+		Kirigami.FormData.label: i18n("Fixed Width:")
+		spacing: 0
+		LibConfig.CheckBox {
+			configObject: root
+			configKey: 'cfg_useFixedWidth'
+		}
+		LibConfig.SpinBox {
+			configObject: root
+			configKey: 'cfg_fixedWidth'
+			suffix: i18n("px")
+			minimumValue: 1
+			stepSize: 10
+		}
+	}
+	RowLayout {
+		visible: root.inVerticalPanel
+		Kirigami.FormData.label: i18n("Fixed Height:")
+		spacing: 0
+		LibConfig.CheckBox {
+			configObject: root
+			configKey: 'cfg_useFixedHeight'
+		}
+		LibConfig.SpinBox {
+			configObject: root
+			configKey: 'cfg_fixedHeight'
+			suffix: i18n("px")
+			minimumValue: 1
+			stepSize: 10
+		}
 	}
 
 	// ── Tooltip ───────────────────────────────────────────────
